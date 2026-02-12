@@ -50,7 +50,7 @@ const renderResultList = (items, title, prefix, indicatorLabel, descriptionLabel
 
 /**
  * Parses markdown-like text from Gemini summary and converts to Docx paragraphs.
- * Supports: # H1, ## H2, **Bold**, * Bullets
+ * Supports: # H1 (with page break), ## H2, ### H3, **Bold**, * Bullets
  */
 const parseMarkdownToDocx = (text) => {
     const lines = text.split('\n');
@@ -60,7 +60,7 @@ const parseMarkdownToDocx = (text) => {
         const trimmed = line.trim();
         if (!trimmed) return;
 
-        // Headers
+        // Headers – H1 gets pageBreakBefore
         if (trimmed.startsWith('# ')) {
             elements.push(H1(trimmed.substring(2)));
             return;
@@ -101,10 +101,15 @@ const parseMarkdownToDocx = (text) => {
     return elements;
 };
 
+
+// ═══════════════════════════════════════════════════════════════
+//  SUMMARY DOCX EXPORT (with TOC and page breaks)
+// ═══════════════════════════════════════════════════════════════
 export const generateSummaryDocx = async (summaryText, projectTitle, language = 'en') => {
     const parsedContent = parseMarkdownToDocx(summaryText);
 
     const doc = new Document({
+        features: { updateFields: true },
         styles: {
             default: {
                 document: {
@@ -156,12 +161,51 @@ export const generateSummaryDocx = async (summaryText, projectTitle, language = 
         sections: [{
             properties: {},
             children: [
+                // Title page
                 new Paragraph({
                     text: projectTitle || 'Project Summary',
                     heading: HeadingLevel.TITLE,
                     alignment: AlignmentType.CENTER,
-                    spacing: { after: 400 }
+                    spacing: { after: 300 }
                 }),
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 400 },
+                    children: [
+                        new TextRun({
+                            text: language === 'si' ? 'Povzetek projekta' : 'Project Summary',
+                            bold: true,
+                            size: 28,
+                            color: "666666",
+                            italics: true,
+                        })
+                    ]
+                }),
+
+                // Table of Contents
+                new Paragraph({
+                    children: [
+                        new TextRun({
+                            text: language === 'si' ? 'KAZALO VSEBINE' : 'TABLE OF CONTENTS',
+                            bold: true,
+                            size: 32,
+                            color: "2E74B5",
+                        })
+                    ],
+                    spacing: { before: 400, after: 200 },
+                }),
+                new TableOfContents(language === 'si' ? 'Kazalo vsebine' : 'Table of Contents', {
+                    hyperlink: true,
+                    headingStyleRange: '1-3',
+                    stylesWithLevels: [
+                        { styleName: 'Heading1', level: 1 },
+                        { styleName: 'Heading2', level: 2 },
+                        { styleName: 'Heading3', level: 3 },
+                    ],
+                }),
+                new Paragraph({ text: '', spacing: { after: 200 } }),
+
+                // Parsed summary content (H1 sections start on new pages)
                 ...parsedContent
             ]
         }]
@@ -170,6 +214,9 @@ export const generateSummaryDocx = async (summaryText, projectTitle, language = 
 };
 
 
+// ═══════════════════════════════════════════════════════════════
+//  FULL PROJECT DOCX EXPORT (with TOC and page breaks)
+// ═══════════════════════════════════════════════════════════════
 export const generateDocx = async (projectData, language = 'en', ganttData = null, pertData = null, organigramData = null) => {
   const { problemAnalysis, projectIdea, generalObjectives, specificObjectives, activities, outputs, outcomes, impacts, risks, kers, projectManagement } = projectData;
   const STEPS = getSteps(language);
@@ -185,9 +232,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       return "000000";
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // TITLE PAGE
-  // ═══════════════════════════════════════════════════════════════
+  // ─── TITLE PAGE ───
   const children: (docx.Paragraph | docx.Table | docx.TableOfContents)[] = [
     new Paragraph({
       text: projectIdea.projectTitle || 'Project Proposal',
@@ -207,9 +252,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       ]
     }),
 
-    // ═══════════════════════════════════════════════════════════════
-    // TABLE OF CONTENTS
-    // ═══════════════════════════════════════════════════════════════
+    // ─── TABLE OF CONTENTS ───
     new Paragraph({
       children: [
         new TextRun({
@@ -236,9 +279,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
     }),
   ];
 
-  // ═══════════════════════════════════════════════════════════════
-  // 1. PROBLEM ANALYSIS (starts on new page via H1 pageBreakBefore)
-  // ═══════════════════════════════════════════════════════════════
+  // ─── 1. PROBLEM ANALYSIS (starts on new page via H1 pageBreakBefore) ───
   children.push(H1(STEPS[0].title));
   children.push(H2(t.coreProblem));
   children.push(H3(problemAnalysis.coreProblem.title));
@@ -248,9 +289,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
   children.push(H2(t.consequences));
   problemAnalysis.consequences.forEach((consequence, i) => consequence.title && children.push(...renderProblemNode(consequence, `${t.consequenceTitle} #${i + 1}: ${consequence.title}`)));
 
-  // ═══════════════════════════════════════════════════════════════
-  // 2. PROJECT IDEA
-  // ═══════════════════════════════════════════════════════════════
+  // ─── 2. PROJECT IDEA ───
   children.push(H1(STEPS[1].title));
   children.push(H2(t.mainAim));
   children.push(P(projectIdea.mainAim));
@@ -276,21 +315,15 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
   children.push(H2(t.euPolicies));
   projectIdea.policies.forEach((policy) => policy.name && children.push(H3(policy.name), P(policy.description)));
 
-  // ═══════════════════════════════════════════════════════════════
-  // 3. GENERAL OBJECTIVES
-  // ═══════════════════════════════════════════════════════════════
+  // ─── 3. GENERAL OBJECTIVES ───
   children.push(H1(STEPS[2].title));
   children.push(...renderResultList(generalObjectives, t.generalObjectives, 'GO', t.indicator, t.description));
 
-  // ═══════════════════════════════════════════════════════════════
-  // 4. SPECIFIC OBJECTIVES
-  // ═══════════════════════════════════════════════════════════════
+  // ─── 4. SPECIFIC OBJECTIVES ───
   children.push(H1(STEPS[3].title));
   children.push(...renderResultList(specificObjectives, t.specificObjectives, 'SO', t.indicator, t.description));
   
-  // ═══════════════════════════════════════════════════════════════
-  // 5. ACTIVITIES
-  // ═══════════════════════════════════════════════════════════════
+  // ─── 5. ACTIVITIES ───
   children.push(H1(STEPS[4].title));
   
   // Project Management
@@ -382,7 +415,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
     }
   });
 
-  // Embed Gantt Chart Image if available
+  // Gantt Chart
   children.push(H2(t.ganttChart));
   if (ganttData && ganttData.dataUrl) {
       try {
@@ -411,7 +444,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       children.push(new Paragraph({ children: [new TextRun({ text: "[Gantt Chart Image Missing]", italics: true, color: "FF0000" })] }));
   }
 
-  // Embed PERT Chart Image if available
+  // PERT Chart
   children.push(H2(t.pertChart));
   if (pertData && pertData.dataUrl) {
       try {
@@ -477,9 +510,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       });
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // 6. EXPECTED RESULTS
-  // ═══════════════════════════════════════════════════════════════
+  // ─── 6. EXPECTED RESULTS ───
   children.push(H1(STEPS[5].title));
   children.push(...renderResultList(outputs, t.outputs, 'D', t.indicator, t.description));
   children.push(...renderResultList(outcomes, t.outcomes, 'R', t.indicator, t.description));
@@ -496,9 +527,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       });
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BUILD DOCUMENT
-  // ═══════════════════════════════════════════════════════════════
+  // ─── BUILD DOCUMENT ───
   const doc = new Document({
     features: {
       updateFields: true,
