@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { storageService } from '../services/storageService.ts';
-import { validateProviderApiKey, OPENROUTER_MODELS, type AIProviderType } from '../services/aiProvider.ts';
+import { validateProviderKey, OPENROUTER_MODELS, type AIProviderType } from '../services/aiProvider.ts';
 import { getAppInstructions, getFullInstructions, saveAppInstructions, resetAppInstructions } from '../services/Instructions.ts';
 import { TEXT } from '../locales.ts';
 
@@ -104,7 +104,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
             return;
         }
 
-        const isValid = await validateProviderApiKey(aiProvider, activeKey);
+        const isValid = await validateProviderKey(aiProvider, activeKey);
         setIsValidating(false);
 
         if (isValid) {
