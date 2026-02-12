@@ -1,3 +1,5 @@
+// services/geminiService.ts
+
 import { storageService } from './storageService.ts';
 import { getAppInstructions } from './Instructions.ts';
 import { detectProjectLanguage as detectLanguage } from '../utils.ts';
@@ -50,12 +52,22 @@ const getContext = (projectData: any): string => {
 };
 
 // --- JSON SCHEMA INSTRUCTION (for OpenRouter / non-Gemini providers) ---
+// FIXED: safely handles @google/genai Type enum values without .toLowerCase() crash
+
 const schemaToTextInstruction = (schema: any): string => {
-  // Convert Gemini-native schema to a text description for providers that don't support native schemas
   try {
+    const typeToString = (t: any): string => {
+      if (!t) return 'string';
+      if (typeof t === 'string') return t.toLowerCase();
+      // Handle @google/genai Type enum values (Type.STRING, Type.OBJECT, etc.)
+      const str = String(t);
+      return str ? str.toLowerCase() : 'string';
+    };
+
     const simplify = (s: any): any => {
       if (!s) return 'any';
-      if (s.type === 'OBJECT' || s.type === 'object') {
+      const sType = typeToString(s.type);
+      if (sType === 'object') {
         const props: any = {};
         if (s.properties) {
           for (const [key, val] of Object.entries(s.properties)) {
@@ -64,19 +76,20 @@ const schemaToTextInstruction = (schema: any): string => {
         }
         return { type: 'object', properties: props, required: s.required || [] };
       }
-      if (s.type === 'ARRAY' || s.type === 'array') {
+      if (sType === 'array') {
         return { type: 'array', items: simplify(s.items) };
       }
-      if (s.enum) return { type: s.type?.toLowerCase() || 'string', enum: s.enum };
-      return s.type?.toLowerCase() || 'string';
+      if (s.enum) return { type: sType, enum: s.enum };
+      return sType;
     };
     return `\n\nRESPONSE JSON SCHEMA (you MUST follow this structure exactly):\n${JSON.stringify(simplify(schema), null, 2)}\n`;
-  } catch {
+  } catch (e) {
+    console.warn('[schemaToTextInstruction] Failed to convert schema:', e);
     return '';
   }
 };
 
-// --- SCHEMAS (unchanged from before) ---
+// --- SCHEMAS ---
 import { Type } from "@google/genai";
 
 const problemNodeSchema = {
@@ -324,7 +337,7 @@ const getPromptAndSchemaForSection = (sectionKey: string, projectData: any, lang
   const globalRules = instructions.GLOBAL_RULES.join('\n');
 
   const languageInstruction = language === 'si'
-    ? "KRITIČNO: Uporabnik je izbral SLOVENŠČINO. Celoten odgovor (naslovi, opisi, kazalniki itd.) MORA biti v SLOVENSKEM jeziku. Tudi če je podan kontekst v angleščini, MORAŠ generirati novo vsebino v slovenščini. Zagotovi visokokakovostno strokovno slovensko terminologijo."
+    ? "KRITIČNO: Uporabnik je izbral SLOVENŠČINO. Celoten odgovor (naslovi, opisi, kazalniki itd.) MORA biti v SLOVENSKEM jeziku. Tudi če je podan kontekst v angleščini, MORA generirati novo vsebino v slovenščini. Zagotovi visokokakovostno strokovno slovensko terminologijo."
     : "CRITICAL: The user has selected ENGLISH language. Write the response in English. If the context is in Slovenian, translate the logic/ideas into English for the new content.";
 
   const fillInstruction = mode === 'fill'
@@ -508,7 +521,7 @@ export const generateProjectSummary = async (projectData: any, language: 'en' | 
   const context = getContext(projectData);
 
   const prompt = language === 'si'
-    ? `${context}\nNapiši povzetek v profesionalnem slovenskem jeziku.\nUstvari jedrnat, visoko profesionalen in prepričljiv 1-stranski povzetek tega projektnega predloga.\nKRITIČNO PRAVILO SKLADNJE: Ko navajš ključne cilje, MORAŠ uporabiti GLAGOLE V NEDOLOČNIKU.\nTERMINOLOGIJA: Uporabi standardno EU terminologijo intervencijske logike v slovenščini.\nOblikuj izhod z uporabo enostavnega Markdown za strukturo.`
+    ? `${context}\nNapiši povzetek v profesionalnem slovenskem jeziku.\nUstvari jedrnat, visoko profesionalen in prepričljiv 1-stranski povzetek tega projektnega predloga.\nKRITIČNO PRAVILO SKLADNJE: Ko navajaš ključne cilje, MORA uporabiti GLAGOLE V NEDOLOČNIKU.\nTERMINOLOGIJA: Uporabi standardno EU terminologijo intervencijske logike v slovenščini.\nOblikuj izhod z uporabo enostavnega Markdown za strukturo.`
     : `${context}\nWrite the summary in professional English.\nCreate a concise, highly professional, and persuasive 1-page summary of this project proposal.\nCRITICAL SYNTAX RULE: When listing Key Objectives or Goals, you MUST use INFINITIVE verbs.\nTERMINOLOGY: Use standard EU Intervention Logic terminology.\nFormat the output using simple Markdown for structure.`;
 
   const result = await generateContent({ prompt });
