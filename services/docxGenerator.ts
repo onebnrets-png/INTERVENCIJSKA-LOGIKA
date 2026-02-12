@@ -1,9 +1,8 @@
-
 import * as docx from 'docx';
 import { getSteps, getReadinessLevelsDefinitions } from '../constants.tsx';
 import { TEXT } from '../locales.ts';
 
-const { Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, AlignmentType, VerticalAlign, ImageRun } = docx;
+const { Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, AlignmentType, VerticalAlign, ImageRun, TableOfContents } = docx;
 
 // Helper to handle multi-line text from textareas
 const splitText = (text) => {
@@ -28,7 +27,8 @@ const base64DataToUint8Array = (base64Data) => {
     return bytes;
 };
 
-const H1 = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 } });
+// H1 now starts on a new page (pageBreakBefore)
+const H1 = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 200 }, pageBreakBefore: true });
 const H2 = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 150 } });
 const H3 = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } });
 const P = (text) => new Paragraph({ children: splitText(text) });
@@ -83,7 +83,7 @@ const parseMarkdownToDocx = (text) => {
         }
 
         // Inline Bold Parsing (**text**)
-        const parts = content.split(/(\*\*.*?\*\*)/g); // Split by bold markers
+        const parts = content.split(/(\*\*.*?\*\*)/g);
         const runs = parts.map(part => {
             if (part.startsWith('**') && part.endsWith('**')) {
                 return new TextRun({ text: part.slice(2, -2), bold: true });
@@ -94,7 +94,7 @@ const parseMarkdownToDocx = (text) => {
         elements.push(new Paragraph({
             children: runs,
             bullet: isBullet ? { level: 0 } : undefined,
-            spacing: { after: 120 } // Add slight spacing for readability
+            spacing: { after: 120 }
         }));
     });
 
@@ -102,7 +102,6 @@ const parseMarkdownToDocx = (text) => {
 };
 
 export const generateSummaryDocx = async (summaryText, projectTitle, language = 'en') => {
-    // Parse the markdown summary into styled paragraphs
     const parsedContent = parseMarkdownToDocx(summaryText);
 
     const doc = new Document({
@@ -111,15 +110,15 @@ export const generateSummaryDocx = async (summaryText, projectTitle, language = 
                 document: {
                     run: {
                         font: "Calibri",
-                        size: 22, // 11pt standard body text
+                        size: 22,
                     },
                 },
                 heading1: {
                     run: {
                         font: "Calibri",
                         bold: true,
-                        size: 32, // 16pt
-                        color: "2E74B5", // Professional Blue
+                        size: 32,
+                        color: "2E74B5",
                     },
                     paragraph: {
                         spacing: { before: 240, after: 120 }
@@ -129,7 +128,7 @@ export const generateSummaryDocx = async (summaryText, projectTitle, language = 
                     run: {
                         font: "Calibri",
                         bold: true,
-                        size: 26, // 13pt
+                        size: 26,
                         color: "2E74B5",
                     },
                     paragraph: {
@@ -140,7 +139,7 @@ export const generateSummaryDocx = async (summaryText, projectTitle, language = 
                     run: {
                         font: "Calibri",
                         bold: true,
-                        size: 24, // 12pt
+                        size: 24,
                         color: "1F4D78",
                     },
                 },
@@ -148,7 +147,7 @@ export const generateSummaryDocx = async (summaryText, projectTitle, language = 
                     run: {
                         font: "Calibri",
                         bold: true,
-                        size: 56, // 28pt
+                        size: 56,
                         color: "2E74B5",
                     }
                 }
@@ -180,28 +179,66 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
   // Helper for traffic light coloring in Word
   const getRiskColor = (level) => {
       const l = level.toLowerCase();
-      if (l === 'high') return "C00000"; // Red
-      if (l === 'medium') return "FFC000"; // Orange/Yellow
-      if (l === 'low') return "00B050"; // Green
+      if (l === 'high') return "C00000";
+      if (l === 'medium') return "FFC000";
+      if (l === 'low') return "00B050";
       return "000000";
   };
 
-  const children: (docx.Paragraph | docx.Table)[] = [
+  // ═══════════════════════════════════════════════════════════════
+  // TITLE PAGE
+  // ═══════════════════════════════════════════════════════════════
+  const children: (docx.Paragraph | docx.Table | docx.TableOfContents)[] = [
     new Paragraph({
       text: projectIdea.projectTitle || 'Project Proposal',
       heading: HeadingLevel.TITLE,
       alignment: AlignmentType.CENTER,
     }),
     new Paragraph({
-      text: projectIdea.projectAcronym ? `(${projectIdea.projectAcronym})` : '',
-      heading: HeadingLevel.HEADING_1,
-      style: "Title",
       alignment: AlignmentType.CENTER,
-      spacing: { after: 600 }
+      spacing: { after: 600 },
+      children: [
+        new TextRun({
+          text: projectIdea.projectAcronym ? `(${projectIdea.projectAcronym})` : '',
+          bold: true,
+          size: 32,
+          color: "2E74B5",
+        })
+      ]
+    }),
+
+    // ═══════════════════════════════════════════════════════════════
+    // TABLE OF CONTENTS
+    // ═══════════════════════════════════════════════════════════════
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: language === 'si' ? 'KAZALO VSEBINE' : 'TABLE OF CONTENTS',
+          bold: true,
+          size: 32,
+          color: "2E74B5",
+        })
+      ],
+      spacing: { before: 400, after: 200 },
+    }),
+    new TableOfContents(language === 'si' ? 'Kazalo vsebine' : 'Table of Contents', {
+      hyperlink: true,
+      headingStyleRange: '1-3',
+      stylesWithLevels: [
+        { styleName: 'Heading1', level: 1 },
+        { styleName: 'Heading2', level: 2 },
+        { styleName: 'Heading3', level: 3 },
+      ],
+    }),
+    new Paragraph({
+      text: '',
+      spacing: { after: 200 },
     }),
   ];
 
-  // 1. Problem Analysis
+  // ═══════════════════════════════════════════════════════════════
+  // 1. PROBLEM ANALYSIS (starts on new page via H1 pageBreakBefore)
+  // ═══════════════════════════════════════════════════════════════
   children.push(H1(STEPS[0].title));
   children.push(H2(t.coreProblem));
   children.push(H3(problemAnalysis.coreProblem.title));
@@ -211,7 +248,9 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
   children.push(H2(t.consequences));
   problemAnalysis.consequences.forEach((consequence, i) => consequence.title && children.push(...renderProblemNode(consequence, `${t.consequenceTitle} #${i + 1}: ${consequence.title}`)));
 
-  // 2. Project Idea
+  // ═══════════════════════════════════════════════════════════════
+  // 2. PROJECT IDEA
+  // ═══════════════════════════════════════════════════════════════
   children.push(H1(STEPS[1].title));
   children.push(H2(t.mainAim));
   children.push(P(projectIdea.mainAim));
@@ -237,17 +276,24 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
   children.push(H2(t.euPolicies));
   projectIdea.policies.forEach((policy) => policy.name && children.push(H3(policy.name), P(policy.description)));
 
-  // 3 & 4. Objectives
+  // ═══════════════════════════════════════════════════════════════
+  // 3. GENERAL OBJECTIVES
+  // ═══════════════════════════════════════════════════════════════
   children.push(H1(STEPS[2].title));
   children.push(...renderResultList(generalObjectives, t.generalObjectives, 'GO', t.indicator, t.description));
+
+  // ═══════════════════════════════════════════════════════════════
+  // 4. SPECIFIC OBJECTIVES
+  // ═══════════════════════════════════════════════════════════════
   children.push(H1(STEPS[3].title));
   children.push(...renderResultList(specificObjectives, t.specificObjectives, 'SO', t.indicator, t.description));
   
-  // 5. Activities (Includes Workplan, Gantt, PERT, Risks)
+  // ═══════════════════════════════════════════════════════════════
+  // 5. ACTIVITIES
+  // ═══════════════════════════════════════════════════════════════
   children.push(H1(STEPS[4].title));
   
-  // Project Management (Quality & Efficiency)
-  // Simplified logic: Always print the Header if projectManagement object exists.
+  // Project Management
   if (projectManagement) {
       children.push(H2(t.management.title));
       
@@ -282,7 +328,6 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
               console.warn("Could not embed Organigram image", e);
           }
       } else {
-          // Fallback if image failed
           children.push(new Paragraph({ children: [new TextRun({ text: "[Organigram Image Missing / Not Captured]", italics: true, color: "FF0000" })] }));
       }
       
@@ -341,7 +386,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
   children.push(H2(t.ganttChart));
   if (ganttData && ganttData.dataUrl) {
       try {
-          const imgWidth = 600; 
+          const imgWidth = 680;
           const aspectRatio = ganttData.height / ganttData.width;
           const imgHeight = imgWidth * aspectRatio;
           const base64Data = ganttData.dataUrl.split(',')[1] || ganttData.dataUrl;
@@ -370,7 +415,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
   children.push(H2(t.pertChart));
   if (pertData && pertData.dataUrl) {
       try {
-          const imgWidth = 600; 
+          const imgWidth = 680;
           const aspectRatio = pertData.height / pertData.width;
           const imgHeight = imgWidth * aspectRatio;
           const base64Data = pertData.dataUrl.split(',')[1] || pertData.dataUrl;
@@ -400,7 +445,6 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       children.push(H2(t.subSteps.riskMitigation));
       risks.forEach((risk, i) => {
           if (!risk.description) return;
-          // Format: RISK1: Title (Category)
           const categoryLabel = t.risks.categories[risk.category.toLowerCase()] || risk.category;
           children.push(H3(`${risk.id || `Risk ${i+1}`}: ${risk.title} (${categoryLabel})`));
           
@@ -433,7 +477,9 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       });
   }
 
-  // 6. Expected Results
+  // ═══════════════════════════════════════════════════════════════
+  // 6. EXPECTED RESULTS
+  // ═══════════════════════════════════════════════════════════════
   children.push(H1(STEPS[5].title));
   children.push(...renderResultList(outputs, t.outputs, 'D', t.indicator, t.description));
   children.push(...renderResultList(outcomes, t.outcomes, 'R', t.indicator, t.description));
@@ -444,27 +490,32 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
       children.push(H2(t.kers.kerTitle)); 
       kers.forEach((ker, i) => {
           if (!ker.title) return;
-          // Format: KER1: Title
           children.push(H3(`${ker.id || `KER${i+1}`}: ${ker.title}`));
           children.push(new Paragraph({ children: [Bold(`${t.description}: `), ...splitText(ker.description)] }));
           children.push(new Paragraph({ children: [Bold(`${t.kers.exploitationStrategy}: `), ...splitText(ker.exploitationStrategy)] }));
       });
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // BUILD DOCUMENT
+  // ═══════════════════════════════════════════════════════════════
   const doc = new Document({
+    features: {
+      updateFields: true,
+    },
     styles: {
       default: {
         document: {
           run: {
             font: "Calibri",
-            size: 22, // 11pt
+            size: 22,
           },
         },
         heading1: {
             run: {
                 font: "Calibri",
                 bold: true,
-                size: 32, // 16pt
+                size: 32,
                 color: "2E74B5",
             },
         },
@@ -472,7 +523,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
             run: {
                 font: "Calibri",
                 bold: true,
-                size: 26, // 13pt
+                size: 26,
                 color: "2E74B5",
             },
         },
@@ -480,7 +531,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
             run: {
                 font: "Calibri",
                 bold: true,
-                size: 24, // 12pt
+                size: 24,
                 color: "1F4D78",
             },
         },
@@ -497,7 +548,7 @@ export const generateDocx = async (projectData, language = 'en', ganttData = nul
             run: {
                 font: "Calibri",
                 bold: true,
-                size: 56, // 28pt
+                size: 56,
                 color: "2E74B5",
             }
         }
