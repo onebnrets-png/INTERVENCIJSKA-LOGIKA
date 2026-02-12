@@ -312,7 +312,7 @@ const App = () => {
   };
 
   // ═══════════════════════════════════════════════════════════════
-  // SMART DIFF-BASED TRANSLATION (replaces old performTranslation)
+  // SMART DIFF-BASED TRANSLATION
   // ═══════════════════════════════════════════════════════════════
   const performTranslation = async (targetLang, sourceData) => {
       if (!ensureApiKey()) return;
@@ -320,10 +320,8 @@ const App = () => {
       const tTarget = TEXT[targetLang] || TEXT['en'];
       setIsLoading(`${tTarget.generating} (Smart Translation)...`);
       try {
-          // Load existing target language data from Supabase
           const existingTargetData = await storageService.loadProject(targetLang, currentProjectId);
 
-          // Smart diff-based translate: only fields that actually changed
           const { translatedData, stats } = await smartTranslateProject(
               sourceData,
               targetLang,
@@ -336,13 +334,11 @@ const App = () => {
           setHasUnsavedTranslationChanges(false);
           await storageService.saveProject(translatedData, targetLang, currentProjectId);
 
-          // Update versions cache
           setProjectVersions(prev => ({
               ...prev,
               [targetLang]: translatedData
           }));
 
-          // Show stats if partially translated
           if (stats.failed > 0) {
               setError(targetLang === 'si'
                   ? `Prevod delno uspel: ${stats.translated}/${stats.changed} polj prevedenih, ${stats.failed} neuspelih.`
@@ -1019,27 +1015,27 @@ const App = () => {
 
             {/* MAIN CONTENT */}
             <main className="flex-1 flex flex-col overflow-hidden">
-                {/* TOOLBAR */}
+                {/* TOOLBAR – FIXED: using t.saveProject etc. instead of t.toolbar.save */}
                 <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2 flex-shrink-0">
                     <div className="flex items-center gap-2">
                         <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
                         {error && <p className="text-red-500 text-xs font-medium truncate max-w-xs">{error}</p>}
                     </div>
                     <div className="flex items-center gap-1">
-                        <button onClick={handleSaveToStorage} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.toolbar.save}>
+                        <button onClick={handleSaveToStorage} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.saveProject}>
                             <ICONS.SAVE className="h-5 w-5" />
                         </button>
-                        <label className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600 cursor-pointer" title={t.toolbar.import}>
+                        <label className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600 cursor-pointer" title={t.importProject}>
                             <ICONS.IMPORT className="h-5 w-5" />
                             <input ref={importInputRef} type="file" accept=".json" onChange={handleImportProject} className="hidden" />
                         </label>
-                        <button onClick={handleExportDocx} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.toolbar.exportDocx}>
+                        <button onClick={handleExportDocx} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.exportDocx}>
                             <ICONS.DOCX className="h-5 w-5" />
                         </button>
-                        <button onClick={handleExportSummary} className={`p-2 rounded-md hover:bg-slate-100 ${showAiWarning ? 'text-amber-400 cursor-not-allowed' : 'text-slate-500 hover:text-sky-600'}`} title={t.toolbar.summary} disabled={showAiWarning}>
+                        <button onClick={handleExportSummary} className={`p-2 rounded-md hover:bg-slate-100 ${showAiWarning ? 'text-amber-400 cursor-not-allowed' : 'text-slate-500 hover:text-sky-600'}`} title={t.exportSummary} disabled={showAiWarning}>
                             <ICONS.SUMMARY className="h-5 w-5" />
                         </button>
-                        <button onClick={handlePrint} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.toolbar.print}>
+                        <button onClick={handlePrint} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.print}>
                             <ICONS.PRINT className="h-5 w-5" />
                         </button>
                     </div>
