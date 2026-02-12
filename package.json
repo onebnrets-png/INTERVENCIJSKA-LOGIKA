@@ -13,7 +13,8 @@
     "react-dom": "^19.2.0",
     "@google/genai": "^1.23.0",
     "docx": "8.5.0",
-    "html2canvas": "latest"
+    "html2canvas": "latest",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
