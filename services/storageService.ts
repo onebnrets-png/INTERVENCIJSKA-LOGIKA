@@ -10,7 +10,7 @@ const generateId = () => Date.now().toString(36) + Math.random().toString(36).su
 
 // ─── LOCAL CACHE (in-memory, avoids excessive DB reads) ──────────
 let cachedUser: { id: string; email: string; displayName: string; role: string } | null = null;
-let cachedSettings: any = null;
+let cachedSettings: Record<string, any> | null = null;
 let cachedProjectsMeta: any[] | null = null;
 
 // ─── HELPER: Get current Supabase user ID ────────────────────────
@@ -36,7 +36,6 @@ export const storageService = {
     }
 
     if (data.user) {
-      // Load profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -51,6 +50,9 @@ export const storageService = {
           role: profile.role
         };
       }
+
+      // Pre-load settings into cache on login
+      await this.loadSettings();
 
       return {
         success: true,
@@ -83,7 +85,7 @@ export const storageService = {
 
     if (data.user) {
       // Wait briefly for the trigger to create profile + settings
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
 
       // Save API key if provided
       if (apiKey && apiKey.trim() !== '') {
@@ -93,7 +95,6 @@ export const storageService = {
           .eq('user_id', data.user.id);
       }
 
-      // Load the created profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -107,6 +108,9 @@ export const storageService = {
         role: profile?.role || 'user'
       };
 
+      // Pre-load settings into cache on register
+      await this.loadSettings();
+
       return {
         success: true,
         email,
@@ -119,7 +123,6 @@ export const storageService = {
   },
 
   async changePassword(currentPassword: string, newPassword: string) {
-    // Supabase handles password change directly
     const { error } = await supabase.auth.updateUser({
       password: newPassword
     });
@@ -158,7 +161,6 @@ export const storageService = {
     return await getAuthUserId();
   },
 
-  // Restore session on page reload
   async restoreSession() {
     const { data } = await supabase.auth.getSession();
     if (data.session?.user) {
@@ -176,6 +178,10 @@ export const storageService = {
           displayName: profile.display_name,
           role: profile.role
         };
+
+        // Pre-load settings on session restore
+        await this.loadSettings();
+
         return profile.email;
       }
     }
@@ -188,29 +194,52 @@ export const storageService = {
 
   async loadSettings() {
     const userId = await this.getCurrentUserId();
-    if (!userId) return null;
+    if (!userId) {
+      cachedSettings = {};
+      return null;
+    }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_settings')
       .select('*')
       .eq('user_id', userId)
       .single();
 
-    cachedSettings = data;
+    if (error) {
+      console.warn('loadSettings error:', error.message);
+      cachedSettings = {};
+      return null;
+    }
+
+    cachedSettings = data || {};
     return data;
+  },
+
+  // FIX: Ensure cache is always initialized, even if loadSettings wasn't called yet
+  async ensureSettingsLoaded() {
+    if (cachedSettings === null) {
+      await this.loadSettings();
+    }
   },
 
   async updateSettings(updates: Record<string, any>) {
     const userId = await this.getCurrentUserId();
     if (!userId) return;
 
-    await supabase
+    const { error } = await supabase
       .from('user_settings')
       .update(updates)
       .eq('user_id', userId);
 
-    // Update cache
-    if (cachedSettings) {
+    if (error) {
+      console.error('updateSettings error:', error.message);
+      return;
+    }
+
+    // FIX: Always update cache, initialize if null
+    if (cachedSettings === null) {
+      cachedSettings = { ...updates };
+    } else {
       cachedSettings = { ...cachedSettings, ...updates };
     }
   },
@@ -291,7 +320,6 @@ export const storageService = {
       return [];
     }
 
-    // Map to existing format
     const projects = (data || []).map(p => ({
       id: p.id,
       title: p.title,
@@ -305,12 +333,14 @@ export const storageService = {
 
   async createProject(initialData: any = null): Promise<any> {
     const userId = await this.getCurrentUserId();
-    if (!userId) return null;
+    if (!userId) {
+      console.error('createProject: No user ID');
+      return null;
+    }
 
     const newId = generateId();
     const dataToSave = initialData || createEmptyProjectData();
 
-    // Create project record
     const { error: projError } = await supabase
       .from('projects')
       .insert({
@@ -324,7 +354,6 @@ export const storageService = {
       return null;
     }
 
-    // Create data rows for both languages
     const { error: dataError } = await supabase
       .from('project_data')
       .insert([
@@ -343,14 +372,11 @@ export const storageService = {
       updatedAt: new Date().toISOString()
     };
 
-    // Invalidate cache
     cachedProjectsMeta = null;
-
     return meta;
   },
 
   async deleteProject(projectId: string) {
-    // CASCADE will handle project_data deletion
     const { error } = await supabase
       .from('projects')
       .delete()
@@ -379,13 +405,11 @@ export const storageService = {
     let targetId = projectId || this.getCurrentProjectId();
 
     if (!targetId) {
-      // Load most recent project
       const projects = await this.getUserProjects();
       if (projects.length > 0) {
         targetId = projects[0].id;
         this.setCurrentProjectId(targetId);
       } else {
-        // Create a default project
         const newProj = await this.createProject();
         if (newProj) {
           targetId = newProj.id;
@@ -426,7 +450,6 @@ export const storageService = {
       }
     }
 
-    // Upsert project data
     const { error: dataError } = await supabase
       .from('project_data')
       .upsert(
@@ -442,7 +465,6 @@ export const storageService = {
       console.error('Error saving project data:', dataError);
     }
 
-    // Update project title from data
     const newTitle = projectData.projectIdea?.projectTitle;
     if (newTitle && newTitle.trim() !== '') {
       await supabase
