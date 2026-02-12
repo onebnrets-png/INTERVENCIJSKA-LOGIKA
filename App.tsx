@@ -1018,8 +1018,7 @@ const App = () => {
                 {/* TOOLBAR – FIXED: using t.saveProject etc. instead of t.toolbar.save */}
                 <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2 flex-shrink-0">
                     <div className="flex items-center gap-2">
-                        <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
-                        {error && <p className="text-red-500 text-xs font-medium truncate max-w-xs">{error}</p>}
+                      <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
                     </div>
                     <div className="flex items-center gap-1">
                         <button onClick={handleSaveToStorage} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.saveProject}>
