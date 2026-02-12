@@ -1,7 +1,7 @@
 {
   "name": "eu-intervention-logic-ai-assistant",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "@google/genai": "^1.23.0",
+    "@supabase/supabase-js": "^2.49.1",
     "docx": "8.5.0",
     "html2canvas": "latest",
     "qrcode": "^1.5.4"
