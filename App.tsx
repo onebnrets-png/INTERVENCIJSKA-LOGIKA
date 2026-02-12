@@ -1041,21 +1041,21 @@ const App = () => {
                     </div>
                 </div>
 
-                {/* SCROLLABLE CONTENT */}
-                <div id="main-scroll-container" className="flex-1 overflow-y-auto p-4 md:p-8">
-                    <ProjectDisplay
-                        projectData={projectData}
-                        currentStepId={currentStepId}
-                        language={language}
-                        onUpdateData={handleUpdateData}
-                        onGenerateSection={handleGenerateSection}
-                        onGenerateCompositeSection={handleGenerateCompositeSection}
-                        onGenerateField={handleGenerateField}
-                        onAddItem={handleAddItem}
-                        onRemoveItem={handleRemoveItem}
-                        isLoading={isLoading}
-                        showAiWarning={showAiWarning}
-                    />
+                               {/* SCROLLABLE CONTENT — ProjectDisplay has its own scroll container and header */}
+                <ProjectDisplay
+                    projectData={projectData}
+                    activeStepId={currentStepId}
+                    language={language}
+                    onUpdateData={handleUpdateData}
+                    onGenerateSection={handleGenerateSection}
+                    onGenerateCompositeSection={handleGenerateCompositeSection}
+                    onGenerateField={handleGenerateField}
+                    onAddItem={handleAddItem}
+                    onRemoveItem={handleRemoveItem}
+                    isLoading={isLoading}
+                    error={error}
+                    missingApiKey={showAiWarning}
+                />
                 </div>
             </main>
         </div>
