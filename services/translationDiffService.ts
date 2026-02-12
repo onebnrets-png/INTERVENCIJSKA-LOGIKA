@@ -1,11 +1,17 @@
 // services/translationDiffService.ts
+// ═══════════════════════════════════════════════════════════════
 // Granular diff-based translation engine.
 // Tracks which fields changed since the last translation
 // and only sends changed content to the AI.
+//
+// TRANSLATION RULES are read from services/Instructions.ts
+// — the single source of truth. No hardcoded rules here.
+// ═══════════════════════════════════════════════════════════════
 
 import { supabase } from './supabaseClient.ts';
 import { generateContent } from './aiProvider.ts';
 import { storageService } from './storageService.ts';
+import { getTranslationRules } from './Instructions.ts';
 
 // ─── SIMPLE HASH (fast, no crypto needed) ────────────────────────
 
@@ -16,7 +22,7 @@ const simpleHash = (str: string): string => {
   for (let i = 0; i < s.length; i++) {
     const char = s.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash |= 0; // Convert to 32bit integer
+    hash |= 0;
   }
   return hash.toString(36);
 };
@@ -26,7 +32,7 @@ const simpleHash = (str: string): string => {
 const SKIP_KEYS = new Set([
   'id', 'startDate', 'endDate', 'date', 'level',
   'category', 'likelihood', 'impact', 'type', 'predecessorId',
-  'projectAcronym', 'startDate'
+  'projectAcronym'
 ]);
 
 const SKIP_VALUES = new Set([
@@ -38,9 +44,9 @@ const SKIP_VALUES = new Set([
 // ─── FLATTEN: Extract all translatable field paths + values ──────
 
 interface FieldEntry {
-  path: string;       // e.g. "problemAnalysis.coreProblem.title"
-  value: string;      // the actual text
-  hash: string;       // hash of the value
+  path: string;
+  value: string;
+  hash: string;
 }
 
 const flattenTranslatableFields = (obj: any, prefix: string = ''): FieldEntry[] => {
@@ -175,7 +181,6 @@ const saveHashes = async (
 const groupBySection = (fields: FieldEntry[]): Map<string, FieldEntry[]> => {
   const groups = new Map<string, FieldEntry[]>();
   for (const field of fields) {
-    // Extract top-level section: "problemAnalysis.coreProblem.title" → "problemAnalysis"
     const section = field.path.split('.')[0].split('[')[0];
     if (!groups.has(section)) groups.set(section, []);
     groups.get(section)!.push(field);
@@ -191,23 +196,22 @@ const translateFieldBatch = async (
 ): Promise<Map<string, string>> => {
   const langName = targetLanguage === 'si' ? 'Slovenian' : 'English';
 
+  // Read translation rules from the central Instructions.ts
+  const translationRules = getTranslationRules(targetLanguage);
+
   // Build a simple key→value map for the AI
   const toTranslate: Record<string, string> = {};
   fields.forEach((f, i) => {
     toTranslate[`field_${i}`] = f.value;
   });
 
-  const prompt = `You are a professional translator for EU Project Proposals.
-Translate each value in the following JSON object into ${langName}.
-RULES:
-1. Keep all keys exactly as they are (field_0, field_1, etc.).
-2. Translate ONLY the text values.
-3. Use high-quality, professional EU project terminology.
-4. Do NOT translate IDs (WP1, T1.1, M1, D1, R1, KER1), dates, or abbreviations.
-5. Return ONLY valid JSON. No markdown, no explanation.
-
-JSON:
-${JSON.stringify(toTranslate, null, 2)}`;
+  const prompt = [
+    `You are a professional translator for EU Project Proposals.`,
+    `Translate each value in the following JSON object into ${langName}.`,
+    `RULES:\n- ${translationRules.join('\n- ')}`,
+    `\nADDITIONAL:\n- Keep all keys exactly as they are (field_0, field_1, etc.).\n- Return ONLY valid JSON. No markdown, no explanation.`,
+    `\nJSON:\n${JSON.stringify(toTranslate, null, 2)}`
+  ].join('\n');
 
   const result = await generateContent({ prompt, jsonMode: true });
   const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
@@ -231,8 +235,10 @@ export const smartTranslateProject = async (
   targetLanguage: 'en' | 'si',
   existingTargetData: any,
   projectId: string
-): Promise<{ translatedData: any; stats: { total: number; changed: number; translated: number; failed: number } }> => {
-
+): Promise<{
+  translatedData: any;
+  stats: { total: number; changed: number; translated: number; failed: number };
+}> => {
   const sourceLang = targetLanguage === 'si' ? 'en' : 'si';
 
   // 1. Flatten all translatable fields from source
@@ -250,23 +256,26 @@ export const smartTranslateProject = async (
   for (const field of sourceFields) {
     const storedHash = storedHashes.get(field.path);
     if (storedHash && storedHash === field.hash) {
-      // Hash matches → source unchanged since last translation → skip
       unchangedFields.push(field);
     } else {
-      // Hash differs or missing → needs (re-)translation
       changedFields.push(field);
     }
   }
 
   console.log(`[TranslationDiff] ${changedFields.length} fields changed, ${unchangedFields.length} unchanged.`);
 
-  // 4. Start with existing target data as base (preserves already-translated content)
+  // 4. Start with existing target data as base
   const translatedData = existingTargetData
     ? JSON.parse(JSON.stringify(existingTargetData))
     : JSON.parse(JSON.stringify(sourceData));
 
   // 5. Translate changed fields in section-based batches
-  const stats = { total: sourceFields.length, changed: changedFields.length, translated: 0, failed: 0 };
+  const stats = {
+    total: sourceFields.length,
+    changed: changedFields.length,
+    translated: 0,
+    failed: 0
+  };
 
   if (changedFields.length === 0) {
     console.log('[TranslationDiff] Nothing changed – no translation needed!');
@@ -279,7 +288,6 @@ export const smartTranslateProject = async (
   for (const [section, fields] of sectionGroups) {
     console.log(`[TranslationDiff] Translating section "${section}" – ${fields.length} fields...`);
 
-    // Split into batches of max 30 fields to avoid token limits
     const BATCH_SIZE = 30;
     for (let i = 0; i < fields.length; i += BATCH_SIZE) {
       const batch = fields.slice(i, i + BATCH_SIZE);
@@ -287,13 +295,11 @@ export const smartTranslateProject = async (
       try {
         const results = await translateFieldBatch(batch, targetLanguage);
 
-        // Apply translated values to target data
         for (const [path, translatedValue] of results) {
           setByPath(translatedData, path, translatedValue);
           stats.translated++;
         }
 
-        // Track successfully translated fields for hash storage
         batch.forEach(f => {
           if (results.has(f.path)) {
             successfullyTranslated.push(f);
@@ -303,14 +309,11 @@ export const smartTranslateProject = async (
         console.warn(`[TranslationDiff] Batch failed for "${section}" (${batch.length} fields):`, error.message);
         stats.failed += batch.length;
 
-        // Fallback: copy source values for failed fields
         for (const field of batch) {
           const existingTarget = getByPath(translatedData, field.path);
           if (!existingTarget || existingTarget.trim() === '' || existingTarget === field.value) {
-            // Target is empty or same as source → copy source as fallback
             setByPath(translatedData, field.path, field.value);
           }
-          // else: keep existing target (it's a previous translation)
         }
       }
     }
