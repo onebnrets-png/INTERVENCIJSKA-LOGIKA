@@ -428,7 +428,11 @@ const App = () => {
     setProjectData(prevData => {
         let newData = set(prevData, path, value);
         if (path[0] === 'activities') {
-             newData = recalculateProjectSchedule(newData);
+            const scheduleResult = recalculateProjectSchedule(newData);
+             newData = scheduleResult.projectData;
+             if (scheduleResult.warnings.length > 0) {
+                 console.warn('Schedule warnings:', scheduleResult.warnings);
+             }
         }
         return newData;
     });
