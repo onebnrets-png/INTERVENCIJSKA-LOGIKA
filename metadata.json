@@ -1,0 +1,5 @@
+{
+  "name": "EU Intervention Logic AI Assistant",
+  "description": "An interactive presentation and AI-powered assistant for developing EU projects based on the Intervention Logic framework. The application guides users through problem analysis, objective setting, activity planning, and impact assessment, using AI to generate detailed, policy-aligned project proposals.",
+  "requestFramePermissions": []
+}
