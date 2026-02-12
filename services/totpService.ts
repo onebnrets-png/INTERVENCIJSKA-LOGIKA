@@ -76,7 +76,6 @@ async function computeHotpCode(base32Secret: string, counter: number): Promise<s
   // 3. Convert counter to 8-byte big-endian buffer
   const counterBuffer = new ArrayBuffer(8);
   const counterView = new DataView(counterBuffer);
-  // JavaScript bitwise ops are 32-bit, so we split into high and low
   counterView.setUint32(0, Math.floor(counter / 0x100000000), false);
   counterView.setUint32(4, counter & 0xffffffff, false);
 
