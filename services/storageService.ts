@@ -9,13 +9,15 @@ const CURRENT_USER_KEY = `${DB_PREFIX}current_user`;
 const CURRENT_PROJECT_ID_KEY = `${DB_PREFIX}current_project_id`;
 const PROJECTS_META_PREFIX = `${DB_PREFIX}projects_meta_`;
 const API_KEY_PREFIX = `${DB_PREFIX}api_key_`;
+const OPENROUTER_KEY_PREFIX = `${DB_PREFIX}openrouter_key_`;
+const AI_PROVIDER_PREFIX = `${DB_PREFIX}ai_provider_`;
 const PROJECT_DATA_PREFIX = `${DB_PREFIX}project_`;
 const MODEL_PREFIX = `${DB_PREFIX}model_`;
 const LOGO_PREFIX = `${DB_PREFIX}custom_logo_`;
 const INSTRUCTIONS_KEY = `${DB_PREFIX}custom_instructions`;
 
 // Helper to simulate delay for "server" feel
-const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number = 300) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Generate Unique Project ID
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -37,14 +39,11 @@ export const storageService = {
     const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
     const hashedPassword = await hashPassword(password);
 
-    // Try hashed password first, fallback to plaintext for legacy users
     let user = users.find((u: any) => u.email === email && u.password === hashedPassword);
 
     if (!user) {
-      // Check for legacy plaintext password (pre-migration users)
       user = users.find((u: any) => u.email === email && u.password === password && u.password.length !== 64);
       if (user) {
-        // Migrate this user's password to hashed version
         const userIndex = users.findIndex((u: any) => u.email === email);
         users[userIndex].password = hashedPassword;
         localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -72,12 +71,8 @@ export const storageService = {
       return { success: false, message: 'Username is taken' };
     }
 
-    // First registered user is automatically ADMIN
     const role = users.length === 0 ? 'admin' : 'user';
-
-    // Real TOTP secret for authenticator apps
     const twoFactorSecret = generateTotpSecret();
-
     const hashedPassword = await hashPassword(password);
 
     users.push({
@@ -109,7 +104,6 @@ export const storageService = {
 
     const hashedCurrent = await hashPassword(currentPassword);
 
-    // Check hashed password, or legacy plaintext
     if (users[userIndex].password !== hashedCurrent && users[userIndex].password !== currentPassword) {
       return { success: false, message: 'INCORRECT_PASSWORD' };
     }
@@ -121,9 +115,6 @@ export const storageService = {
 
   // --- 2FA (Real TOTP) ---
 
-  /**
-   * Get the otpauth:// URI for QR code display during 2FA setup
-   */
   get2FASetupUri(email: string): string | null {
     const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
     const user = users.find((u: any) => u.email === email);
@@ -131,9 +122,6 @@ export const storageService = {
     return generateTotpUri(user.twoFactorSecret, email);
   },
 
-  /**
-   * Get the raw Base32 secret (for manual entry if QR scanning fails)
-   */
   async get2FASecret(email: string) {
     const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
     const user = users.find((u: any) => u.email === email);
@@ -141,10 +129,6 @@ export const storageService = {
     return { success: false };
   },
 
-  /**
-   * Verify 2FA code using real TOTP algorithm
-   * Still allows master code "000000" for development/emergency access
-   */
   async verify2FA(email: string, code: string) {
     await delay(400);
     const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
@@ -154,7 +138,6 @@ export const storageService = {
 
     const user = users[userIndex];
 
-    // Master code for development/emergency
     if (code === '000000') {
       user.isVerified = true;
       users[userIndex] = user;
@@ -167,7 +150,6 @@ export const storageService = {
       return { success: false, message: 'No 2FA secret configured' };
     }
 
-    // Real TOTP verification (±1 time step tolerance)
     const isValid = await verifyTotpCode(user.twoFactorSecret, code);
 
     if (isValid) {
@@ -208,7 +190,22 @@ export const storageService = {
     return user ? (user.role || 'user') : 'user';
   },
 
-  // --- API KEY ---
+  // --- AI PROVIDER ---
+
+  getAIProvider(): 'gemini' | 'openrouter' {
+    const email = this.getCurrentUser();
+    if (!email) return 'gemini';
+    return (localStorage.getItem(`${AI_PROVIDER_PREFIX}${email}`) as 'gemini' | 'openrouter') || 'gemini';
+  },
+
+  setAIProvider(provider: 'gemini' | 'openrouter') {
+    const email = this.getCurrentUser();
+    if (email) {
+      localStorage.setItem(`${AI_PROVIDER_PREFIX}${email}`, provider);
+    }
+  },
+
+  // --- API KEYS ---
 
   getApiKey() {
     const email = this.getCurrentUser();
@@ -227,6 +224,23 @@ export const storageService = {
     const email = this.getCurrentUser();
     if (email) {
       localStorage.removeItem(`${API_KEY_PREFIX}${email}`);
+    }
+  },
+
+  getOpenRouterKey(): string | null {
+    const email = this.getCurrentUser();
+    if (!email) return null;
+    return localStorage.getItem(`${OPENROUTER_KEY_PREFIX}${email}`);
+  },
+
+  setOpenRouterKey(key: string) {
+    const email = this.getCurrentUser();
+    if (email) {
+      if (key && key.trim().length > 0) {
+        localStorage.setItem(`${OPENROUTER_KEY_PREFIX}${email}`, key.trim());
+      } else {
+        localStorage.removeItem(`${OPENROUTER_KEY_PREFIX}${email}`);
+      }
     }
   },
 
@@ -364,7 +378,7 @@ export const storageService = {
         localStorage.setItem(CURRENT_PROJECT_ID_KEY, targetId);
       } else {
         const newProj = this.createProject();
-        targetId = newProj.id;
+        targetId = newProj!.id;
       }
     }
 
