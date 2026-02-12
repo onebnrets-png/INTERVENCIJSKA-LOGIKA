@@ -1044,11 +1044,14 @@ const App = () => {
       </div>
       )}
 
-      {/* PRINT LAYOUT (hidden, only visible when printing) */}
-      <PrintLayout projectData={projectData} language={language} logo={appLogo} />
+      {/* PRINT LAYOUT – hidden on screen, visible only when printing */}
+<div className="hidden print:block">
+    <PrintLayout projectData={projectData} language={language} logo={appLogo} />
+</div>
 
-      {/* EXPORT-ONLY CHART CONTAINERS (hidden, used by html2canvas) */}
-      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+{/* EXPORT-ONLY CHART CONTAINERS (hidden, used by html2canvas) */}
+<div style={{ position: 'absolute', left: '-9999px', top: '-9999px', pointerEvents: 'none' }}>
+
           <div id="gantt-chart-export" style={{ width: '1200px', background: 'white', padding: '20px' }}>
               <GanttChart activities={projectData.activities} language={language} forceViewMode={true} containerWidth={1200} printMode={true} />
           </div>
