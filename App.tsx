@@ -1039,8 +1039,7 @@ const App = () => {
                         </button>
                     </div>
                 </div>
-
-                               {/* SCROLLABLE CONTENT — ProjectDisplay has its own scroll container and header */}
+                {/* SCROLLABLE CONTENT — ProjectDisplay has its own scroll container */}
                 <ProjectDisplay
                     projectData={projectData}
                     activeStepId={currentStepId}
@@ -1055,7 +1054,6 @@ const App = () => {
                     error={error}
                     missingApiKey={showAiWarning}
                 />
-                </div>
             </main>
         </div>
       </div>
