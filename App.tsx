@@ -1,11 +1,10 @@
-
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import WelcomeScreen from './components/WelcomeScreen.tsx';
 import ProjectDisplay from './components/ProjectDisplay.tsx';
 import PrintLayout from './components/PrintLayout.tsx';
 import GanttChart from './components/GanttChart.tsx';
-import PERTChart from './components/PERTChart.tsx'; 
-import Organigram from './components/Organigram.tsx'; 
+import PERTChart from './components/PERTChart.tsx';
+import Organigram from './components/Organigram.tsx';
 import ConfirmationModal from './components/ConfirmationModal.tsx';
 import AuthScreen from './components/AuthScreen.tsx';
 import SettingsModal from './components/SettingsModal.tsx';
@@ -43,13 +42,16 @@ const ApiWarningBanner = ({ onDismiss, onOpenSettings, language }) => {
 };
 
 const App = () => {
-  const [currentUser, setCurrentUser] = useState(storageService.getCurrentUser());
+  // ═══════════════════════════════════════════════════════════════
+  // STATE – currentUser starts as null, restored via Supabase session
+  // ═══════════════════════════════════════════════════════════════
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [projectData, setProjectData] = useState(createEmptyProjectData());
   const [projectVersions, setProjectVersions] = useState<{ en: any; si: any }>({
-      en: null, 
+      en: null,
       si: null
   });
-  
+
   // Project Management State
   const [currentProjectId, setCurrentProjectId] = useState(storageService.getCurrentProjectId());
   const [userProjects, setUserProjects] = useState([]);
@@ -99,14 +101,31 @@ const App = () => {
     return STEPS.map(step => isStepCompleted(projectData, step.key));
   }, [projectData, language, STEPS]);
 
-  // --- Auth & Data Loading Effects ---
+  // ═══════════════════════════════════════════════════════════════
+  // SUPABASE: Restore session on page reload
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+      const restoreSession = async () => {
+          const email = await storageService.restoreSession();
+          if (email) {
+              setCurrentUser(email);
+          }
+      };
+      restoreSession();
+  }, []);
 
-  // Load Projects on Login
+  // ═══════════════════════════════════════════════════════════════
+  // Load Projects on Login (async)
+  // ═══════════════════════════════════════════════════════════════
   useEffect(() => {
       if (currentUser) {
-          refreshProjectList();
-          loadActiveProject(); // This will load specific ID or create default if none
-          loadCustomLogo(); // Load logo
+          const init = async () => {
+              await storageService.loadSettings();
+              await refreshProjectList();
+              await loadActiveProject();
+              loadCustomLogo();
+          };
+          init();
       }
   }, [currentUser]);
 
@@ -119,22 +138,19 @@ const App = () => {
       }
   };
 
-  const refreshProjectList = () => {
-      const list = storageService.getUserProjects();
+  const refreshProjectList = async () => {
+      const list = await storageService.getUserProjects();
       setUserProjects(list);
   };
 
-  const loadActiveProject = (specificId = null) => {
-      // 1. Load Data
-      const loadedData = storageService.loadProject(language, specificId);
-      
-      // 2. Update State safely
+  const loadActiveProject = async (specificId = null) => {
+      const loadedData = await storageService.loadProject(language, specificId);
+
       if (loadedData) {
-          setProjectData(safeMerge(loadedData)); // Use safeMerge to fix any missing fields
-          
-          // Try loading opposite language too
+          setProjectData(safeMerge(loadedData));
+
           const otherLang = language === 'en' ? 'si' : 'en';
-          const otherData = storageService.loadProject(otherLang, specificId);
+          const otherData = await storageService.loadProject(otherLang, specificId);
           setProjectVersions({
               en: language === 'en' ? safeMerge(loadedData) : safeMerge(otherData),
               si: language === 'si' ? safeMerge(loadedData) : safeMerge(otherData)
@@ -143,7 +159,6 @@ const App = () => {
           setProjectData(createEmptyProjectData());
       }
 
-      // 3. Update Current ID Ref
       const activeId = storageService.getCurrentProjectId();
       setCurrentProjectId(activeId);
   };
@@ -177,63 +192,55 @@ const App = () => {
       setCurrentUser(username);
   };
 
-  const handleLogout = () => {
-      storageService.logout();
+  const handleLogout = async () => {
+      await storageService.logout();
       setCurrentUser(null);
       setCurrentProjectId(null);
       setProjectData(createEmptyProjectData());
-      setIsWarningDismissed(false); 
-      setAppLogo(BRAND_ASSETS.logoText); // Reset logo on logout
+      setIsWarningDismissed(false);
+      setAppLogo(BRAND_ASSETS.logoText);
   };
 
   // --- Project Management Handlers ---
 
-  const handleSwitchProject = (projectId) => {
+  const handleSwitchProject = async (projectId) => {
       if (projectId === currentProjectId) {
           setIsProjectListOpen(false);
           return;
       }
 
-      // 1. Save current state before switching
-      storageService.saveProject(projectData, language, currentProjectId);
-      
-      // 2. Update active ID
+      await storageService.saveProject(projectData, language, currentProjectId);
+
       storageService.setCurrentProjectId(projectId);
-      
-      // 3. Load new project
-      loadActiveProject(projectId);
+
+      await loadActiveProject(projectId);
       setIsProjectListOpen(false);
-      
-      // 4. Reset view
-      setCurrentStepId(null); 
+
+      setCurrentStepId(null);
       setHasUnsavedTranslationChanges(false);
   };
 
-  const handleCreateProject = () => {
-      // 1. Save current
+  const handleCreateProject = async () => {
       if (currentProjectId) {
-          storageService.saveProject(projectData, language, currentProjectId);
+          await storageService.saveProject(projectData, language, currentProjectId);
       }
 
-      // 2. Create New
-      const newProj = storageService.createProject();
-      
-      // 3. Switch to it
-      refreshProjectList();
+      const newProj = await storageService.createProject();
+
+      await refreshProjectList();
       setCurrentProjectId(newProj.id);
-      loadActiveProject(newProj.id);
-      
+      await loadActiveProject(newProj.id);
+
       setIsProjectListOpen(false);
-      setCurrentStepId(1); // Go to step 1 of new project
+      setCurrentStepId(1);
   };
 
-  const handleDeleteProject = (projectId) => {
-      storageService.deleteProject(projectId);
-      refreshProjectList();
-      
-      // If we deleted the active one, load whatever remains (or create new)
+  const handleDeleteProject = async (projectId) => {
+      await storageService.deleteProject(projectId);
+      await refreshProjectList();
+
       if (projectId === currentProjectId) {
-          loadActiveProject(); 
+          await loadActiveProject();
           setCurrentStepId(null);
       }
   };
@@ -243,7 +250,7 @@ const App = () => {
   const generateFilename = (extension: string): string => {
     const acronym = projectData.projectIdea.projectAcronym?.trim();
     const title = projectData.projectIdea.projectTitle?.trim();
-    
+
     let baseName = 'eu-project';
     if (acronym && title) {
         baseName = `${acronym} - ${title}`;
@@ -257,21 +264,21 @@ const App = () => {
     return `${sanitized}.${extension}`;
   };
 
-  const handleSaveToStorage = () => {
+  const handleSaveToStorage = async () => {
       try {
           if (currentUser) {
-              // 1. Save to Local Browser Storage (Background)
-              storageService.saveProject(projectData, language, currentProjectId);
+              // 1. Save to Supabase
+              await storageService.saveProject(projectData, language, currentProjectId);
               const otherLang = language === 'en' ? 'si' : 'en';
               if (projectVersions[otherLang]) {
-                  storageService.saveProject(projectVersions[otherLang], otherLang, currentProjectId);
+                  await storageService.saveProject(projectVersions[otherLang], otherLang, currentProjectId);
               }
-              refreshProjectList(); // Update metadata in list if title changed
+              await refreshProjectList();
 
               // 2. DOWNLOAD JSON TO DISK (Foreground)
               const exportData = {
                   meta: {
-                      version: '2.1', // Bumped for multi-project support
+                      version: '3.0',
                       createdAt: new Date().toISOString(),
                       activeLanguage: language,
                       author: currentUser,
@@ -320,13 +327,13 @@ const App = () => {
           setLanguage(targetLang);
           setHasUnsavedTranslationChanges(false);
           // Auto-save translation
-          storageService.saveProject(translatedData, targetLang, currentProjectId);
+          await storageService.saveProject(translatedData, targetLang, currentProjectId);
       } catch (e) {
          if (e.message === 'MISSING_API_KEY') {
              setIsSettingsOpen(true);
          } else {
              console.error("Translation failed", e);
-             let userMessage = targetLang === 'si' 
+             let userMessage = targetLang === 'si'
                   ? "Napaka pri prevajanju. Preverite kvoto ali ključ."
                   : "Translation failed. Check quota or key.";
              setError(userMessage);
@@ -348,18 +355,18 @@ const App = () => {
       setHasUnsavedTranslationChanges(false);
   };
 
-  const handleLanguageSwitchRequest = (newLang) => {
+  const handleLanguageSwitchRequest = async (newLang) => {
     if (newLang === language) return;
-    
+
     // Auto-save current
     if (currentUser) {
-       storageService.saveProject(projectData, language, currentProjectId);
+       await storageService.saveProject(projectData, language, currentProjectId);
     }
 
     if (!hasContent(projectData)) {
       setLanguage(newLang);
       // Try load from DB for new lang based on ID
-      const loaded = storageService.loadProject(newLang, currentProjectId);
+      const loaded = await storageService.loadProject(newLang, currentProjectId);
       setProjectData(loaded || createEmptyProjectData());
       setHasUnsavedTranslationChanges(false);
       return;
@@ -368,7 +375,7 @@ const App = () => {
     // Check if we have a version in memory or storage
     let cachedVersion = projectVersions[newLang];
     if (!cachedVersion) {
-        cachedVersion = storageService.loadProject(newLang, currentProjectId);
+        cachedVersion = await storageService.loadProject(newLang, currentProjectId);
     }
     const tCurrent = TEXT[language] || TEXT['en'];
 
@@ -432,11 +439,11 @@ const App = () => {
     setHasUnsavedTranslationChanges(true);
   }, []);
 
-  // Save on significant updates
+  // Auto-save on significant updates (async debounce)
   useEffect(() => {
-     const timer = setTimeout(() => {
+     const timer = setTimeout(async () => {
          if (currentUser && hasContent(projectData)) {
-             storageService.saveProject(projectData, language, currentProjectId);
+             await storageService.saveProject(projectData, language, currentProjectId);
          }
      }, 2000);
      return () => clearTimeout(timer);
@@ -448,14 +455,14 @@ const App = () => {
     setError(null);
     try {
       const generatedData = await generateSectionContent(sectionKey, projectData, language, mode);
-      
+
       let newData = { ...projectData };
       if (['problemAnalysis', 'projectIdea'].includes(sectionKey)) {
            newData[sectionKey] = { ...newData[sectionKey], ...generatedData };
       } else {
            newData[sectionKey] = generatedData;
       }
-      
+
       if (sectionKey === 'activities') {
           const schedResult = recalculateProjectSchedule(newData);
           newData = schedResult.projectData;
@@ -465,7 +472,7 @@ const App = () => {
           setIsLoading(`${t.generating} ${t.subSteps.riskMitigation}...`);
           try {
              const risksContent = await generateSectionContent('risks', newData, language, mode);
-             newData.risks = risksContent; 
+             newData.risks = risksContent;
           } catch (e) { console.error(e); }
       }
 
@@ -479,20 +486,18 @@ const App = () => {
     }
   };
 
-  const handleImportProject = (event) => {
+  const handleImportProject = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setIsLoading(true);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const text = e.target?.result;
         if (typeof text !== 'string') throw new Error('File content is not valid text.');
         const importedJson = JSON.parse(text);
-        
-        // Handle Import logic: Ask to overwrite current or create new?
-        // For simplicity: Creates a new project from import
-        const newProj = storageService.createProject();
+
+        const newProj = await storageService.createProject();
         let finalData = createEmptyProjectData();
         let targetLang = 'en';
 
@@ -501,28 +506,29 @@ const App = () => {
              const preferredLang = importedJson.meta.activeLanguage || 'en';
              const safeEn = en ? safeMerge(en) : null;
              const safeSi = si ? safeMerge(si) : null;
-             
+
              // Save both versions to new ID
-             if (safeEn) storageService.saveProject(safeEn, 'en', newProj.id);
-             if (safeSi) storageService.saveProject(safeSi, 'si', newProj.id);
+             if (safeEn) await storageService.saveProject(safeEn, 'en', newProj.id);
+             if (safeSi) await storageService.saveProject(safeSi, 'si', newProj.id);
 
              if (preferredLang === 'si' && safeSi) { finalData = safeSi; targetLang = 'si'; }
              else { finalData = safeEn || safeSi; targetLang = safeEn ? 'en' : 'si'; }
-             
+
         } else if (importedJson.problemAnalysis) {
           const detectedLang = detectProjectLanguage(importedJson);
           finalData = safeMerge(importedJson);
           targetLang = detectedLang as 'en' | 'si';
-          storageService.saveProject(finalData, targetLang, newProj.id);
+          await storageService.saveProject(finalData, targetLang, newProj.id);
         }
 
         // Switch to new project
-        refreshProjectList();
+        await refreshProjectList();
         setCurrentProjectId(newProj.id);
+        storageService.setCurrentProjectId(newProj.id);
         setProjectData(finalData);
         setLanguage(targetLang as 'en' | 'si');
         setCurrentStepId(1);
-        
+
       } catch (err) {
         setError(`Failed to import: ${err.message}`);
       } finally {
@@ -615,7 +621,7 @@ const App = () => {
 
   const handleGenerateField = async (path) => {
     if (!ensureApiKey()) return;
-    
+
     const fieldName = path[path.length - 1];
     setIsLoading(`${t.generating} ${fieldName}...`);
     try {
@@ -662,20 +668,17 @@ const App = () => {
   const handleSubStepClick = (subStepId) => {
     const el = document.getElementById(subStepId);
     const container = document.getElementById('main-scroll-container');
-    
+
     if (el && container) {
         const elRect = el.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
-        // Calculate the position of the element relative to the container's current view
         const relativeTop = elRect.top - containerRect.top;
-        
-        // Scroll the container
+
         container.scrollBy({
-            top: relativeTop - 24, // 24px padding top for breathing room
+            top: relativeTop - 24,
             behavior: 'smooth'
         });
     } else if (el) {
-        // Fallback for sub-steps not in the main scroll container (unlikely)
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
@@ -705,11 +708,10 @@ const App = () => {
 
   const handleExportDocx = async () => {
     setIsLoading("Rendering Graphs...");
-    // Force a delay to ensure components are rendered
     await new Promise(r => setTimeout(r, 2000));
 
-    const exportOptions = { 
-        scale: 2, 
+    const exportOptions = {
+        scale: 2,
         backgroundColor: '#ffffff',
         useCORS: true,
         allowTaint: true
@@ -759,7 +761,7 @@ const App = () => {
             console.warn("Organigram capture failed", e);
         }
     }
-    
+
     setIsLoading("Generating DOCX...");
     try {
         const blob = await generateDocx(projectData, language, ganttData, pertData, organigramData);
@@ -793,10 +795,10 @@ const App = () => {
         <>
             {shouldShowBanner && <ApiWarningBanner onDismiss={() => setIsWarningDismissed(true)} onOpenSettings={() => setIsSettingsOpen(true)} language={language} />}
             <SettingsModal isOpen={isSettingsOpen} onClose={() => { setIsSettingsOpen(false); checkApiKey(); }} language={language} />
-            <AuthScreen 
-                onLoginSuccess={handleLoginSuccess} 
-                language={language} 
-                setLanguage={(lang) => setLanguage(lang as 'en' | 'si')} 
+            <AuthScreen
+                onLoginSuccess={handleLoginSuccess}
+                language={language}
+                setLanguage={(lang) => setLanguage(lang as 'en' | 'si')}
                 onOpenSettings={() => setIsSettingsOpen(true)}
             />
         </>
@@ -805,18 +807,18 @@ const App = () => {
 
   return (
     <>
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={() => { 
-            setIsSettingsOpen(false); 
-            checkApiKey(); 
-            loadCustomLogo(); // Refresh logo if changed in settings
-        }} 
-        language={language} 
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => {
+            setIsSettingsOpen(false);
+            checkApiKey();
+            loadCustomLogo();
+        }}
+        language={language}
       />
       <ConfirmationModal isOpen={modalConfig.isOpen} {...modalConfig} />
-      <ProjectListModal 
-          isOpen={isProjectListOpen} 
+      <ProjectListModal
+          isOpen={isProjectListOpen}
           onClose={() => setIsProjectListOpen(false)}
           projects={userProjects}
           currentProjectId={currentProjectId}
@@ -825,8 +827,8 @@ const App = () => {
           onDeleteProject={handleDeleteProject}
           language={language}
       />
-      
-      {/* ... Summary Modal Code ... */}
+
+      {/* Summary Modal */}
       {summaryModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print:hidden">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full border border-slate-200 flex flex-col max-h-[90vh]">
@@ -861,7 +863,7 @@ const App = () => {
           /* WELCOME SCREEN */
           <div className="flex flex-col h-[100dvh] bg-slate-200 overflow-hidden font-sans print:hidden">
             {shouldShowBanner && <ApiWarningBanner onDismiss={() => setIsWarningDismissed(true)} onOpenSettings={() => setIsSettingsOpen(true)} language={language} />}
-            
+
             <div className="absolute top-4 left-4 z-20 flex gap-2" style={{ top: shouldShowBanner ? '4rem' : '1rem' }}>
                  {/* Project Switcher in Welcome Screen Header */}
                  <button onClick={() => setIsProjectListOpen(true)} className="px-3 py-1 bg-white/80 backdrop-blur rounded shadow text-sm font-semibold text-slate-700 hover:bg-white flex items-center gap-1 cursor-pointer border border-slate-300">
@@ -905,7 +907,7 @@ const App = () => {
             )}
 
             {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/30 z-20 lg:hidden" aria-hidden="true" />}
-            
+
             <aside className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 p-5 flex flex-col flex-shrink-0 transform transition-transform duration-300 ease-in-out w-72 lg:w-64 xl:w-72 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="flex flex-col mb-4 flex-shrink-0">
                     <div className="flex justify-between items-center mb-6">
@@ -917,7 +919,7 @@ const App = () => {
                             <button onClick={() => handleLanguageSwitchRequest('en')} disabled={!!isLoading} className={`px-2 py-0.5 text-xs font-semibold rounded ${language === 'en' ? 'bg-white shadow text-sky-700' : 'text-slate-500'} disabled:opacity-50`}>EN</button>
                         </div>
                     </div>
-                    
+
                     {/* PROJECT SWITCHER WIDGET */}
                     <div className="mb-4 bg-slate-50 rounded-lg p-3 border border-slate-200">
                         <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">{t.projects.currentProject}</p>
@@ -934,38 +936,38 @@ const App = () => {
                         <button onClick={() => setIsSettingsOpen(true)} className="text-sky-600 hover:underline">{t.auth.settings}</button>
                     </div>
                 </div>
-            
+
                 <nav className="flex-1 flex flex-col space-y-1 overflow-y-auto custom-scrollbar min-h-0">
                     {STEPS.map((step, idx) => {
                     const isStepCompletedStatus = completedStepsStatus[idx];
-                    const isClickable = step.id === 1 || completedStepsStatus[0]; 
-                    
+                    const isClickable = step.id === 1 || completedStepsStatus[0];
+
                     return (
                         <div key={step.id}>
-                        <button 
-                            onClick={() => isClickable && setCurrentStepId(step.id)} 
-                            disabled={!isClickable} 
+                        <button
+                            onClick={() => isClickable && setCurrentStepId(step.id)}
+                            disabled={!isClickable}
                             className={`w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between ${currentStepId === step.id ? 'bg-sky-100 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-100'} ${!isClickable ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             <span>{step.title}</span>
-                            {isStepCompletedStatus 
+                            {isStepCompletedStatus
                                 ? <ICONS.CHECK className="h-5 w-5 text-green-500 flex-shrink-0" />
                                 : (currentStepId === step.id && <div className="h-2 w-2 rounded-full bg-sky-400"></div>)
                             }
                         </button>
-                        
+
                         {currentStepId === step.id && SUB_STEPS[step.key] && SUB_STEPS[step.key].length > 0 && (
                             <div className="pl-4 mt-1 space-y-1 border-l-2 border-sky-200 ml-4 mb-2">
                             {SUB_STEPS[step.key].map(subStep => {
                                 const isSubDone = isSubStepCompleted(projectData, step.key, subStep.id);
                                 return (
-                                <button 
-                                    key={subStep.id} 
-                                    onClick={() => handleSubStepClick(subStep.id)} 
+                                <button
+                                    key={subStep.id}
+                                    onClick={() => handleSubStepClick(subStep.id)}
                                     className="w-full text-left px-2 py-1.5 rounded-md text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-between"
                                 >
                                     <span>{subStep.title}</span>
-                                    {isSubDone 
+                                    {isSubDone
                                         ? <ICONS.CIRCLE_CHECK className="h-4 w-4 text-green-500 flex-shrink-0" />
                                         : <ICONS.CIRCLE_X className="h-4 w-4 text-red-400 flex-shrink-0 opacity-60" />
                                     }
@@ -978,7 +980,7 @@ const App = () => {
                     );
                     })}
                 </nav>
-                
+
                 <div className="mt-auto pt-4 border-t border-slate-200 flex-shrink-0 bg-white z-10 pb-4 lg:pb-0">
                     <h3 className="px-4 text-xs font-semibold uppercase text-slate-400 tracking-wider">{t.projectActions}</h3>
                     <div className="mt-2 space-y-1">
@@ -999,7 +1001,7 @@ const App = () => {
                         <ICONS.PRINT className="h-5 w-5" /> {t.print}
                     </button>
                     <button onClick={handleLogout} className="w-full text-left px-4 py-2 rounded-md text-red-600 hover:bg-red-50 flex items-center gap-3 border-t border-slate-100 mt-2 cursor-pointer">
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg> 
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                         {t.auth.logout}
                     </button>
                     </div>
@@ -1028,13 +1030,13 @@ const App = () => {
         </div>
       </div>
       )}
-      
-      {/* FIX: pointer-events-none added to ensure PrintLayout never blocks clicks when hidden */}
+
+      {/* PRINT LAYOUT */}
       <div className="hidden print:block fixed inset-0 bg-white z-[9999] overflow-visible w-full h-full pointer-events-none print:pointer-events-auto">
         <PrintLayout projectData={projectData} language={language} logo={appLogo} />
       </div>
-      
-      {/* EXPORT CHARTS: Always rendered in background with FIXED dimensions to avoid ResizeObserver race conditions */}
+
+      {/* EXPORT CHARTS: Always rendered in background */}
       <div id="export-container" style={{ position: 'fixed', top: 0, left: 0, width: '1200px', zIndex: -9999, opacity: 1, background: '#ffffff', pointerEvents: 'none' }}>
            <div className="bg-white p-4">
                 <GanttChart activities={projectData.activities} language={language} id="gantt-chart-export" forceViewMode="project" containerWidth={1150} />
@@ -1043,11 +1045,11 @@ const App = () => {
                 <PERTChart activities={projectData.activities} language={language} id="pert-chart-export" printMode={true} containerWidth={1150} />
            </div>
            <div className="bg-white p-4" style={{ width: '1200px' }}>
-                <Organigram 
-                    structure={projectData.projectManagement?.structure} 
-                    activities={projectData.activities} 
-                    language={language} 
-                    id="organigram-export" 
+                <Organigram
+                    structure={projectData.projectManagement?.structure}
+                    activities={projectData.activities}
+                    language={language}
+                    id="organigram-export"
                 />
            </div>
       </div>
