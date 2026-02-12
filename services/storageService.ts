@@ -1,417 +1,456 @@
+// services/storageService.ts
+// Supabase-backed storage service – replaces localStorage completely
+// All data now lives in PostgreSQL via Supabase
+
+import { supabase } from './supabaseClient.ts';
 import { createEmptyProjectData } from '../utils.ts';
-import { generateTotpSecret, generateTotpUri, verifyTotpCode } from './totpService.ts';
 
-const DB_PREFIX = 'eu_app_';
-
-// Keys
-const USERS_KEY = `${DB_PREFIX}users`;
-const CURRENT_USER_KEY = `${DB_PREFIX}current_user`;
-const CURRENT_PROJECT_ID_KEY = `${DB_PREFIX}current_project_id`;
-const PROJECTS_META_PREFIX = `${DB_PREFIX}projects_meta_`;
-const API_KEY_PREFIX = `${DB_PREFIX}api_key_`;
-const OPENROUTER_KEY_PREFIX = `${DB_PREFIX}openrouter_key_`;
-const AI_PROVIDER_PREFIX = `${DB_PREFIX}ai_provider_`;
-const PROJECT_DATA_PREFIX = `${DB_PREFIX}project_`;
-const MODEL_PREFIX = `${DB_PREFIX}model_`;
-const LOGO_PREFIX = `${DB_PREFIX}custom_logo_`;
-const INSTRUCTIONS_KEY = `${DB_PREFIX}custom_instructions`;
-
-// Helper to simulate delay for "server" feel
-const delay = (ms: number = 300) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Generate Unique Project ID
+// ─── ID GENERATOR ────────────────────────────────────────────────
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
 
-// SHA-256 password hashing via Web Crypto API
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+// ─── LOCAL CACHE (in-memory, avoids excessive DB reads) ──────────
+let cachedUser: { id: string; email: string; displayName: string; role: string } | null = null;
+let cachedSettings: any = null;
+let cachedProjectsMeta: any[] | null = null;
+
+// ─── HELPER: Get current Supabase user ID ────────────────────────
+async function getAuthUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id || null;
 }
 
 export const storageService = {
-  // --- AUTHENTICATION ---
+
+  // ═══════════════════════════════════════════════════════════════
+  // AUTHENTICATION (Supabase Auth)
+  // ═══════════════════════════════════════════════════════════════
 
   async login(email: string, password: string) {
-    await delay(300);
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const hashedPassword = await hashPassword(password);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
 
-    let user = users.find((u: any) => u.email === email && u.password === hashedPassword);
-
-    if (!user) {
-      user = users.find((u: any) => u.email === email && u.password === password && u.password.length !== 64);
-      if (user) {
-        const userIndex = users.findIndex((u: any) => u.email === email);
-        users[userIndex].password = hashedPassword;
-        localStorage.setItem(USERS_KEY, JSON.stringify(users));
-      }
+    if (error) {
+      return { success: false, message: error.message };
     }
 
-    if (user) {
-      if (user.twoFactorSecret) {
-        return { success: false, message: '2FA_REQUIRED', email: user.email, displayName: user.displayName, role: user.role };
+    if (data.user) {
+      // Load profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profile) {
+        cachedUser = {
+          id: data.user.id,
+          email: profile.email,
+          displayName: profile.display_name,
+          role: profile.role
+        };
       }
-      return { success: false, message: 'SETUP_2FA_REQUIRED', email: user.email, displayName: user.displayName, role: user.role };
+
+      return {
+        success: true,
+        email: data.user.email,
+        displayName: profile?.display_name || email.split('@')[0],
+        role: profile?.role || 'user'
+      };
     }
-    return { success: false, message: 'Invalid credentials' };
+
+    return { success: false, message: 'Login failed' };
   },
 
   async register(email: string, displayName: string, password: string, apiKey: string = '') {
-    await delay(300);
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-
-    if (users.find((u: any) => u.email === email)) {
-      return { success: false, message: 'Email already registered' };
-    }
-
-    if (displayName && users.find((u: any) => u.displayName === displayName)) {
-      return { success: false, message: 'Username is taken' };
-    }
-
-    const role = users.length === 0 ? 'admin' : 'user';
-    const twoFactorSecret = generateTotpSecret();
-    const hashedPassword = await hashPassword(password);
-
-    users.push({
+    const { data, error } = await supabase.auth.signUp({
       email,
-      displayName: displayName || email.split('@')[0],
-      password: hashedPassword,
-      role,
-      twoFactorSecret,
-      isVerified: false
+      password,
+      options: {
+        data: {
+          display_name: displayName || email.split('@')[0]
+        }
+      }
     });
 
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-
-    if (apiKey && apiKey.trim() !== '') {
-      localStorage.setItem(`${API_KEY_PREFIX}${email}`, apiKey);
+    if (error) {
+      if (error.message.includes('already registered')) {
+        return { success: false, message: 'Email already registered' };
+      }
+      return { success: false, message: error.message };
     }
 
-    return { success: true, email, displayName: displayName || email.split('@')[0], twoFactorSecret, role };
+    if (data.user) {
+      // Wait briefly for the trigger to create profile + settings
+      await new Promise(r => setTimeout(r, 1000));
+
+      // Save API key if provided
+      if (apiKey && apiKey.trim() !== '') {
+        await supabase
+          .from('user_settings')
+          .update({ gemini_key: apiKey.trim() })
+          .eq('user_id', data.user.id);
+      }
+
+      // Load the created profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      cachedUser = {
+        id: data.user.id,
+        email: email,
+        displayName: profile?.display_name || displayName || email.split('@')[0],
+        role: profile?.role || 'user'
+      };
+
+      return {
+        success: true,
+        email,
+        displayName: cachedUser.displayName,
+        role: cachedUser.role
+      };
+    }
+
+    return { success: false, message: 'Registration failed' };
   },
 
   async changePassword(currentPassword: string, newPassword: string) {
-    const email = this.getCurrentUser();
-    if (!email) return { success: false };
+    // Supabase handles password change directly
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
 
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const userIndex = users.findIndex((u: any) => u.email === email);
-
-    if (userIndex === -1) return { success: false };
-
-    const hashedCurrent = await hashPassword(currentPassword);
-
-    if (users[userIndex].password !== hashedCurrent && users[userIndex].password !== currentPassword) {
-      return { success: false, message: 'INCORRECT_PASSWORD' };
+    if (error) {
+      return { success: false, message: error.message };
     }
-
-    users[userIndex].password = await hashPassword(newPassword);
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
     return { success: true };
   },
 
-  // --- 2FA (Real TOTP) ---
+  // ═══════════════════════════════════════════════════════════════
+  // SESSION
+  // ═══════════════════════════════════════════════════════════════
 
-  get2FASetupUri(email: string): string | null {
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const user = users.find((u: any) => u.email === email);
-    if (!user || !user.twoFactorSecret) return null;
-    return generateTotpUri(user.twoFactorSecret, email);
+  async logout() {
+    await supabase.auth.signOut();
+    cachedUser = null;
+    cachedSettings = null;
+    cachedProjectsMeta = null;
   },
 
-  async get2FASecret(email: string) {
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const user = users.find((u: any) => u.email === email);
-    if (user) return { success: true, secret: user.twoFactorSecret };
-    return { success: false };
+  getCurrentUser(): string | null {
+    return cachedUser?.email || null;
   },
 
-  async verify2FA(email: string, code: string) {
-    await delay(400);
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const userIndex = users.findIndex((u: any) => u.email === email);
+  getCurrentUserDisplayName(): string | null {
+    return cachedUser?.displayName || null;
+  },
 
-    if (userIndex === -1) return { success: false, message: 'User not found' };
+  getUserRole(): string {
+    return cachedUser?.role || 'user';
+  },
 
-    const user = users[userIndex];
+  async getCurrentUserId(): Promise<string | null> {
+    if (cachedUser?.id) return cachedUser.id;
+    return await getAuthUserId();
+  },
 
-    if (code === '000000') {
-      user.isVerified = true;
-      users[userIndex] = user;
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-      localStorage.setItem(CURRENT_USER_KEY, user.email);
-      return { success: true, displayName: user.displayName, role: user.role };
+  // Restore session on page reload
+  async restoreSession() {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) {
+      const userId = data.session.user.id;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (profile) {
+        cachedUser = {
+          id: userId,
+          email: profile.email,
+          displayName: profile.display_name,
+          role: profile.role
+        };
+        return profile.email;
+      }
     }
+    return null;
+  },
 
-    if (!user.twoFactorSecret) {
-      return { success: false, message: 'No 2FA secret configured' };
+  // ═══════════════════════════════════════════════════════════════
+  // USER SETTINGS (AI Provider, Keys, Model, Logo, Instructions)
+  // ═══════════════════════════════════════════════════════════════
+
+  async loadSettings() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return null;
+
+    const { data } = await supabase
+      .from('user_settings')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    cachedSettings = data;
+    return data;
+  },
+
+  async updateSettings(updates: Record<string, any>) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return;
+
+    await supabase
+      .from('user_settings')
+      .update(updates)
+      .eq('user_id', userId);
+
+    // Update cache
+    if (cachedSettings) {
+      cachedSettings = { ...cachedSettings, ...updates };
     }
-
-    const isValid = await verifyTotpCode(user.twoFactorSecret, code);
-
-    if (isValid) {
-      user.isVerified = true;
-      users[userIndex] = user;
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-      localStorage.setItem(CURRENT_USER_KEY, user.email);
-      return { success: true, displayName: user.displayName, role: user.role };
-    }
-
-    return { success: false, message: 'Invalid 2FA code' };
   },
 
-  // --- SESSION ---
-
-  logout() {
-    localStorage.removeItem(CURRENT_USER_KEY);
-    localStorage.removeItem(CURRENT_PROJECT_ID_KEY);
-  },
-
-  getCurrentUser() {
-    return localStorage.getItem(CURRENT_USER_KEY);
-  },
-
-  getCurrentUserDisplayName() {
-    const email = this.getCurrentUser();
-    if (!email) return null;
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const user = users.find((u: any) => u.email === email);
-    return user ? user.displayName : email.split('@')[0];
-  },
-
-  getUserRole() {
-    const email = this.getCurrentUser();
-    if (!email) return 'guest';
-    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const user = users.find((u: any) => u.email === email);
-    return user ? (user.role || 'user') : 'user';
-  },
-
-  // --- AI PROVIDER ---
-
+  // --- AI Provider ---
   getAIProvider(): 'gemini' | 'openrouter' {
-    const email = this.getCurrentUser();
-    if (!email) return 'gemini';
-    return (localStorage.getItem(`${AI_PROVIDER_PREFIX}${email}`) as 'gemini' | 'openrouter') || 'gemini';
+    return (cachedSettings?.ai_provider as 'gemini' | 'openrouter') || 'gemini';
   },
 
-  setAIProvider(provider: 'gemini' | 'openrouter') {
-    const email = this.getCurrentUser();
-    if (email) {
-      localStorage.setItem(`${AI_PROVIDER_PREFIX}${email}`, provider);
-    }
+  async setAIProvider(provider: 'gemini' | 'openrouter') {
+    await this.updateSettings({ ai_provider: provider });
   },
 
-  // --- API KEYS ---
-
-  getApiKey() {
-    const email = this.getCurrentUser();
-    if (!email) return null;
-    return localStorage.getItem(`${API_KEY_PREFIX}${email}`);
+  // --- API Keys ---
+  getApiKey(): string | null {
+    return cachedSettings?.gemini_key || null;
   },
 
-  setApiKey(key: string) {
-    const email = this.getCurrentUser();
-    if (email) {
-      localStorage.setItem(`${API_KEY_PREFIX}${email}`, key);
-    }
+  async setApiKey(key: string) {
+    await this.updateSettings({ gemini_key: key.trim() || null });
   },
 
-  clearApiKey() {
-    const email = this.getCurrentUser();
-    if (email) {
-      localStorage.removeItem(`${API_KEY_PREFIX}${email}`);
-    }
+  async clearApiKey() {
+    await this.updateSettings({ gemini_key: null });
   },
 
   getOpenRouterKey(): string | null {
-    const email = this.getCurrentUser();
-    if (!email) return null;
-    return localStorage.getItem(`${OPENROUTER_KEY_PREFIX}${email}`);
+    return cachedSettings?.openrouter_key || null;
   },
 
-  setOpenRouterKey(key: string) {
-    const email = this.getCurrentUser();
-    if (email) {
-      if (key && key.trim().length > 0) {
-        localStorage.setItem(`${OPENROUTER_KEY_PREFIX}${email}`, key.trim());
-      } else {
-        localStorage.removeItem(`${OPENROUTER_KEY_PREFIX}${email}`);
-      }
+  async setOpenRouterKey(key: string) {
+    await this.updateSettings({ openrouter_key: key.trim() || null });
+  },
+
+  // --- Custom Model ---
+  getCustomModel(): string | null {
+    return cachedSettings?.model || null;
+  },
+
+  async setCustomModel(model: string) {
+    await this.updateSettings({ model: model.trim() || null });
+  },
+
+  // --- Custom Logo ---
+  getCustomLogo(): string | null {
+    return cachedSettings?.custom_logo || null;
+  },
+
+  async saveCustomLogo(base64Data: string | null) {
+    await this.updateSettings({ custom_logo: base64Data });
+  },
+
+  // --- Custom Instructions (Admin) ---
+  getCustomInstructions(): any {
+    return cachedSettings?.custom_instructions || null;
+  },
+
+  async saveCustomInstructions(instructions: any) {
+    await this.updateSettings({ custom_instructions: instructions });
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // PROJECT MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════
+
+  async getUserProjects(): Promise<any[]> {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return [];
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id, title, created_at, updated_at')
+      .eq('owner_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading projects:', error);
+      return [];
     }
+
+    // Map to existing format
+    const projects = (data || []).map(p => ({
+      id: p.id,
+      title: p.title,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at
+    }));
+
+    cachedProjectsMeta = projects;
+    return projects;
   },
 
-  // --- CUSTOM MODEL ---
-
-  getCustomModel() {
-    const email = this.getCurrentUser();
-    if (!email) return null;
-    return localStorage.getItem(`${MODEL_PREFIX}${email}`);
-  },
-
-  setCustomModel(model: string) {
-    const email = this.getCurrentUser();
-    if (email) {
-      if (model && model.trim().length > 0) {
-        localStorage.setItem(`${MODEL_PREFIX}${email}`, model.trim());
-      } else {
-        localStorage.removeItem(`${MODEL_PREFIX}${email}`);
-      }
-    }
-  },
-
-  // --- INSTRUCTIONS MANAGEMENT (ADMIN) ---
-
-  saveCustomInstructions(instructions: any) {
-    if (instructions) {
-      localStorage.setItem(INSTRUCTIONS_KEY, JSON.stringify(instructions));
-    } else {
-      localStorage.removeItem(INSTRUCTIONS_KEY);
-    }
-  },
-
-  getCustomInstructions() {
-    const stored = localStorage.getItem(INSTRUCTIONS_KEY);
-    return stored ? JSON.parse(stored) : null;
-  },
-
-  // --- CUSTOM LOGO ---
-
-  saveCustomLogo(base64Data: string | null) {
-    const email = this.getCurrentUser();
-    if (email) {
-      if (base64Data) {
-        localStorage.setItem(`${LOGO_PREFIX}${email}`, base64Data);
-      } else {
-        localStorage.removeItem(`${LOGO_PREFIX}${email}`);
-      }
-    }
-  },
-
-  getCustomLogo() {
-    const email = this.getCurrentUser();
-    if (!email) return null;
-    return localStorage.getItem(`${LOGO_PREFIX}${email}`);
-  },
-
-  // --- PROJECT MANAGEMENT (MULTI-PROJECT) ---
-
-  getUserProjects() {
-    const email = this.getCurrentUser();
-    if (!email) return [];
-    const metaKey = `${PROJECTS_META_PREFIX}${email}`;
-    const projects = JSON.parse(localStorage.getItem(metaKey) || '[]');
-    return projects.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  },
-
-  createProject(initialData: any = null) {
-    const email = this.getCurrentUser();
-    if (!email) return null;
+  async createProject(initialData: any = null): Promise<any> {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return null;
 
     const newId = generateId();
-    const now = new Date().toISOString();
-    const metaKey = `${PROJECTS_META_PREFIX}${email}`;
+    const dataToSave = initialData || createEmptyProjectData();
 
-    const projects = JSON.parse(localStorage.getItem(metaKey) || '[]');
+    // Create project record
+    const { error: projError } = await supabase
+      .from('projects')
+      .insert({
+        id: newId,
+        owner_id: userId,
+        title: 'New Project'
+      });
 
-    const newProjectMeta = {
+    if (projError) {
+      console.error('Error creating project:', projError);
+      return null;
+    }
+
+    // Create data rows for both languages
+    const { error: dataError } = await supabase
+      .from('project_data')
+      .insert([
+        { project_id: newId, language: 'en', data: dataToSave },
+        { project_id: newId, language: 'si', data: dataToSave }
+      ]);
+
+    if (dataError) {
+      console.error('Error creating project data:', dataError);
+    }
+
+    const meta = {
       id: newId,
-      title: "New Project",
-      createdAt: now,
-      updatedAt: now
+      title: 'New Project',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    projects.push(newProjectMeta);
-    localStorage.setItem(metaKey, JSON.stringify(projects));
+    // Invalidate cache
+    cachedProjectsMeta = null;
 
-    const dataToSave = initialData || createEmptyProjectData();
-    localStorage.setItem(`${PROJECT_DATA_PREFIX}${newId}_en`, JSON.stringify(dataToSave));
-    localStorage.setItem(`${PROJECT_DATA_PREFIX}${newId}_si`, JSON.stringify(dataToSave));
-
-    localStorage.setItem(CURRENT_PROJECT_ID_KEY, newId);
-
-    return newProjectMeta;
+    return meta;
   },
 
-  deleteProject(projectId: string) {
-    const email = this.getCurrentUser();
-    if (!email) return;
+  async deleteProject(projectId: string) {
+    // CASCADE will handle project_data deletion
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', projectId);
 
-    const metaKey = `${PROJECTS_META_PREFIX}${email}`;
-    let projects = JSON.parse(localStorage.getItem(metaKey) || '[]');
-
-    projects = projects.filter((p: any) => p.id !== projectId);
-    localStorage.setItem(metaKey, JSON.stringify(projects));
-
-    localStorage.removeItem(`${PROJECT_DATA_PREFIX}${projectId}_en`);
-    localStorage.removeItem(`${PROJECT_DATA_PREFIX}${projectId}_si`);
-
-    if (localStorage.getItem(CURRENT_PROJECT_ID_KEY) === projectId) {
-      localStorage.removeItem(CURRENT_PROJECT_ID_KEY);
+    if (error) {
+      console.error('Error deleting project:', error);
     }
+
+    cachedProjectsMeta = null;
   },
 
+  // --- Current Project ID (stored locally since it's session-specific) ---
   setCurrentProjectId(projectId: string) {
-    localStorage.setItem(CURRENT_PROJECT_ID_KEY, projectId);
+    sessionStorage.setItem('current_project_id', projectId);
   },
 
-  getCurrentProjectId() {
-    return localStorage.getItem(CURRENT_PROJECT_ID_KEY);
+  getCurrentProjectId(): string | null {
+    return sessionStorage.getItem('current_project_id');
   },
 
-  loadProject(language: string = 'en', projectId: string | null = null) {
-    const email = this.getCurrentUser();
-    if (!email) return createEmptyProjectData();
+  async loadProject(language: string = 'en', projectId: string | null = null): Promise<any> {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return createEmptyProjectData();
 
-    let targetId = projectId;
-    if (!targetId) {
-      targetId = localStorage.getItem(CURRENT_PROJECT_ID_KEY);
-    }
+    let targetId = projectId || this.getCurrentProjectId();
 
     if (!targetId) {
-      const projects = this.getUserProjects();
+      // Load most recent project
+      const projects = await this.getUserProjects();
       if (projects.length > 0) {
         targetId = projects[0].id;
-        localStorage.setItem(CURRENT_PROJECT_ID_KEY, targetId);
+        this.setCurrentProjectId(targetId);
       } else {
-        const newProj = this.createProject();
-        targetId = newProj!.id;
+        // Create a default project
+        const newProj = await this.createProject();
+        if (newProj) {
+          targetId = newProj.id;
+          this.setCurrentProjectId(targetId);
+        } else {
+          return createEmptyProjectData();
+        }
       }
     }
 
-    const raw = localStorage.getItem(`${PROJECT_DATA_PREFIX}${targetId}_${language}`);
-    return raw ? JSON.parse(raw) : createEmptyProjectData();
+    const { data, error } = await supabase
+      .from('project_data')
+      .select('data')
+      .eq('project_id', targetId)
+      .eq('language', language)
+      .single();
+
+    if (error || !data) {
+      return createEmptyProjectData();
+    }
+
+    return data.data;
   },
 
-  saveProject(data: any, language: string = 'en', projectId: string | null = null) {
-    const email = this.getCurrentUser();
-    if (!email) return;
+  async saveProject(projectData: any, language: string = 'en', projectId: string | null = null) {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return;
 
-    let targetId = projectId || localStorage.getItem(CURRENT_PROJECT_ID_KEY);
+    let targetId = projectId || this.getCurrentProjectId();
+
     if (!targetId) {
-      const newProj = this.createProject(data);
-      targetId = newProj!.id;
+      const newProj = await this.createProject(projectData);
+      if (newProj) {
+        targetId = newProj.id;
+        this.setCurrentProjectId(targetId);
+      } else {
+        return;
+      }
     }
 
-    localStorage.setItem(`${PROJECT_DATA_PREFIX}${targetId}_${language}`, JSON.stringify(data));
+    // Upsert project data
+    const { error: dataError } = await supabase
+      .from('project_data')
+      .upsert(
+        {
+          project_id: targetId,
+          language: language,
+          data: projectData
+        },
+        { onConflict: 'project_id,language' }
+      );
 
-    const metaKey = `${PROJECTS_META_PREFIX}${email}`;
-    const projects = JSON.parse(localStorage.getItem(metaKey) || '[]');
-    const projIndex = projects.findIndex((p: any) => p.id === targetId);
-
-    if (projIndex !== -1) {
-      const newTitle = data.projectIdea?.projectTitle || projects[projIndex].title;
-      const displayTitle = (newTitle && newTitle.trim() !== '') ? newTitle : projects[projIndex].title;
-
-      projects[projIndex] = {
-        ...projects[projIndex],
-        title: displayTitle,
-        updatedAt: new Date().toISOString()
-      };
-      localStorage.setItem(metaKey, JSON.stringify(projects));
+    if (dataError) {
+      console.error('Error saving project data:', dataError);
     }
+
+    // Update project title from data
+    const newTitle = projectData.projectIdea?.projectTitle;
+    if (newTitle && newTitle.trim() !== '') {
+      await supabase
+        .from('projects')
+        .update({ title: newTitle.trim() })
+        .eq('id', targetId);
+    }
+
+    cachedProjectsMeta = null;
   }
 };
