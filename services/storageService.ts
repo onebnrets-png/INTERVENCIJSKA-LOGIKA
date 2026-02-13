@@ -84,15 +84,30 @@ export const storageService = {
     }
 
     if (data.user) {
-      // Wait briefly for the trigger to create profile + settings
+      // Wait for the DB trigger to create profile + user_settings row
       await new Promise(r => setTimeout(r, 1500));
 
-      // Save API key if provided
+      // ★ FIX: Use upsert instead of update, and also set ai_provider
       if (apiKey && apiKey.trim() !== '') {
-        await supabase
+        const { error: keyError } = await supabase
           .from('user_settings')
-          .update({ gemini_key: apiKey.trim() })
-          .eq('user_id', data.user.id);
+          .upsert(
+            {
+              user_id: data.user.id,
+              gemini_key: apiKey.trim(),
+              ai_provider: 'gemini'
+            },
+            { onConflict: 'user_id' }
+          );
+
+        if (keyError) {
+          console.warn('register: Failed to save API key via upsert, trying update...', keyError.message);
+          // Fallback: retry with update (in case upsert isn't allowed by RLS)
+          await supabase
+            .from('user_settings')
+            .update({ gemini_key: apiKey.trim(), ai_provider: 'gemini' })
+            .eq('user_id', data.user.id);
+        }
       }
 
       const { data: profile } = await supabase
@@ -108,8 +123,16 @@ export const storageService = {
         role: profile?.role || 'user'
       };
 
-      // Pre-load settings into cache on register
+      // ★ FIX: Load settings AFTER the key has been written
       await this.loadSettings();
+
+      // ★ FIX: If settings still don't have the key, force it into cache
+      if (apiKey && apiKey.trim() !== '' && !cachedSettings?.gemini_key) {
+        console.warn('register: API key not found in loaded settings, forcing into cache');
+        if (cachedSettings === null) cachedSettings = {};
+        cachedSettings.gemini_key = apiKey.trim();
+        cachedSettings.ai_provider = 'gemini';
+      }
 
       return {
         success: true,
