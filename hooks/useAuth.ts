@@ -1,9 +1,6 @@
 // hooks/useAuth.ts
 // ═══════════════════════════════════════════════════════════════
-// Authentication hook — login, logout, session restoration.
-//
-// NOTE: handleLogout requires a callback to reset project state,
-// which is injected via the onLogoutCleanup parameter.
+// Authentication hook — login, logout, session restoration, MFA check.
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
@@ -17,10 +14,36 @@ export const useAuth = () => {
   const [isWarningDismissed, setIsWarningDismissed] = useState(false);
   const [appLogo, setAppLogo] = useState(BRAND_ASSETS.logoText);
 
+  // ─── MFA State ─────────────────────────────────────────────────
+  const [needsMFAVerify, setNeedsMFAVerify] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+
   // ─── Load custom logo from settings cache ──────────────────────
   const loadCustomLogo = useCallback(() => {
     const custom = storageService.getCustomLogo();
     setAppLogo(custom || BRAND_ASSETS.logoText);
+  }, []);
+
+  // ─── Check AAL level (MFA required?) ──────────────────────────
+  const checkMFA = useCallback(async (): Promise<boolean> => {
+    try {
+      const { currentLevel, nextLevel } = await storageService.getAAL();
+      if (nextLevel === 'aal2' && currentLevel !== 'aal2') {
+        // User has MFA enrolled but hasn't verified this session
+        const { totp } = await storageService.getMFAFactors();
+        const verifiedFactor = totp.find((f: any) => f.factor_type === 'totp' && f.status === 'verified');
+        if (verifiedFactor) {
+          setMfaFactorId(verifiedFactor.id);
+          setNeedsMFAVerify(true);
+          return true; // MFA verification needed
+        }
+      }
+    } catch (err) {
+      console.warn('checkMFA error:', err);
+    }
+    setNeedsMFAVerify(false);
+    setMfaFactorId(null);
+    return false; // No MFA needed
   }, []);
 
   // ─── Restore session on mount ──────────────────────────────────
@@ -28,14 +51,16 @@ export const useAuth = () => {
     const restoreSession = async () => {
       const email = await storageService.restoreSession();
       if (email) {
-        setCurrentUser(email);
-        // restoreSession() already calls loadSettings() internally,
-        // so cachedSettings is populated — now load the logo.
-        loadCustomLogo();
+        const mfaNeeded = await checkMFA();
+        if (!mfaNeeded) {
+          setCurrentUser(email);
+          loadCustomLogo();
+        }
+        // If MFA is needed, we don't set currentUser yet — AuthScreen shows MFA prompt
       }
     };
     restoreSession();
-  }, [loadCustomLogo]);
+  }, [loadCustomLogo, checkMFA]);
 
   // ─── Check API key ─────────────────────────────────────────────
   const checkApiKey = useCallback(async () => {
@@ -54,14 +79,28 @@ export const useAuth = () => {
   }, [currentUser, checkApiKey]);
 
   // ─── Login ─────────────────────────────────────────────────────
-  const handleLoginSuccess = useCallback((username: string) => {
+  const handleLoginSuccess = useCallback(async (username: string) => {
+    // After Supabase login, check if MFA is needed
+    const mfaNeeded = await checkMFA();
+    if (mfaNeeded) {
+      // Don't set currentUser yet — show MFA screen
+      return;
+    }
     setCurrentUser(username);
-    // Settings are loaded during login (storageService.login calls loadSettings),
-    // so we can load the custom logo immediately.
-    // Small timeout to ensure settings cache is populated after login completes.
     setTimeout(() => {
       loadCustomLogo();
     }, 100);
+  }, [loadCustomLogo, checkMFA]);
+
+  // ─── MFA Verified ──────────────────────────────────────────────
+  const handleMFAVerified = useCallback(() => {
+    setNeedsMFAVerify(false);
+    setMfaFactorId(null);
+    const email = storageService.getCurrentUser();
+    if (email) {
+      setCurrentUser(email);
+      loadCustomLogo();
+    }
   }, [loadCustomLogo]);
 
   // ─── Logout ────────────────────────────────────────────────────
@@ -70,6 +109,8 @@ export const useAuth = () => {
     setCurrentUser(null);
     setIsWarningDismissed(false);
     setAppLogo(BRAND_ASSETS.logoText);
+    setNeedsMFAVerify(false);
+    setMfaFactorId(null);
   }, []);
 
   // ─── Dismiss warning ───────────────────────────────────────────
@@ -99,5 +140,9 @@ export const useAuth = () => {
     loadCustomLogo,
     dismissWarning,
     ensureApiKey,
+    // MFA
+    needsMFAVerify,
+    mfaFactorId,
+    handleMFAVerified,
   };
 };
