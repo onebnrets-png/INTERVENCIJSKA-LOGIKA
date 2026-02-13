@@ -1,6 +1,7 @@
 // hooks/useProjectManager.ts
 // ═══════════════════════════════════════════════════════════════
 // Project CRUD, import/export, save, auto-save, navigation.
+// On login: shows project list instead of auto-loading last project.
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -32,13 +33,14 @@ export const useProjectManager = ({
     en: null,
     si: null,
   });
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(
-    storageService.getCurrentProjectId()
-  );
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [userProjects, setUserProjects] = useState<any[]>([]);
   const [hasUnsavedTranslationChanges, setHasUnsavedTranslationChanges] =
     useState(false);
   const [currentStepId, setCurrentStepId] = useState<number | null>(null);
+  
+  // NEW: Flag to show project list on login
+  const [showProjectListOnLogin, setShowProjectListOnLogin] = useState(false);
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -97,6 +99,7 @@ export const useProjectManager = ({
   const refreshProjectList = useCallback(async () => {
     const list = await storageService.getUserProjects();
     setUserProjects(list);
+    return list;
   }, []);
 
   // ─── Load active project ──────────────────────────────────────
@@ -125,17 +128,32 @@ export const useProjectManager = ({
   );
 
   // ─── Initialize on login ──────────────────────────────────────
+  // CHANGED: Don't auto-load last project. Instead, load project list
+  // and signal App.tsx to show the project selection modal.
 
   useEffect(() => {
     if (currentUser) {
       const init = async () => {
         await storageService.loadSettings();
-        await refreshProjectList();
-        await loadActiveProject();
+        const projects = await refreshProjectList();
+        
+        // Always show project list on login so user can choose
+        if (projects.length > 0) {
+          setShowProjectListOnLogin(true);
+        } else {
+          // No projects — create first one and go directly
+          const newProj = await storageService.createProject();
+          if (newProj) {
+            setCurrentProjectId(newProj.id);
+            storageService.setCurrentProjectId(newProj.id);
+            await loadActiveProject(newProj.id);
+            await refreshProjectList();
+          }
+        }
       };
       init();
     }
-  }, [currentUser]); // intentionally omit refreshProjectList, loadActiveProject to avoid loops
+  }, [currentUser]); // intentionally omit refreshProjectList, loadActiveProject
 
   // ─── Sync project versions ────────────────────────────────────
 
@@ -149,6 +167,9 @@ export const useProjectManager = ({
   // ─── Auto-save (debounced 2s) ─────────────────────────────────
 
   useEffect(() => {
+    // Only auto-save if a project is actually loaded
+    if (!currentProjectId) return;
+    
     const timer = setTimeout(async () => {
       if (currentUser && hasContent(projectData)) {
         await storageService.saveProject(projectData, language, currentProjectId);
@@ -157,32 +178,42 @@ export const useProjectManager = ({
     return () => clearTimeout(timer);
   }, [projectData, currentUser, language, currentProjectId, hasContent]);
 
-  // ─── Logout cleanup (called by App.tsx after auth.handleLogout) ─
+  // ─── Logout cleanup ───────────────────────────────────────────
 
   const resetOnLogout = useCallback(() => {
     setCurrentProjectId(null);
     setProjectData(createEmptyProjectData());
     setCurrentStepId(null);
     setHasUnsavedTranslationChanges(false);
+    setShowProjectListOnLogin(false);
   }, []);
 
   // ─── CRUD handlers ────────────────────────────────────────────
 
   const handleSwitchProject = useCallback(
     async (projectId: string) => {
-      if (projectId === currentProjectId) return;
+      if (projectId === currentProjectId) {
+        // Even if same project, dismiss the login modal
+        setShowProjectListOnLogin(false);
+        return;
+      }
 
-      await storageService.saveProject(projectData, language, currentProjectId);
+      // Save current project before switching (if one is loaded)
+      if (currentProjectId && hasContent(projectData)) {
+        await storageService.saveProject(projectData, language, currentProjectId);
+      }
+      
       storageService.setCurrentProjectId(projectId);
       await loadActiveProject(projectId);
       setCurrentStepId(null);
       setHasUnsavedTranslationChanges(false);
+      setShowProjectListOnLogin(false);
     },
-    [currentProjectId, projectData, language, loadActiveProject]
+    [currentProjectId, projectData, language, loadActiveProject, hasContent]
   );
 
   const handleCreateProject = useCallback(async () => {
-    if (currentProjectId) {
+    if (currentProjectId && hasContent(projectData)) {
       await storageService.saveProject(projectData, language, currentProjectId);
     }
 
@@ -193,10 +224,12 @@ export const useProjectManager = ({
 
     await refreshProjectList();
     setCurrentProjectId(newProj.id);
+    storageService.setCurrentProjectId(newProj.id);
     await loadActiveProject(newProj.id);
     setCurrentStepId(1);
+    setShowProjectListOnLogin(false);
     return newProj;
-  }, [currentProjectId, projectData, language, refreshProjectList, loadActiveProject]);
+  }, [currentProjectId, projectData, language, hasContent, refreshProjectList, loadActiveProject]);
 
   const handleDeleteProject = useCallback(
     async (projectId: string) => {
@@ -204,11 +237,12 @@ export const useProjectManager = ({
       await refreshProjectList();
 
       if (projectId === currentProjectId) {
-        await loadActiveProject();
+        setCurrentProjectId(null);
+        setProjectData(createEmptyProjectData());
         setCurrentStepId(null);
       }
     },
-    [currentProjectId, refreshProjectList, loadActiveProject]
+    [currentProjectId, refreshProjectList]
   );
 
   // ─── Data update ──────────────────────────────────────────────
@@ -357,6 +391,7 @@ export const useProjectManager = ({
             setProjectData(finalData);
             setLanguage(targetLang);
             setCurrentStepId(1);
+            setShowProjectListOnLogin(false);
             resolve();
           } catch (err: any) {
             reject(err);
@@ -483,6 +518,8 @@ export const useProjectManager = ({
     setCurrentStepId,
     hasUnsavedTranslationChanges,
     setHasUnsavedTranslationChanges,
+    showProjectListOnLogin,
+    setShowProjectListOnLogin,
     importInputRef,
     hasContent,
     checkSectionHasContent,
