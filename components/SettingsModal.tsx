@@ -5,7 +5,6 @@ import { getAppInstructions, saveAppInstructions, resetAppInstructions } from '.
 import { TEXT } from '../locales.ts';
 
 // ─── Lightweight TOTP helpers (no external dependency) ───
-// Base32 decode
 const base32Decode = (encoded: string): Uint8Array => {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
     let bits = '';
@@ -21,14 +20,12 @@ const base32Decode = (encoded: string): Uint8Array => {
     return bytes;
 };
 
-// HMAC-SHA1 via SubtleCrypto
 const hmacSha1 = async (keyBytes: Uint8Array, message: Uint8Array): Promise<Uint8Array> => {
     const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
     const sig = await crypto.subtle.sign('HMAC', key, message);
     return new Uint8Array(sig);
 };
 
-// Generate current TOTP code from a base32 secret
 const generateTOTP = async (secret: string, period = 30, digits = 6): Promise<string> => {
     const keyBytes = base32Decode(secret);
     const time = Math.floor(Date.now() / 1000 / period);
@@ -44,7 +41,6 @@ const generateTOTP = async (secret: string, period = 30, digits = 6): Promise<st
     return code.toString().padStart(digits, '0');
 };
 
-// Verify a user-entered code against a secret (checks current ± 1 window)
 const verifyTOTP = async (secret: string, userCode: string): Promise<boolean> => {
     const period = 30;
     const keyBytes = base32Decode(secret);
@@ -66,16 +62,18 @@ const verifyTOTP = async (secret: string, userCode: string): Promise<boolean> =>
     return false;
 };
 
-// Build otpauth URI for QR code generation
 const buildOtpAuthUri = (secret: string, email: string, issuer = 'INTERVENCIJSKA-LOGIKA'): string => {
     return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 };
 
-// ─── QR Code generation (pure JS, no dependency) ───
-// Minimal QR code as SVG using the Google Charts API fallback as <img>
 const QRCodeImage = ({ value, size = 200 }: { value: string; size?: number }) => {
     const url = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}&margin=8`;
     return <img src={url} alt="QR Code" width={size} height={size} className="rounded-lg border border-slate-200" />;
+};
+
+// ─── Helper: check if localStorage-based 2FA is available ───
+const has2FASupport = (): boolean => {
+    return typeof storageService.get2FASecret === 'function';
 };
 
 
@@ -98,6 +96,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
     // 2FA State
     const [twoFASecret, setTwoFASecret] = useState('');
     const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+    const [twoFAAvailable, setTwoFAAvailable] = useState(false);
     const [showEnroll2FA, setShowEnroll2FA] = useState(false);
     const [enrollVerifyCode, setEnrollVerifyCode] = useState('');
     const [enrollError, setEnrollError] = useState('');
@@ -126,18 +125,34 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
             const logo = storageService.getCustomLogo();
             setCustomLogo(logo);
 
-            // Load 2FA status
-            const email = storageService.getCurrentUser();
-            if (email) {
-                storageService.get2FASecret(email).then(result => {
-                    if (result.success && result.secret) {
-                        setTwoFASecret(result.secret);
-                        // Check if user has already verified 2FA
-                        const users = JSON.parse(localStorage.getItem('eu_app_users') || '[]');
-                        const user = users.find(u => u.email === email);
-                        setTwoFAEnabled(user?.isVerified === true);
+            // Load 2FA status (safe — works with both localStorage and Supabase)
+            try {
+                if (has2FASupport()) {
+                    const email = storageService.getCurrentUser();
+                    if (email) {
+                        storageService.get2FASecret(email).then(result => {
+                            if (result.success && result.secret) {
+                                setTwoFASecret(result.secret);
+                                const users = JSON.parse(localStorage.getItem('eu_app_users') || '[]');
+                                const user = users.find(u => u.email === email);
+                                setTwoFAEnabled(user?.isVerified === true);
+                                setTwoFAAvailable(true);
+                            }
+                        }).catch(() => {
+                            setTwoFAAvailable(false);
+                        });
                     }
-                });
+                } else {
+                    // Supabase version — no localStorage 2FA
+                    setTwoFASecret('');
+                    setTwoFAEnabled(false);
+                    setTwoFAAvailable(false);
+                }
+            } catch (e) {
+                console.warn('[SettingsModal] 2FA status load skipped:', e);
+                setTwoFASecret('');
+                setTwoFAEnabled(false);
+                setTwoFAAvailable(false);
             }
             
             // Load Instructions
@@ -260,7 +275,6 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
         const isValid = await verifyTOTP(twoFASecret, enrollVerifyCode);
         
         if (isValid) {
-            // Mark user as 2FA verified in localStorage
             const email = storageService.getCurrentUser();
             const users = JSON.parse(localStorage.getItem('eu_app_users') || '[]');
             const userIndex = users.findIndex(u => u.email === email);
@@ -288,7 +302,6 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
             const userIndex = users.findIndex(u => u.email === email);
             if (userIndex !== -1) {
                 users[userIndex].isVerified = false;
-                // Generate a new secret for next time
                 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
                 let newSecret = '';
                 for (let i = 0; i < 16; i++) newSecret += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -349,8 +362,8 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
 
     if (!isOpen) return null;
 
-    const email = storageService.getCurrentUser() || '';
-    const otpAuthUri = buildOtpAuthUri(twoFASecret, email);
+    const email = (typeof storageService.getCurrentUser === 'function' ? storageService.getCurrentUser() : '') || '';
+    const otpAuthUri = twoFASecret ? buildOtpAuthUri(twoFASecret, email) : '';
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -416,7 +429,8 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                                 </div>
                             </div>
 
-                            {/* ─── 2FA Section ─── */}
+                            {/* ─── 2FA Section (only if localStorage-based auth) ─── */}
+                            {twoFAAvailable && (
                             <div className="border-t border-slate-200 pt-6">
                                 <div className="flex items-center justify-between mb-4">
                                     <div>
@@ -436,7 +450,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                                     </div>
                                 </div>
 
-                                {/* 2FA is ENABLED — show disable option */}
+                                {/* 2FA is ENABLED */}
                                 {twoFAEnabled && !showEnroll2FA && (
                                     <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                                         <div className="flex items-center gap-3 mb-3">
@@ -458,7 +472,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                                     </div>
                                 )}
 
-                                {/* 2FA is NOT ENABLED — show setup button or enrollment */}
+                                {/* 2FA is NOT ENABLED */}
                                 {!twoFAEnabled && !showEnroll2FA && (
                                     <button 
                                         onClick={handleStart2FAEnroll}
@@ -544,6 +558,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                                     </div>
                                 )}
                             </div>
+                            )}
                         </div>
                     )}
 
