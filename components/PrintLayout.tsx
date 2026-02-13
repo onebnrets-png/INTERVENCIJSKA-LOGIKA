@@ -1,3 +1,9 @@
+// components/PrintLayout.tsx
+// ═══════════════════════════════════════════════════════════════
+// Print-only layout component.
+// Renders the complete project in a clean, printable format.
+// Hidden on screen (className="hidden print:block" in App.tsx).
+// ═══════════════════════════════════════════════════════════════
 
 import React from 'react';
 import { getSteps, getReadinessLevelsDefinitions, BRAND_ASSETS } from '../constants.tsx';
@@ -76,6 +82,19 @@ const PrintLayout = ({ projectData, language = 'en', logo }) => {
     const READINESS_LEVELS_DEFINITIONS = getReadinessLevelsDefinitions(language);
 
     const displayLogo = logo || BRAND_ASSETS.logoText;
+
+    // ─── Safe accessor for localized enum values ─────────────────
+    const safeCategory = (cat: string | undefined): string => {
+        if (!cat) return '';
+        const key = cat.toLowerCase();
+        return t.risks.categories[key] || cat;
+    };
+
+    const safeLevel = (level: string | undefined): string => {
+        if (!level) return '';
+        const key = level.toLowerCase();
+        return t.risks.levels[key] || level;
+    };
 
     return (
         <div className="p-8 bg-white text-black font-sans relative">
@@ -192,7 +211,7 @@ const PrintLayout = ({ projectData, language = 'en', logo }) => {
                          </div>
                     </div>
 
-                    {/* PERT Chart (Visual) - ADDED HERE */}
+                    {/* PERT Chart (Visual) */}
                     <div style={{ pageBreakInside: 'avoid', marginTop: '1.5rem', marginBottom: '1.5rem' }}>
                          <h3 className="text-xl font-semibold text-gray-800 mb-2">{t.subSteps.pertChart}</h3>
                          <div className="border border-gray-300 rounded overflow-hidden">
@@ -200,20 +219,22 @@ const PrintLayout = ({ projectData, language = 'en', logo }) => {
                          </div>
                     </div>
 
-                    {/* Risks */}
+                    {/* Risks — NOW SAFE against undefined category/likelihood/impact */}
                     <SubSection title={t.subSteps.riskMitigation}>
                         {risks.map((risk, i) => risk.description && (
                             <div key={i} className="mb-4 border-b border-gray-100 pb-2">
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
                                          <h4 className="font-bold text-gray-800">{risk.id || `Risk ${i+1}`}: {risk.title}</h4>
-                                         <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600 border border-gray-300">{t.risks.categories[risk.category.toLowerCase()] || risk.category}</span>
+                                         <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600 border border-gray-300">
+                                             {safeCategory(risk.category)}
+                                         </span>
                                     </div>
                                 </div>
                                 <p className="text-gray-700 mb-1">{risk.description}</p>
                                 <div className="flex gap-4 text-sm mb-1">
-                                    <span><strong>{t.risks.likelihood}:</strong> {t.risks.levels[risk.likelihood.toLowerCase()] || risk.likelihood}</span>
-                                    <span><strong>{t.risks.impact}:</strong> {t.risks.levels[risk.impact.toLowerCase()] || risk.impact}</span>
+                                    <span><strong>{t.risks.likelihood}:</strong> {safeLevel(risk.likelihood)}</span>
+                                    <span><strong>{t.risks.impact}:</strong> {safeLevel(risk.impact)}</span>
                                 </div>
                                 <p className="text-sm"><strong>{t.risks.mitigation}:</strong> {risk.mitigation}</p>
                             </div>
