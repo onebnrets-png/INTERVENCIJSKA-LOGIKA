@@ -7,6 +7,30 @@
 //   - useTranslation    → language switching, diff-based translation
 //   - useGeneration     → AI content generation, summaries
 // ═══════════════════════════════════════════════════════════════
+// Dodaj importe na vrh
+import { EnrollMFA } from './components/EnrollMFA.tsx';
+import { VerifyMFA } from './components/VerifyMFA.tsx';
+
+// Dodaj state
+const [showMFAVerify, setShowMFAVerify] = useState(false);
+const [showMFAEnroll, setShowMFAEnroll] = useState(false);
+
+// Po uspešni prijavi (v handleLoginSuccess ali useEffect po auth.currentUser)
+// dodaj AAL preverjanje:
+useEffect(() => {
+    if (!auth.currentUser) return;
+    (async () => {
+        const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (data?.nextLevel === 'aal2' && data?.currentLevel !== 'aal2') {
+            setShowMFAVerify(true);
+        }
+    })();
+}, [auth.currentUser]);
+
+// V renderju, PRED prikazom glavne aplikacije:
+if (auth.currentUser && showMFAVerify) {
+    return <VerifyMFA language={language} onVerified={() => setShowMFAVerify(false)} />;
+}
 
 import React, { useState, useMemo, useEffect } from 'react';
 import WelcomeScreen from './components/WelcomeScreen.tsx';
