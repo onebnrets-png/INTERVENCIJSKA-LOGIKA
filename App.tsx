@@ -137,7 +137,18 @@ const App = () => {
     setModalConfig,
     closeModal,
   });
+  // NEW: Show project list modal on login
+  const [isProjectListOpen, setIsProjectListOpen] = useState(false);
+  
+  // ... (existing code) ...
 
+  // Add this useEffect after the hooks section:
+  useEffect(() => {
+    if (pm.showProjectListOnLogin) {
+      setIsProjectListOpen(true);
+      pm.setShowProjectListOnLogin(false);
+    }
+  }, [pm.showProjectListOnLogin]);
   // ─── Derived values ────────────────────────────────────────────
 
   const t = TEXT[language] || TEXT['en'];
