@@ -1,10 +1,10 @@
 // components/SettingsModal.tsx
-// Updated for async Supabase-backed storageService
+// Settings modal with model selection for both Gemini and OpenRouter.
 
 import React, { useState, useEffect } from 'react';
 import { storageService } from '../services/storageService.ts';
-import { validateProviderKey, OPENROUTER_MODELS, type AIProviderType } from '../services/aiProvider.ts';
-import { getAppInstructions, getFullInstructions, saveAppInstructions, resetAppInstructions } from '../services/Instructions.ts';
+import { validateProviderKey, OPENROUTER_MODELS, GEMINI_MODELS, type AIProviderType } from '../services/aiProvider.ts';
+import { getFullInstructions, saveAppInstructions, resetAppInstructions } from '../services/Instructions.ts';
 import { TEXT } from '../locales.ts';
 
 const SettingsModal = ({ isOpen, onClose, language }) => {
@@ -46,7 +46,6 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
         const role = storageService.getUserRole();
         setIsAdmin(role === 'admin');
 
-        // Load settings from Supabase (via cache)
         await storageService.loadSettings();
 
         const provider = storageService.getAIProvider() || 'gemini';
@@ -60,6 +59,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
 
         const model = storageService.getCustomModel();
         if (model) setModelName(model);
+        else setModelName(provider === 'gemini' ? 'gemini-3-pro-preview' : 'deepseek/deepseek-v3.2');
 
         const logo = storageService.getCustomLogo();
         setCustomLogo(logo);
@@ -80,7 +80,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
         if (provider === 'gemini' && !modelName.startsWith('gemini')) {
             setModelName('gemini-3-pro-preview');
         } else if (provider === 'openrouter' && modelName.startsWith('gemini')) {
-            setModelName('openai/gpt-4o');
+            setModelName('deepseek/deepseek-v3.2');
         }
     };
 
@@ -89,7 +89,6 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
         setMessage(t.validating || "Validating...");
         setIsError(false);
 
-        // Save all settings to Supabase
         await storageService.setAIProvider(aiProvider);
         await storageService.setCustomModel(modelName.trim());
         await storageService.setApiKey(geminiKey.trim());
@@ -211,6 +210,9 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
 
     if (!isOpen) return null;
 
+    // Get current model list based on provider
+    const currentModels = aiProvider === 'gemini' ? GEMINI_MODELS : OPENROUTER_MODELS;
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
@@ -240,6 +242,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                         <>
                             {activeTab === 'general' && (
                                 <>
+                                    {/* Provider Selection */}
                                     <div className="mb-5">
                                         <label className="block text-sm font-medium text-slate-700 mb-2">
                                             {language === 'si' ? 'AI ponudnik' : 'AI Provider'}
@@ -258,6 +261,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                                         </div>
                                     </div>
 
+                                    {/* API Key — Gemini */}
                                     {aiProvider === 'gemini' && (
                                         <div className="mb-4">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">{language === 'si' ? 'Google Gemini API ključ' : 'Google Gemini API Key'}</label>
@@ -266,6 +270,7 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                                         </div>
                                     )}
 
+                                    {/* API Key — OpenRouter */}
                                     {aiProvider === 'openrouter' && (
                                         <div className="mb-4">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">OpenRouter API Key</label>
@@ -274,23 +279,35 @@ const SettingsModal = ({ isOpen, onClose, language }) => {
                                         </div>
                                     )}
 
+                                    {/* Model Selection — UNIFIED for both providers */}
                                     <div className="mb-4 pt-4 border-t border-slate-100">
                                         <label className="block text-sm font-medium text-slate-700 mb-1">{language === 'si' ? 'AI model' : 'AI Model'}</label>
-                                        {aiProvider === 'openrouter' ? (
-                                            <>
-                                                <select value={modelName} onChange={(e) => setModelName(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 text-sm">
-                                                    {OPENROUTER_MODELS.map(m => (<option key={m.id} value={m.id}>{m.name} – {m.description}</option>))}
-                                                </select>
-                                                <div className="mt-2">
-                                                    <label className="block text-xs text-slate-500 mb-1">{language === 'si' ? 'Ali vnesite ID modela ročno:' : 'Or enter model ID manually:'}</label>
-                                                    <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="e.g. openai/gpt-4o" className="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 font-mono text-xs" />
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder={t.modelPlaceholder || "gemini-3-pro-preview"} className="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 font-mono text-sm" />
-                                        )}
+                                        <select
+                                            value={currentModels.some(m => m.id === modelName) ? modelName : ''}
+                                            onChange={(e) => setModelName(e.target.value)}
+                                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 text-sm"
+                                        >
+                                            {!currentModels.some(m => m.id === modelName) && modelName && (
+                                                <option value={modelName}>{modelName} ({language === 'si' ? 'ročno vnesen' : 'custom'})</option>
+                                            )}
+                                            {currentModels.map(m => (
+                                                <option key={m.id} value={m.id}>{m.name} – {m.description}</option>
+                                            ))}
+                                        </select>
+                                        <div className="mt-2">
+                                            <label className="block text-xs text-slate-500 mb-1">{language === 'si' ? 'Ali vnesite ID modela ročno:' : 'Or enter model ID manually:'}</label>
+                                            <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder={aiProvider === 'gemini' ? "gemini-3-pro-preview" : "e.g. openai/gpt-4o"} className="w-full p-2 border border-slate-300 rounded-md focus:ring-sky-500 font-mono text-xs" />
+                                        </div>
                                     </div>
 
+                                    {/* Provider info boxes */}
+                                    {aiProvider === 'gemini' && (
+                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-800">
+                                            <strong>Google Gemini</strong>
+                                            {language === 'si' ? ' – brezplačna kvota za razvoj. Gemini 3 Pro je najzmogljivejši model.' : ' – free tier for development. Gemini 3 Pro is the most powerful model.'}
+                                            <br /><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline font-semibold mt-1 inline-block">aistudio.google.com</a>
+                                        </div>
+                                    )}
                                     {aiProvider === 'openrouter' && (
                                         <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800">
                                             <strong>OpenRouter</strong>
