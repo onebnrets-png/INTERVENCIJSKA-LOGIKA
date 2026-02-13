@@ -1,13 +1,100 @@
 // components/AuthScreen.tsx
-// Supabase Auth – Email/Password login & registration
-// No more TOTP/2FA in frontend – use Supabase MFA in the future
+// Supabase Auth — Email/Password login & registration + MFA verification
 
 import React, { useState } from 'react';
 import { storageService } from '../services/storageService.ts';
 import { isValidEmail, checkPasswordStrength, isPasswordSecure, generateDisplayNameFromEmail } from '../utils.ts';
 import { TEXT } from '../locales.ts';
 
-const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) => {
+// ─── MFA Verification Sub-Component ─────────────────────────────
+const MFAVerifyScreen = ({ factorId, language, onVerified, onCancel }: {
+    factorId: string;
+    language: string;
+    onVerified: () => void;
+    onCancel: () => void;
+}) => {
+    const [code, setCode] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleVerify = async () => {
+        setError('');
+        if (code.length !== 6) {
+            setError(language === 'si' ? 'Vnesi 6-mestno kodo.' : 'Enter a 6-digit code.');
+            return;
+        }
+        setLoading(true);
+        const result = await storageService.challengeAndVerifyMFA(factorId, code);
+        setLoading(false);
+        if (result.success) {
+            onVerified();
+        } else {
+            setError(result.message || (language === 'si' ? 'Napačna koda.' : 'Invalid code.'));
+            setCode('');
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-200 p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-8 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-sky-400 to-sky-600"></div>
+
+                <div className="text-center mb-8">
+                    <div className="mx-auto w-16 h-16 bg-sky-100 rounded-full flex items-center justify-center mb-4">
+                        <svg className="w-8 h-8 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    <h1 className="text-2xl font-bold text-sky-800 mb-2">
+                        {language === 'si' ? 'Dvostopenjsko preverjanje' : 'Two-Factor Authentication'}
+                    </h1>
+                    <p className="text-slate-500 text-sm">
+                        {language === 'si'
+                            ? 'Odpri authenticator aplikacijo in vnesi 6-mestno kodo.'
+                            : 'Open your authenticator app and enter the 6-digit code.'}
+                    </p>
+                </div>
+
+                {error && (
+                    <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded border border-red-100 mb-4 animate-pulse">
+                        {error}
+                    </div>
+                )}
+
+                <div className="flex gap-3 mb-6">
+                    <input
+                        type="text"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        maxLength={6}
+                        className="flex-1 p-4 border border-slate-300 rounded-lg text-center text-2xl tracking-[0.5em] font-mono focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && code.length === 6 && handleVerify()}
+                    />
+                </div>
+
+                <button
+                    onClick={handleVerify}
+                    disabled={loading || code.length !== 6}
+                    className="w-full py-3 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold transition-colors disabled:opacity-50 shadow-sm text-lg"
+                >
+                    {loading ? '...' : (language === 'si' ? 'Potrdi' : 'Verify')}
+                </button>
+
+                <div className="mt-4 text-center">
+                    <button onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-700 underline">
+                        {language === 'si' ? 'Prekliči in odjava' : 'Cancel and sign out'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Main AuthScreen ─────────────────────────────────────────────
+
+const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings, needsMFAVerify, mfaFactorId, onMFAVerified, onMFACancel }) => {
     const [isLogin, setIsLogin] = useState(true);
 
     const [email, setEmail] = useState('');
@@ -25,6 +112,18 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) =
 
     const t = TEXT[language].auth;
     const pwStrength = checkPasswordStrength(password);
+
+    // ─── If MFA verification is needed, show MFA screen ──────────
+    if (needsMFAVerify && mfaFactorId) {
+        return (
+            <MFAVerifyScreen
+                factorId={mfaFactorId}
+                language={language}
+                onVerified={onMFAVerified}
+                onCancel={onMFACancel}
+            />
+        );
+    }
 
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
@@ -71,7 +170,6 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) =
         setLoading(false);
 
         if (result.success) {
-            // Auto-login after registration (if email confirmation is disabled)
             onLoginSuccess(result.displayName || email.split('@')[0]);
         } else {
             setError(result.message || t.errorExists);
@@ -123,26 +221,13 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) =
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">{t.emailLabel || "Email Address"}</label>
-                        <input
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all"
-                            placeholder="user@example.com"
-                        />
+                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all" placeholder="user@example.com" />
                     </div>
 
                     {!isLogin && (
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">{t.displayNameLabel || "Username / Display Name"}</label>
-                            <input
-                                type="text"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all"
-                                placeholder={email.split('@')[0] || "Optional"}
-                            />
+                            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all" placeholder={email.split('@')[0] || "Optional"} />
                             <p className="text-xs text-slate-400 mt-1">{t.displayNameDesc || "If empty, we'll use your email prefix."}</p>
                         </div>
                     )}
@@ -150,35 +235,17 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) =
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">{t.password}</label>
                         <div className="relative">
-                            <input
-                                type={showPassword ? "text" : "password"}
-                                required
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all pr-10"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-2 top-2.5 focus:outline-none"
-                            >
+                            <input type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all pr-10" />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-2.5 focus:outline-none">
                                 {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
                             </button>
                         </div>
                         {!isLogin && (
                             <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
-                                <span className={pwStrength.length ? "text-green-600 font-bold" : "text-slate-400"}>
-                                    {pwStrength.length ? "✓" : "○"} {t.pwRuleChars || "8+ Characters"}
-                                </span>
-                                <span className={pwStrength.hasNumber ? "text-green-600 font-bold" : "text-slate-400"}>
-                                    {pwStrength.hasNumber ? "✓" : "○"} {t.pwRuleNumber || "Number (0-9)"}
-                                </span>
-                                <span className={pwStrength.hasSpecial ? "text-green-600 font-bold" : "text-slate-400"}>
-                                    {pwStrength.hasSpecial ? "✓" : "○"} {t.pwRuleSign || "Symbol (!@#)"}
-                                </span>
-                                <span className={(pwStrength.hasUpper || pwStrength.hasLower) ? "text-green-600 font-bold" : "text-slate-400"}>
-                                    {(pwStrength.hasUpper || pwStrength.hasLower) ? "✓" : "○"} {t.pwRuleLetters || "Letters"}
-                                </span>
+                                <span className={pwStrength.length ? "text-green-600 font-bold" : "text-slate-400"}>{pwStrength.length ? "✓" : "○"} {t.pwRuleChars || "8+ Characters"}</span>
+                                <span className={pwStrength.hasNumber ? "text-green-600 font-bold" : "text-slate-400"}>{pwStrength.hasNumber ? "✓" : "○"} {t.pwRuleNumber || "Number (0-9)"}</span>
+                                <span className={pwStrength.hasSpecial ? "text-green-600 font-bold" : "text-slate-400"}>{pwStrength.hasSpecial ? "✓" : "○"} {t.pwRuleSign || "Symbol (!@#)"}</span>
+                                <span className={(pwStrength.hasUpper || pwStrength.hasLower) ? "text-green-600 font-bold" : "text-slate-400"}>{(pwStrength.hasUpper || pwStrength.hasLower) ? "✓" : "○"} {t.pwRuleLetters || "Letters"}</span>
                             </div>
                         )}
                     </div>
@@ -187,18 +254,8 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) =
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">{t.confirmPassword}</label>
                             <div className="relative">
-                                <input
-                                    type={showConfirmPassword ? "text" : "password"}
-                                    required
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all pr-10"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                    className="absolute right-2 top-2.5 focus:outline-none"
-                                >
+                                <input type={showConfirmPassword ? "text" : "password"} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 transition-all pr-10" />
+                                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-2 top-2.5 focus:outline-none">
                                     {showConfirmPassword ? <EyeSlashIcon /> : <EyeIcon />}
                                 </button>
                             </div>
@@ -208,34 +265,15 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) =
                     {!isLogin && (
                         <div className="bg-slate-50 p-3 rounded-md border border-slate-200 mt-2">
                             <label className="block text-sm font-bold text-sky-700 mb-1">{t.apiKeyLabel}</label>
-                            <input
-                                type="password"
-                                value={apiKey}
-                                onChange={(e) => setApiKey(e.target.value)}
-                                className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 font-mono text-xs"
-                                placeholder={t.apiKeyPlaceholder}
-                            />
+                            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 font-mono text-xs" placeholder={t.apiKeyPlaceholder} />
                             <p className="text-xs text-slate-500 mt-1">{t.apiKeyDesc}</p>
                         </div>
                     )}
 
-                    {error && (
-                        <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded border border-red-100 animate-pulse">
-                            {error}
-                        </div>
-                    )}
+                    {error && (<div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded border border-red-100 animate-pulse">{error}</div>)}
+                    {successMessage && (<div className="text-green-600 text-sm text-center bg-green-50 p-2 rounded border border-green-100">{successMessage}</div>)}
 
-                    {successMessage && (
-                        <div className="text-green-600 text-sm text-center bg-green-50 p-2 rounded border border-green-100">
-                            {successMessage}
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 font-semibold transition-colors disabled:opacity-50 shadow-sm"
-                    >
+                    <button type="submit" disabled={loading} className="w-full py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 font-semibold transition-colors disabled:opacity-50 shadow-sm">
                         {loading ? '...' : (isLogin ? t.loginBtn : t.registerBtn)}
                     </button>
                 </form>
@@ -243,10 +281,7 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings }) =
                 <div className="mt-6 text-center text-sm border-t border-slate-100 pt-4">
                     <p className="text-slate-600">
                         {isLogin ? t.switchMsg : t.switchMsgLogin}
-                        <button
-                            onClick={() => { setIsLogin(!isLogin); setError(''); setEmail(''); setDisplayName(''); setPassword(''); setApiKey(''); setSuccessMessage(''); }}
-                            className="ml-2 text-sky-600 hover:underline font-semibold"
-                        >
+                        <button onClick={() => { setIsLogin(!isLogin); setError(''); setEmail(''); setDisplayName(''); setPassword(''); setApiKey(''); setSuccessMessage(''); }} className="ml-2 text-sky-600 hover:underline font-semibold">
                             {isLogin ? t.switchAction : t.switchActionLogin}
                         </button>
                     </p>
