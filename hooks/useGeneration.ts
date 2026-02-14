@@ -2,7 +2,10 @@
 // ═══════════════════════════════════════════════════════════════
 // AI content generation — sections, fields, summaries.
 //
-// v3.5.1 — 2026-02-14 — CHANGES:
+// v3.5.2 — 2026-02-14 — CHANGES:
+//   - FIXED: Auto-generate projectManagement (Kakovost in učinkovitost
+//     izvedbe) when generating activities — description field was left
+//     empty because projectManagement is a separate key in ProjectData.
 //   - FIXED: robustCheckSectionHasContent replaces broken parent check
 //   - FIXED: checkOtherLanguageHasContent deep-checks ONLY the specific section
 //   - FIXED: Level 2 modal — primary button is now "Generate/Enhance current"
@@ -267,6 +270,9 @@ export const useGeneration = ({
   );
 
   // ─── Execute section generation ────────────────────────────────
+  // v3.5.2 FIX: When generating 'activities', also auto-generate
+  // 'projectManagement' (Kakovost in učinkovitost izvedbe) BEFORE
+  // risks, so the description field is populated.
 
   const executeGeneration = useCallback(
     async (sectionKey: string, mode: string = 'regenerate') => {
@@ -296,7 +302,34 @@ export const useGeneration = ({
             console.warn('Schedule warnings:', schedResult.warnings);
           }
 
-          // Auto-generate risks after activities
+          // ────────────────────────────────────────────────────────
+          // v3.5.2 FIX: Auto-generate projectManagement
+          // (Kakovost in učinkovitost izvedbe — description + structure)
+          // Generated BEFORE risks so it has full activities context,
+          // and risks in turn have full projectManagement context.
+          // ────────────────────────────────────────────────────────
+          setIsLoading(`${t.generating} ${t.subSteps.qualityEfficiency}...`);
+          try {
+            const pmContent = await generateSectionContent(
+              'projectManagement',
+              newData,
+              language,
+              mode
+            );
+            // Deep merge to preserve any manually entered structure fields
+            newData.projectManagement = {
+              ...newData.projectManagement,
+              ...pmContent,
+              structure: {
+                ...(newData.projectManagement?.structure || {}),
+                ...(pmContent?.structure || {}),
+              },
+            };
+          } catch (e) {
+            console.error('[Auto-gen projectManagement]:', e);
+          }
+
+          // Auto-generate risks after activities + projectManagement
           setIsLoading(`${t.generating} ${t.subSteps.riskMitigation}...`);
           try {
             const risksContent = await generateSectionContent(
