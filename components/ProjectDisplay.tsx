@@ -865,28 +865,45 @@ const renderActivities = (props) => {
 // ═══════════════════════════════════════════════════════════════
 
 const ProjectDisplay = (props) => {
-    const { currentStep, currentSubStep } = props;
+    const { activeStepId, language } = props;
 
-    const steps = getSteps();
-    const stepKey = steps[currentStep]?.key;
+    const steps = getSteps(language);
+    const currentStepObj = steps.find(s => s.id === activeStepId);
+    const stepKey = currentStepObj?.key;
 
-    switch (stepKey) {
-        case 'problemAnalysis':
-            return renderProblemAnalysis(props);
-        case 'projectIdea':
-            return renderProjectIdea(props);
-        case 'objectives':
-            if (currentSubStep === 0) return renderObjectives(props, 'generalObjectives');
-            return renderObjectives(props, 'specificObjectives');
-        case 'activities':
-            return renderActivities(props);
-        case 'results':
-            if (currentSubStep === 0) return renderGenericResults(props, 'outputs');
-            if (currentSubStep === 1) return renderGenericResults(props, 'outcomes');
-            return renderGenericResults(props, 'impacts');
-        default:
-            return <div>Unknown step</div>;
-    }
+    const renderContent = () => {
+        switch (stepKey) {
+            case 'problemAnalysis':
+                return renderProblemAnalysis(props);
+            case 'projectIdea':
+                return renderProjectIdea(props);
+            case 'generalObjectives':
+                return renderObjectives(props, 'generalObjectives');
+            case 'specificObjectives':
+                return renderObjectives(props, 'specificObjectives');
+            case 'activities':
+                return renderActivities(props);
+            case 'expectedResults':
+                return (
+                    <>
+                        {renderGenericResults(props, 'outputs')}
+                        {renderGenericResults(props, 'outcomes')}
+                        {renderGenericResults(props, 'impacts')}
+                        {renderKERs(props)}
+                    </>
+                );
+            default:
+                return <div className="p-8 text-slate-400 text-center">Unknown step: {stepKey || activeStepId}</div>;
+        }
+    };
+
+    return (
+        <div id="main-scroll-container" className="flex-1 overflow-y-auto">
+            <div className="max-w-4xl mx-auto px-6 py-8">
+                {renderContent()}
+            </div>
+        </div>
+    );
 };
 
 export default ProjectDisplay;
