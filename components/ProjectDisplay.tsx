@@ -659,11 +659,22 @@ const renderKERs = (props) => {
 
 const renderActivities = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
-    const { activities } = projectData;
     const path = ['activities'];
     const t = TEXT[language] || TEXT['en'];
 
-    const allTasks = (activities || []).flatMap(wp => wp.tasks || []);
+    // ★ FIX: Ensure activities is always a valid array — AI sometimes returns
+    // an object wrapper { activities: [...] } or a single WP object instead of array.
+    // This guard prevents the app from crashing during/after generation.
+    const rawActivities = projectData.activities;
+    const activities = Array.isArray(rawActivities)
+        ? rawActivities
+        : (rawActivities && Array.isArray(rawActivities.activities))
+            ? rawActivities.activities
+            : (rawActivities && typeof rawActivities === 'object' && rawActivities.id)
+                ? [rawActivities]
+                : [];
+
+    const allTasks = activities.flatMap(wp => wp.tasks || []);
 
     const handleTaskUpdate = (itemPath, value) => {
         if (itemPath.includes('tasks')) {
