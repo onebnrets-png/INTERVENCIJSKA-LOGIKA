@@ -596,13 +596,14 @@ To je GLAVNO vsebinsko polje. MORA vsebovati celovito besedilo (najmanj 500 bese
 5. NOTRANJA KOMUNIKACIJA – Orodja, urniki, poročevalske verige, upravljanje dokumentov.
 6. REŠEVANJE KONFLIKTOV – Eskalacija: neformalno → mediacija koordinatorja → formalna arbitraža.
 7. UPRAVLJANJE PODATKOV IN ODPRTA ZNANOST – Načela FAIR, vrste dostopa, podrobnosti repozitorija.
-Piši v tekočih odstavkih, ne v seznamih s pikicami. BREZ markdown. Piši kot izkušen svetovalec.
+Piši v tekočih odstavkih, ne v alinejah. Brez markdown. Piši kot izkušen svetovalec.
 
-OBLIKOVANJE OPISA:
-- Opis strukturiraj v JASNE ODSTAVKE, ločene z dvojnimi novimi vrsticami (\\n\\n).
-- Vsaka večja tema (upravljavska struktura, mehanizmi odločanja, zagotavljanje kakovosti, obvladovanje tveganj, komunikacija, reševanje konfliktov, upravljanje podatkov) naj bo LASTEN ODSTAVEK.
-- Začni vsak odstavek z naslovom teme v goli obliki v svoji vrstici, npr.: "Upravljavska struktura", nato nova vrsta in opisno besedilo.
-- NE piši enega neprekinjenega bloka besedila. Besedilo mora biti berljivo z jasno vizualno ločitvijo med temami.
+FORMATIRANJE OPISA:
+- Razdeli opis v JASNE ODSTAVKE, ločene z dvojnimi novimi vrsticami (\\n\\n).
+- Vsaka večja tema (upravljavska struktura, odločanje, zagotavljanje kakovosti, obvladovanje tveganj, komunikacija, reševanje konfliktov, upravljanje podatkov) mora biti SVOJ ODSTAVEK.
+- Vsak odstavek začni z imenom teme v goli besedili na svoji vrstici, npr.: "Upravljavska struktura" nato nova vrstica, nato opisno besedilo.
+- NE piši enega samega neprekinjenega bloka besedila. Besedilo mora biti berljivo z jasno vizualno ločitvijo med temami.
+- To je KRITIČNO za berljivost — AI model MORA vstaviti \\n\\n med odstavke v JSON string vrednosti.
 
 DEL 2 — POLJA STRUKTURE (projectManagement.structure):
 Ta polja se prikazujejo kot OZNAKE v organizacijski shemi. MORAJO vsebovati SAMO kratke nazive vlog (največ 5–8 besed):
@@ -667,10 +668,24 @@ DELIVERABLE RULES:
 - Deliverable titles: noun phrase describing the product (e.g., "Training curriculum document").
 - Deliverables must be verifiable via desk review. No vague descriptions.
 
+DELIVERABLE QUALITY (MANDATORY):
+- Every deliverable description MUST be 2–4 sentences: what it contains, its format/type, and who the target audience is.
+- Every deliverable indicator MUST be specific and measurable — NOT vague. Include format, quantity, and verification method.
+- WRONG indicator: "Report delivered" — RIGHT indicator: "Technical report (min. 40 pages), peer-reviewed by 2 external experts, published on project website by M12"
+- WRONG description: "Final report" — RIGHT description: "Comprehensive analytical report synthesising findings from all 12 pilot sites, including comparative methodology framework, quantitative performance metrics, and policy recommendations for regional authorities."
+
 TASK RULES:
 - At least 3 tasks per WP (technical WPs), at least 2 tasks per administrative WP.
 - Each task MUST have realistic startDate and endDate in YYYY-MM-DD format.
 - Tasks within a WP should have logical dependencies (FS type preferred).
+
+TASK DEPENDENCIES (MANDATORY):
+- Every task (except the first task of WP1) MUST have at least 1 dependency in the "dependencies" array.
+- Use realistic dependency types: FS (Finish-to-Start) is most common, SS (Start-to-Start) for parallel tasks, FF (Finish-to-Finish) for synchronized completions.
+- Dependencies MUST reference valid predecessorId values from tasks that are defined earlier in the project timeline.
+- WP2+ first tasks should depend on at least one task from a previous WP (cross-WP dependency).
+- Administrative WPs (Dissemination, Project Management) should have SS dependencies from WP1 Task 1 (they run in parallel from the start).
+- Example: {"predecessorId": "T1.2", "type": "FS"} means this task starts after T1.2 finishes.
 
 FORMATTING:
 - No markdown. Vary sentence structures. Write like an experienced consultant.
@@ -734,10 +749,24 @@ PRAVILA ZA DOSEŽKE (DELIVERABLES):
 - Naslovi dosežkov: samostalniška zveza z opisom produkta (npr. "Dokument učnega načrta").
 - Dosežki morajo biti preverljivi z namiznim pregledom. Brez nejasnih opisov.
 
+KAKOVOST DOSEŽKOV / DELIVERABLES (OBVEZNO):
+- Vsak opis dosežka (deliverable) MORA imeti 2–4 stavke: kaj vsebuje, kakšen je format/tip, in kdo je ciljna publika.
+- Vsak kazalnik dosežka MORA biti specifičen in merljiv — NE nejasen. Vključi format, količino in način preverjanja.
+- NAPAČEN kazalnik: "Poročilo oddano" — PRAVILEN kazalnik: "Tehnično poročilo (min. 40 strani), recenzirano s strani 2 zunanjih strokovnjakov, objavljeno na spletni strani projekta do M12"
+- NAPAČEN opis: "Končno poročilo" — PRAVILEN opis: "Celovito analitično poročilo, ki sintetizira ugotovitve vseh 12 pilotnih lokacij, vključno s primerjalno metodološko ogrodje, kvantitativnimi kazalniki uspešnosti in priporočili za regionalne organe."
+
 PRAVILA ZA NALOGE:
 - Vsaj 3 naloge na DS (tehnični DS), vsaj 2 nalogi na administrativni DS.
 - Vsaka naloga MORA imeti realistična datuma startDate in endDate v formatu YYYY-MM-DD.
 - Naloge znotraj DS naj imajo logične odvisnosti (tip FS je prednosten).
+
+SOODVISNOSTI NALOG (OBVEZNO):
+- Vsaka naloga (razen prve naloge DS1) MORA imeti vsaj 1 odvisnost v polju "dependencies".
+- Uporabljaj realistične tipe odvisnosti: FS (konec-začetek) je najpogostejši, SS (začetek-začetek) za vzporedne naloge, FF (konec-konec) za sinhronizirane zaključke.
+- Odvisnosti MORAJO navajati veljavne predecessorId vrednosti iz nalog, ki so opredeljene prej v časovnici projekta.
+- Prve naloge DS2+ morajo biti odvisne od vsaj ene naloge iz prejšnjega DS (medskladna odvisnost).
+- Administrativna DS (Diseminacija, Upravljanje projekta) imata SS odvisnosti od T1.1 (tečeta vzporedno od začetka).
+- Primer: {"predecessorId": "T1.2", "type": "FS"} pomeni, da se ta naloga začne po zaključku T1.2.
 
 OBLIKOVANJE:
 - BREZ markdown. Variraj stavčne strukture. Piši kot izkušen svetovalec.
