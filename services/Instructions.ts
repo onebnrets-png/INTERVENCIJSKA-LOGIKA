@@ -150,7 +150,13 @@ CROSS-REFERENCING
 FORMATTING
 - Use double line breaks to separate distinct thematic sections within a single field.
 - Use bullet points only when listing discrete items (risks, outputs, indicators). For narrative content, write flowing paragraphs.
-- Never include markdown headers (# or ##) inside field content – the application handles headings.
+- NEVER include ANY markdown formatting inside field content:
+  * No bold markers: ** or __
+  * No italic markers: * or _
+  * No headers: # or ##
+  * No code blocks or backticks
+  * The application handles ALL visual formatting — your output must be plain text only.
+- For sub-section titles within a field (e.g., phase names), write them as plain text on a separate line: "Phase 1: Development of the semantic model" — NOT "**Phase 1: Development of the semantic model**".
 
 API KEY AND SYSTEM BEHAVIOUR
 - Never ask the user for an API key, provider settings, or system configuration within generated content.
