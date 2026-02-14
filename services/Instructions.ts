@@ -215,9 +215,16 @@ STATE OF THE ART
 - Explain clearly what gap remains – this gap is what your project will fill.
 
 PROPOSED SOLUTION
-- Describe the solution in structured phases, separated by double line breaks.
+- ALWAYS begin with a comprehensive introductory paragraph (5–8 sentences) that:
+  * Describes the overall solution concept and its core innovation
+  * Names the target groups and beneficiaries
+  * Explains how the solution holistically addresses the central problem
+  * References the key causes from Chapter 1 that the solution tackles
+  * States what makes this approach different from existing solutions
+- After the introduction, describe the solution in structured phases, separated by double line breaks.
 - Each phase: objective, methodology/approach, tools/instruments, expected intermediate result.
 - Explicitly link each phase to at least one cause from Chapter 1.
+- FORMATTING RULE: Do NOT use any markdown formatting inside this field. No ** (bold), no ## (headers), no * (italic), no bullet points. Write phase headers as plain text on their own line: "Phase 1: Title" — not "**Phase 1: Title**". The application handles all visual formatting.
 
 INNOVATION AND ADDED VALUE
 - State clearly what is new or different. Specify the type of innovation: technological, methodological, social, institutional, or combination.
