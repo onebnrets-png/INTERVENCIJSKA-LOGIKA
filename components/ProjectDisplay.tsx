@@ -392,7 +392,7 @@ const renderObjectives = (props, sectionKey) => {
     );
 }
 
-// --- RENDER PROJECT MANAGEMENT (Updated v4.2 — Implementation + Organigram as separate sub-steps) ---
+// --- RENDER PROJECT MANAGEMENT (v4.5 — Fixed duplicate title) ---
 const renderProjectManagement = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, isLoading, language, missingApiKey } = props;
     const { projectManagement } = projectData;
@@ -401,9 +401,9 @@ const renderProjectManagement = (props) => {
 
     return (
         <div className="mb-10 pb-8">
-            {/* ── IMPLEMENTACIJA ── */}
+            {/*  IMPLEMENTACIJA — en sam naslov  */}
             <div id="implementation" className="mb-10">
-                <SectionHeader title={t.management.implementation}>
+                <SectionHeader title={t.management.implementation || t.management.title}>
                     <GenerateButton 
                         onClick={() => onGenerateSection('projectManagement')} 
                         isLoading={isLoading === `${t.generating} projectManagement...`} 
@@ -413,7 +413,7 @@ const renderProjectManagement = (props) => {
                     />
                 </SectionHeader>
                 
-                <p className="text-sm text-slate-500 mb-4 -mt-2">{t.management.implementationDesc}</p>
+                <p className="text-sm text-slate-500 mb-4 -mt-2">{t.management.implementationDesc || t.management.desc}</p>
 
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea 
@@ -430,7 +430,7 @@ const renderProjectManagement = (props) => {
                 </div>
             </div>
 
-            {/* ── ORGANIZACIJSKA STRUKTURA (ORGANIGRAM) ── */}
+            {/*  ORGANIZACIJSKA STRUKTURA (ORGANIGRAM)  */}
             <div id="organigram">
                 <SectionHeader title={t.management.organigram} />
 
@@ -446,7 +446,6 @@ const renderProjectManagement = (props) => {
         </div>
     );
 };
-
 // --- RENDER RISKS (Sub-Component of Activities) ---
 const renderRisks = (props) => {
     const { projectData, onUpdateData, onGenerateField, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
