@@ -13,7 +13,7 @@
 //  - Calling the AI provider
 //  - Post-processing responses (JSON parsing, sanitization, merging)
 //
-// v3.5.2 — 2026-02-14 — CHANGES:
+// v3.5.3 — 2026-02-14 — CHANGES:
 //   1. getContext() includes sections when EITHER title OR description exists
 //   2. generateFieldContent() injects sibling field values into prompt
 //   3. Strong bilingual language directive in every prompt
@@ -30,6 +30,9 @@
 //  12. Safe handling of translationRules/summaryRules as string or array
 //  13. HUMANIZATION RULES — anti-AI-fingerprint, sentence variation,
 //      banned phrases, concrete specificity, active voice
+//  14. PROJECT TITLE RULES — specific rules for generating project names
+//      (30–200 chars, noun phrase, no acronym, no full sentences)
+//  15. sanitizeProjectTitle() — post-processing to enforce length limits
 // ═══════════════════════════════════════════════════════════════
 
 import { storageService } from './storageService.ts';
@@ -206,10 +209,7 @@ These rules apply to ALL generated content WITHOUT EXCEPTION.
 ═══════════════════════════════════════════════════════════════════`;
 };
 
-// ─── HUMANIZATION RULES (v3.5.2 — NEW) ──────────────────────────
-// Ensures AI output reads as human-written, not machine-generated.
-// Injected as a separate high-visibility block alongside the rules
-// in Instructions.ts for double reinforcement.
+// ─── HUMANIZATION RULES (v3.5.2) ────────────────────────────────
 
 const getHumanizationRules = (language: 'en' | 'si'): string => {
   if (language === 'si') {
@@ -314,6 +314,114 @@ EU evaluators and AI detection tools easily identify machine-generated text.
 ═══════════════════════════════════════════════════════════════════`;
 };
 
+// ─── PROJECT TITLE RULES (v3.5.3 — NEW) ─────────────────────────
+// Specific rules for generating the project name (projectTitle field).
+// The acronym is generated separately — this is ONLY the full name.
+
+const getProjectTitleRules = (language: 'en' | 'si'): string => {
+  if (language === 'si') {
+    return `═══ STROGA PRAVILA ZA NAZIV PROJEKTA (projectTitle) ═══
+POZOR: To so pravila SAMO za polje "projectTitle" (naziv projekta).
+Akronim se generira LOČENO — naziv NE sme vsebovati akronima.
+
+1. DOLŽINA: med 30 in 200 znakov (NE krajši, NE daljši)
+2. OBLIKA: jedrnata IMENSKI IZRAZ — NE cel stavek, NE glagolska oblika
+3. BREZ AKRONIMA — ta se generira posebej
+4. BREZ GLAGOLOV v osebni obliki (NE "Projekt bo razvil...", NE "Razvijamo...")
+5. BREZ generičnih AI fraz ("Inovativen pristop k celovitemu razvoju...")
+6. BREZ naštevanja s vejicami ("razvoj, implementacija, testiranje in diseminacija...")
+7. BREZ naštevanja pridevnikov ("Inovativna, trajnostna, celovita in napredna rešitev")
+8. Naziv MORA odgovoriti na vprašanje: "Kaj ta projekt PRINESE / NAREDI?"
+9. Naziv je BLAGOVNA ZNAMKA projekta — jedrnat, zapomnljiv, strokoven
+
+VZORCI DOBRIH NAZIVOV:
+- "Digitalna preobrazba obrtniških veščin v čezmejnem prostoru"
+- "Krožno gospodarstvo v lesnopredelovalni industriji Podonavja"
+- "Zeleni prehod mobilnosti v srednje velikih mestih"
+- "Krepitev digitalnih kompetenc mladih na podeželju"
+- "Trajnostna prehranska veriga v alpskem prostoru"
+- "Medgeneracijski prenos znanj v kulturni dediščini"
+
+VZORCI SLABIH NAZIVOV (PREPOVEDANO):
+- "Projekt za razvoj inovativnih rešitev za trajnostno preobrazbo" (preveč generično)
+- "Razvijamo nove pristope k celovitemu reševanju izzivov" (stavek z glagolom)
+- "Inovativna, trajnostna, celovita in napredna rešitev" (naštevanje pridevnikov)
+- "GREENTRANS – Zelena preobrazba prometa" (vsebuje akronim — PREPOVEDANO)
+- "Projekt bo vzpostavil platformo za..." (stavek z glagolom — PREPOVEDANO)
+═══════════════════════════════════════════════════════════════════`;
+  }
+
+  return `═══ STRICT RULES FOR PROJECT TITLE (projectTitle) ═══
+ATTENTION: These rules apply ONLY to the "projectTitle" field (project name).
+The acronym is generated SEPARATELY — the title MUST NOT contain an acronym.
+
+1. LENGTH: between 30 and 200 characters (NOT shorter, NOT longer)
+2. FORMAT: concise NOUN PHRASE — NOT a full sentence, NOT a verb form
+3. NO ACRONYM — that is generated separately
+4. NO CONJUGATED VERBS (NOT "The project will develop...", NOT "We develop...")
+5. NO generic AI phrases ("An innovative approach to comprehensive development...")
+6. NO comma-separated enumerations ("development, implementation, testing and dissemination...")
+7. NO adjective chains ("Innovative, sustainable, comprehensive and advanced solution")
+8. Title MUST answer: "What does this project DELIVER / ACHIEVE?"
+9. Title is a PROJECT BRAND — concise, memorable, professional
+
+GOOD TITLE EXAMPLES:
+- "Digital Transformation of Artisan Skills in Cross-Border Regions"
+- "Circular Economy in the Wood Processing Industry of the Danube Region"
+- "Green Mobility Transition in Medium-Sized Cities"
+- "Strengthening Digital Competences of Rural Youth"
+- "Sustainable Food Supply Chain in the Alpine Space"
+- "Intergenerational Knowledge Transfer in Cultural Heritage"
+
+BAD TITLE EXAMPLES (FORBIDDEN):
+- "Project for developing innovative solutions for sustainable transformation" (too generic)
+- "We develop new approaches to comprehensively solving challenges" (sentence with verb)
+- "Innovative, sustainable, comprehensive and advanced solution" (adjective chain)
+- "GREENTRANS – Green Urban Transport Transformation" (contains acronym — FORBIDDEN)
+- "The project will establish a platform for..." (sentence with verb — FORBIDDEN)
+═══════════════════════════════════════════════════════════════════`;
+};
+
+// ─── SANITIZE PROJECT TITLE (v3.5.3 — NEW) ──────────────────────
+// Post-processing to enforce title constraints after AI generation.
+
+const sanitizeProjectTitle = (title: string): string => {
+  if (!title || typeof title !== 'string') return title;
+
+  let clean = title.trim();
+
+  // Remove markdown
+  clean = clean
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/`([^`]+)`/g, '$1');
+
+  // Remove surrounding quotes
+  clean = clean.replace(/^["'«»„""]|["'«»"""]$/g, '').trim();
+
+  // Remove leading "Project Title:" or "Naziv projekta:" prefix if AI added it
+  clean = clean.replace(/^(Project\s*Title|Naziv\s*projekta)\s*[:–—-]\s*/i, '').trim();
+
+  // Remove acronym prefix if AI added it despite instructions (e.g., "ACRONYM – Title")
+  // Pattern: 2-10 uppercase letters followed by separator then the real title
+  const acronymPattern = /^[A-ZČŠŽ]{2,10}\s*[–—:-]\s*/;
+  if (acronymPattern.test(clean)) {
+    const withoutAcronym = clean.replace(acronymPattern, '').trim();
+    // Only remove if remaining text is substantial (>20 chars)
+    if (withoutAcronym.length > 20) {
+      clean = withoutAcronym;
+    }
+  }
+
+  // Enforce max 200 characters — cut at last word boundary
+  if (clean.length > 200) {
+    clean = clean.substring(0, 200).replace(/\s+\S*$/, '').trim();
+  }
+
+  return clean;
+};
+
 // ─── QUALITY ENFORCEMENT (appended to every section prompt) ──────
 
 const getQualityEnforcement = (sectionKey: string, language: 'en' | 'si'): string => {
@@ -350,6 +458,7 @@ const getQualityEnforcement = (sectionKey: string, language: 'en' | 'si'): strin
     },
     projectIdea: {
       en: [
+        'projectTitle is a concise noun phrase (30–200 chars), NO acronym, NO full sentence',
         'State of the Art references ≥3 specific existing projects/studies with names and years',
         'Proposed Solution BEGINS with a 5–8 sentence introductory paragraph BEFORE any phases',
         'Proposed Solution phases use plain text headers (no ** or ## markdown)',
@@ -361,6 +470,7 @@ const getQualityEnforcement = (sectionKey: string, language: 'en' | 'si'): strin
         'Sentence lengths and structures vary naturally throughout',
       ],
       si: [
+        'projectTitle je jedrnata imenski izraz (30–200 znakov), BREZ akronima, BREZ celega stavka',
         'Stanje tehnike navaja ≥3 specifične obstoječe projekte/študije z imeni in letnicami',
         'Predlagana rešitev se ZAČNE s 5–8 stavkov dolgim uvodnim odstavkom PRED fazami',
         'Faze predlagane rešitve uporabljajo golo besedilo za naslove (brez ** ali ## markdown)',
@@ -536,6 +646,7 @@ const schemas: Record<string, any> = {
   projectIdea: {
     type: Type.OBJECT,
     properties: {
+      projectTitle: { type: Type.STRING },
       mainAim: { type: Type.STRING },
       stateOfTheArt: { type: Type.STRING },
       proposedSolution: { type: Type.STRING },
@@ -558,7 +669,7 @@ const schemas: Record<string, any> = {
         required: ['TRL', 'SRL', 'ORL', 'LRL']
       }
     },
-    required: ['mainAim', 'stateOfTheArt', 'proposedSolution', 'policies', 'readinessLevels']
+    required: ['projectTitle', 'mainAim', 'stateOfTheArt', 'proposedSolution', 'policies', 'readinessLevels']
   },
   objectives: {
     type: Type.ARRAY,
@@ -780,7 +891,7 @@ const getRulesForSection = (sectionKey: string, language: 'en' | 'si'): string =
   return '';
 };
 
-// ─── PROMPT BUILDER (v3.5.2) ─────────────────────────────────────
+// ─── PROMPT BUILDER (v3.5.3) ─────────────────────────────────────
 
 const getPromptAndSchemaForSection = (
   sectionKey: string,
@@ -807,6 +918,9 @@ const getPromptAndSchemaForSection = (
   const academicRules = getAcademicRigorRules(language);
   const humanRules = getHumanizationRules(language);
 
+  // v3.5.3: Inject project title rules when generating projectIdea section
+  const titleRules = sectionKey === 'projectIdea' ? getProjectTitleRules(language) : '';
+
   let modeInstruction: string;
 
   if (mode === 'fill') {
@@ -827,12 +941,13 @@ const getPromptAndSchemaForSection = (
   const taskInstruction = getSectionTaskInstruction(sectionKey, projectData, language);
   const qualityGate = getQualityEnforcement(sectionKey, language);
 
-  // v3.5.2: Prompt order — humanization rules added after academic rules
+  // v3.5.3: Prompt order — title rules injected for projectIdea
   const prompt = [
     langDirective,
     langMismatchNotice,
     academicRules,
     humanRules,
+    titleRules,
     context,
     modeInstruction,
     `${globalRulesHeader}:\n${globalRules}`,
@@ -845,7 +960,7 @@ const getPromptAndSchemaForSection = (
   return { prompt, schema };
 };
 
-// ─── SECTION-SPECIFIC TASK INSTRUCTIONS (v3.5.2) ────────────────
+// ─── SECTION-SPECIFIC TASK INSTRUCTIONS (v3.5.3) ────────────────
 
 const getSectionTaskInstruction = (
   sectionKey: string,
@@ -867,10 +982,19 @@ const getSectionTaskInstruction = (
         : `USER INPUT FOR CORE PROBLEM:\n${userInput}\n\nTASK: Based STRICTLY on the USER INPUT ABOVE, create (or complete) a detailed problem analysis.\n\nMANDATORY:\n- Title and description MUST be directly related to user's input.\n- Do NOT invent unrelated topics.\n- Every CAUSE: title + 3–5 sentence description + at least 1 citation from REAL source.\n- Every CONSEQUENCE: title + 3–5 sentence description + at least 1 citation from REAL source.\n- Core problem MUST include a quantitative indicator.\n- NEVER write generic descriptions without evidence.\n- If unknown: "[Insert verified data: <description>]".\n- NO markdown (**, ##, \`).\n- Write like an experienced human consultant — vary sentence structures.`;
     }
 
-    case 'projectIdea':
+    case 'projectIdea': {
+      // v3.5.3: Extract user-entered project title for explicit instruction
+      const userTitle = projectData.projectIdea?.projectTitle?.trim() || '';
+      const titleContext = userTitle
+        ? (language === 'si'
+          ? `\nUPORABNIKOV VNOS ZA NAZIV PROJEKTA: "${userTitle}"\nPRAVILA ZA NAZIV:\n- Če je uporabnikov vnos primeren (30–200 znakov, imenski izraz, brez akronima), ga OHRANI NESPREMENJENO.\n- Če je uporabnikov vnos prekratek ali predolg ali vsebuje glagol, ga IZBOLJŠAJ v skladu s pravili za naziv projekta zgoraj.\n- NIKOLI ne generiraj popolnoma drugačnega naziva — ostani na temi uporabnikovega vnosa.\n`
+          : `\nUSER INPUT FOR PROJECT TITLE: "${userTitle}"\nTITLE RULES:\n- If the user's input is acceptable (30–200 chars, noun phrase, no acronym), KEEP IT UNCHANGED.\n- If the user's input is too short, too long, or contains a verb, IMPROVE it following the project title rules above.\n- NEVER generate a completely different title — stay on the user's topic.\n`)
+        : '';
+
       return language === 'si'
-        ? 'Na podlagi analize problemov razvij (ali dopolni) celovito projektno idejo.\n\nOBVEZNE ZAHTEVE:\n- Stanje tehnike MORA navajati vsaj 3 RESNIČNE obstoječe projekte/študije z imeni in letnicami.\n- Predlagana rešitev MORA začeti s CELOVITIM UVODNIM ODSTAVKOM (5–8 stavkov) pred fazami.\n- Faze: golo besedilo "Faza 1: Naslov" — NE "**Faza 1: Naslov**".\n- EU politike morajo biti resnične in preverljive.\n- Če ne poznaš projekta: "[Vstavite preverjen projekt: <tematika>]".\n- BREZ markdown (**, ##, `).\n- Piši kot izkušen človeški svetovalec — variraj stavke, izogibaj se AI frazam.'
-        : 'Based on the problem analysis, develop (or complete) a comprehensive project idea.\n\nMANDATORY:\n- State of the Art MUST reference at least 3 REAL existing projects/studies with names and years.\n- Proposed Solution MUST BEGIN with a COMPREHENSIVE INTRODUCTORY PARAGRAPH (5–8 sentences) before phases.\n- Phase headers: plain text "Phase 1: Title" — NOT "**Phase 1: Title**".\n- EU policies must be real and verifiable.\n- If unknown project: "[Insert verified project: <topic>]".\n- NO markdown (**, ##, `).\n- Write like an experienced human consultant — vary sentences, avoid AI phrases.';
+        ? `${titleContext}Na podlagi analize problemov razvij (ali dopolni) celovito projektno idejo.\n\nOBVEZNE ZAHTEVE:\n- Stanje tehnike MORA navajati vsaj 3 RESNIČNE obstoječe projekte/študije z imeni in letnicami.\n- Predlagana rešitev MORA začeti s CELOVITIM UVODNIM ODSTAVKOM (5–8 stavkov) pred fazami.\n- Faze: golo besedilo "Faza 1: Naslov" — NE "**Faza 1: Naslov**".\n- EU politike morajo biti resnične in preverljive.\n- Če ne poznaš projekta: "[Vstavite preverjen projekt: <tematika>]".\n- BREZ markdown (**, ##, \`).\n- Piši kot izkušen človeški svetovalec — variraj stavke, izogibaj se AI frazam.`
+        : `${titleContext}Based on the problem analysis, develop (or complete) a comprehensive project idea.\n\nMANDATORY:\n- State of the Art MUST reference at least 3 REAL existing projects/studies with names and years.\n- Proposed Solution MUST BEGIN with a COMPREHENSIVE INTRODUCTORY PARAGRAPH (5–8 sentences) before phases.\n- Phase headers: plain text "Phase 1: Title" — NOT "**Phase 1: Title**".\n- EU policies must be real and verifiable.\n- If unknown project: "[Insert verified project: <topic>]".\n- NO markdown (**, ##, \`).\n- Write like an experienced human consultant — vary sentences, avoid AI phrases.`;
+    }
 
     case 'generalObjectives':
       return language === 'si'
@@ -967,6 +1091,11 @@ export const generateSectionContent = async (
     parsedData.proposedSolution = text;
   }
 
+  // v3.5.3: Sanitize project title after generation
+  if (sectionKey === 'projectIdea' && parsedData.projectTitle) {
+    parsedData.projectTitle = sanitizeProjectTitle(parsedData.projectTitle);
+  }
+
   if (mode === 'fill' && currentSectionData) {
     parsedData = smartMerge(currentSectionData, parsedData);
   }
@@ -974,10 +1103,15 @@ export const generateSectionContent = async (
   // Strip markdown formatting from all string values
   parsedData = stripMarkdown(parsedData);
 
+  // v3.5.3: Re-sanitize title after stripMarkdown (in case merge reintroduced issues)
+  if (sectionKey === 'projectIdea' && parsedData.projectTitle) {
+    parsedData.projectTitle = sanitizeProjectTitle(parsedData.projectTitle);
+  }
+
   return parsedData;
 };
 
-// ─── FIELD CONTENT GENERATION (v3.5.2) ───────────────────────────
+// ─── FIELD CONTENT GENERATION (v3.5.3) ───────────────────────────
 
 export const generateFieldContent = async (
   path: (string | number)[],
@@ -1001,6 +1135,12 @@ export const generateFieldContent = async (
   const fieldRuleText = fieldRule
     ? `\n${language === 'si' ? 'PRAVILO ZA TO POLJE' : 'FIELD-SPECIFIC RULE'}:\n${fieldRule}\n`
     : '';
+
+  // v3.5.3: Special handling for projectTitle field
+  const isProjectTitle = fieldName === 'projectTitle' ||
+    (sectionName === 'projectIdea' && fieldName === 'title' && path.length <= 2);
+
+  const titleRules = isProjectTitle ? getProjectTitleRules(language) : '';
 
   let siblingContext = '';
   try {
@@ -1030,7 +1170,18 @@ export const generateFieldContent = async (
   let specificContext = '';
   let extraInstruction = '';
 
-  if (path.includes('milestones')) {
+  if (isProjectTitle) {
+    // v3.5.3: Dedicated project title generation
+    const existingTitle = projectData.projectIdea?.projectTitle?.trim() || '';
+    specificContext = language === 'si' ? 'naziv projekta (projectTitle)' : 'the project title (projectTitle)';
+    extraInstruction = existingTitle
+      ? (language === 'si'
+        ? `\nUPORABNIKOV TRENUTNI NAZIV: "${existingTitle}"\nČe je primeren (30–200 znakov, imenski izraz, brez akronima, brez glagola), ga VRNI NESPREMENJENO.\nČe ni primeren, ga IZBOLJŠAJ v skladu s pravili za naziv zgoraj — ostani na isti temi.\nVrni SAMO naziv — brez navodil, brez razlage, brez narekovajev.\n`
+        : `\nUSER'S CURRENT TITLE: "${existingTitle}"\nIf acceptable (30–200 chars, noun phrase, no acronym, no verb), RETURN IT UNCHANGED.\nIf not acceptable, IMPROVE it following the title rules above — stay on the same topic.\nReturn ONLY the title — no instructions, no explanation, no quotes.\n`)
+      : (language === 'si'
+        ? `\nGeneriraj primeren NAZIV PROJEKTA na podlagi konteksta projekta.\nUpoštevaj pravila za naziv zgoraj.\nVrni SAMO naziv — brez navodil, brez razlage, brez narekovajev.\n`
+        : `\nGenerate an appropriate PROJECT TITLE based on the project context.\nFollow the title rules above.\nReturn ONLY the title — no instructions, no explanation, no quotes.\n`);
+  } else if (path.includes('milestones')) {
     if (fieldName === 'date') {
       const projectStartDate = projectData.projectIdea?.startDate || new Date().toISOString().split('T')[0];
       const wpIdx = path[1];
@@ -1059,15 +1210,20 @@ export const generateFieldContent = async (
       : ' The generated text MUST be directly related to the existing data above.')
     : '';
 
-  const taskLine = language === 'si'
-    ? `Generiraj profesionalno vrednost za ${specificContext} znotraj "${sectionName}". Vrni samo golo besedilo brez markdown. Vključi citat iz REALNEGA vira če primerno. Če ne poznaš podatka: "[Vstavite preverjen podatek: ...]". Piši kot izkušen človeški svetovalec.${anchorNote}`
-    : `Generate a professional value for ${specificContext} within "${sectionName}". Return only plain text, no markdown. Include citation from a REAL source where appropriate. If unknown: "[Insert verified data: ...]". Write like an experienced human consultant.${anchorNote}`;
+  const taskLine = isProjectTitle
+    ? (language === 'si'
+      ? `Generiraj ali izboljšaj NAZIV PROJEKTA. Vrni SAMO golo besedilo naziva (30–200 znakov). Brez markdown, brez narekovajev, brez razlage.${anchorNote}`
+      : `Generate or improve the PROJECT TITLE. Return ONLY the plain text title (30–200 characters). No markdown, no quotes, no explanation.${anchorNote}`)
+    : (language === 'si'
+      ? `Generiraj profesionalno vrednost za ${specificContext} znotraj "${sectionName}". Vrni samo golo besedilo brez markdown. Vključi citat iz REALNEGA vira če primerno. Če ne poznaš podatka: "[Vstavite preverjen podatek: ...]". Piši kot izkušen človeški svetovalec.${anchorNote}`
+      : `Generate a professional value for ${specificContext} within "${sectionName}". Return only plain text, no markdown. Include citation from a REAL source where appropriate. If unknown: "[Insert verified data: ...]". Write like an experienced human consultant.${anchorNote}`);
 
   const prompt = [
     langDirective,
     langMismatchNotice,
-    academicRules,
-    humanRules,
+    isProjectTitle ? '' : academicRules,   // No citations needed for a title
+    isProjectTitle ? '' : humanRules,       // Humanization not relevant for short title
+    titleRules,
     context,
     siblingContext,
     `${globalRulesHeader}:\n${globalRules}`,
@@ -1084,6 +1240,11 @@ export const generateFieldContent = async (
     .replace(/__([^_]+)__/g, '$1')
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/`([^`]+)`/g, '$1');
+
+  // v3.5.3: Apply title sanitization if this was a projectTitle field
+  if (isProjectTitle) {
+    text = sanitizeProjectTitle(text);
+  }
 
   return text;
 };
