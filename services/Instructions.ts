@@ -440,6 +440,30 @@ export const QUALITY_GATES: Record<string, Record<string, string[]>> = {
       'Dolžine in strukture stavkov se naravno razlikujejo skozi besedilo',
     ]
   },
+  activities: {
+    en: [
+      'The LAST WP (highest number) is "Project Management and Coordination" — NOT any other topic',
+      'The SECOND-TO-LAST WP is "Dissemination, Communication and Exploitation"',
+      'WP1 is a foundational/analytical WP — NOT project management',
+      'Total number of WPs is between 6 and 10',
+      'Every WP has at least 1 milestone with a date in YYYY-MM-DD format',
+      'Every WP has at least 1 deliverable',
+      'Every task has startDate and endDate in YYYY-MM-DD format',
+      'All WP and task titles use NOUN PHRASES, not infinitive verbs',
+      'No markdown formatting in any text field',
+    ],
+    si: [
+      'ZADNJI DS (najvišja številka) je "Upravljanje in koordinacija projekta" — NE nobena druga tema',
+      'PREDZADNJI DS je "Diseminacija, komunikacija in izkoriščanje rezultatov"',
+      'DS1 je temeljni/analitični DS — NE projektno vodenje',
+      'Skupno število DS je med 6 in 10',
+      'Vsak DS ima vsaj 1 mejnik z datumom v formatu YYYY-MM-DD',
+      'Vsak DS ima vsaj 1 dosežek',
+      'Vsaka naloga ima startDate in endDate v formatu YYYY-MM-DD',
+      'Vsi naslovi DS in nalog uporabljajo SAMOSTALNIŠKE ZVEZE, ne nedoločnik',
+      'Brez markdown formatiranja v nobenem besedilnem polju',
+    ]
+  },
   _default: {
     en: [
       'Every description has ≥3 substantive sentences',
