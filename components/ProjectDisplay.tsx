@@ -392,7 +392,7 @@ const renderObjectives = (props, sectionKey) => {
     );
 }
 
-// --- RENDER PROJECT MANAGEMENT (Updated v3.5.2 — Implementation + Organigram) ---
+// --- RENDER PROJECT MANAGEMENT (Updated v4.2 — Implementation + Organigram as separate sub-steps) ---
 const renderProjectManagement = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, isLoading, language, missingApiKey } = props;
     const { projectManagement } = projectData;
@@ -400,25 +400,21 @@ const renderProjectManagement = (props) => {
     const pmPath = ['projectManagement'];
 
     return (
-        <div id="quality-efficiency" className="mb-10 pb-8">
-            <SectionHeader title={t.management.title}>
-                <GenerateButton 
-                    onClick={() => onGenerateSection('projectManagement')} 
-                    isLoading={isLoading === `${t.generating} projectManagement...`} 
-                    title={t.generateSection} 
-                    text={t.generateAI} 
-                    missingApiKey={missingApiKey} 
-                />
-            </SectionHeader>
-            
-            <p className="text-sm text-slate-500 mb-6 -mt-2">{t.management.desc}</p>
-
+        <div className="mb-10 pb-8">
             {/* ── IMPLEMENTACIJA ── */}
-            <div className="mb-8">
-                <div className="mb-3 border-b border-slate-200 pb-2">
-                    <h4 className="text-lg font-bold text-slate-700">{t.management.implementation}</h4>
-                    <p className="text-sm text-slate-500 mt-0.5">{t.management.implementationDesc}</p>
-                </div>
+            <div id="implementation" className="mb-10">
+                <SectionHeader title={t.management.implementation}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('projectManagement')} 
+                        isLoading={isLoading === `${t.generating} projectManagement...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </SectionHeader>
+                
+                <p className="text-sm text-slate-500 mb-4 -mt-2">{t.management.implementationDesc}</p>
+
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea 
                         label={t.description} 
@@ -435,10 +431,9 @@ const renderProjectManagement = (props) => {
             </div>
 
             {/* ── ORGANIZACIJSKA STRUKTURA (ORGANIGRAM) ── */}
-            <div>
-                <div className="mb-3 border-b border-slate-200 pb-2">
-                    <h4 className="text-lg font-bold text-slate-700">{t.management.organigram}</h4>
-                </div>
+            <div id="organigram">
+                <SectionHeader title={t.management.organigram} />
+
                 <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50">
                     <Organigram 
                         structure={projectManagement?.structure} 
