@@ -1,10 +1,12 @@
 // hooks/useGeneration.ts
 // ═══════════════════════════════════════════════════════════════
 // AI content generation — sections, fields, summaries.
-// 
-// v3.3 — 2026-02-14 — CHANGES:
-//   - 3-option modal: Enhance Existing / Fill Missing / Regenerate All
-//   - Applied to both single-section and composite-section generation
+//
+// v3.4 — 2026-02-14 — CHANGES:
+//   - FIXED: robustCheckSectionHasContent replaces broken parent check
+//   - Recursively checks ALL fields (title, description, nested objects, arrays)
+//   - 3-option modal now correctly shown when ANY field has content
+//   - checkOtherLanguageHasContent also checks nested objects
 //   - 'enhance' mode passed to geminiService for professional deepening
 //
 // SMART 4-LEVEL LOGIC for "Generate with AI" button:
@@ -56,7 +58,7 @@ export const useGeneration = ({
   setIsSettingsOpen,
   setHasUnsavedTranslationChanges,
   handleUpdateData,
-  checkSectionHasContent,
+  checkSectionHasContent, // kept in interface for compatibility, overridden below
   setModalConfig,
   closeModal,
   currentProjectId,
@@ -74,6 +76,48 @@ export const useGeneration = ({
 
   const t = TEXT[language] || TEXT['en'];
 
+  // ─── ROBUST content checker (v3.4 FIX) ─────────────────────────
+  // The parent's checkSectionHasContent only checks top-level or
+  // title fields. This version recursively checks ALL fields:
+  // title, description, nested objects, arrays with items.
+  // This ensures the 3-option modal appears when the user has
+  // entered ANY content (e.g. just a description, not a title).
+
+  const robustCheckSectionHasContent = useCallback(
+    (sectionKey: string): boolean => {
+      const section = projectData[sectionKey];
+      if (!section) return false;
+
+      const hasAnyContent = (obj: any): boolean => {
+        if (!obj || typeof obj !== 'object') return false;
+        for (const key of Object.keys(obj)) {
+          const val = obj[key];
+          // String field with actual text
+          if (typeof val === 'string' && val.trim().length > 0) return true;
+          // Array with at least one meaningful item
+          if (Array.isArray(val) && val.length > 0) {
+            if (
+              val.some((item: any) => {
+                if (typeof item === 'string') return item.trim().length > 0;
+                if (typeof item === 'object') return hasAnyContent(item);
+                return false;
+              })
+            )
+              return true;
+          }
+          // Nested object
+          if (typeof val === 'object' && !Array.isArray(val) && hasAnyContent(val)) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      return hasAnyContent(section);
+    },
+    [projectData]
+  );
+
   // ─── Friendly error handler ────────────────────────────────────
 
   const handleAIError = useCallback(
@@ -85,17 +129,28 @@ export const useGeneration = ({
         return;
       }
 
-      if (msg.includes('Quota') || msg.includes('credits') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rate limit') || msg.includes('afford')) {
+      if (
+        msg.includes('Quota') ||
+        msg.includes('credits') ||
+        msg.includes('429') ||
+        msg.includes('RESOURCE_EXHAUSTED') ||
+        msg.includes('rate limit') ||
+        msg.includes('afford')
+      ) {
         setModalConfig({
           isOpen: true,
           title: language === 'si' ? 'Nezadostna sredstva AI' : 'Insufficient AI Credits',
-          message: language === 'si'
-            ? 'Vaš AI ponudnik nima dovolj sredstev za to zahtevo. Možne rešitve:\n\n• Dopolnite kredit pri vašem AI ponudniku\n• V Nastavitvah zamenjajte na cenejši model\n• V Nastavitvah preklopite na drugega AI ponudnika'
-            : 'Your AI provider does not have enough credits for this request. Possible solutions:\n\n• Top up credits with your AI provider\n• Switch to a cheaper model in Settings\n• Switch to a different AI provider in Settings',
+          message:
+            language === 'si'
+              ? 'Vaš AI ponudnik nima dovolj sredstev za to zahtevo. Možne rešitve:\n\n• Dopolnite kredit pri vašem AI ponudniku\n• V Nastavitvah zamenjajte na cenejši model\n• V Nastavitvah preklopite na drugega AI ponudnika'
+              : 'Your AI provider does not have enough credits for this request. Possible solutions:\n\n• Top up credits with your AI provider\n• Switch to a cheaper model in Settings\n• Switch to a different AI provider in Settings',
           confirmText: language === 'si' ? 'Odpri nastavitve' : 'Open Settings',
           secondaryText: '',
           cancelText: language === 'si' ? 'Zapri' : 'Close',
-          onConfirm: () => { closeModal(); setIsSettingsOpen(true); },
+          onConfirm: () => {
+            closeModal();
+            setIsSettingsOpen(true);
+          },
           onSecondary: null,
           onCancel: closeModal,
         });
@@ -103,23 +158,34 @@ export const useGeneration = ({
       }
 
       if (msg.includes('JSON') || msg.includes('Unexpected token') || msg.includes('parse')) {
-        setError(language === 'si'
-          ? 'AI je vrnil nepravilen format. Poskusite ponovno.'
-          : 'AI returned an invalid format. Please try again.');
+        setError(
+          language === 'si'
+            ? 'AI je vrnil nepravilen format. Poskusite ponovno.'
+            : 'AI returned an invalid format. Please try again.'
+        );
         return;
       }
 
-      if (msg.includes('fetch') || msg.includes('network') || msg.includes('Failed to fetch') || msg.includes('ERR_')) {
-        setError(language === 'si'
-          ? 'Omrežna napaka. Preverite internetno povezavo in poskusite ponovno.'
-          : 'Network error. Check your internet connection and try again.');
+      if (
+        msg.includes('fetch') ||
+        msg.includes('network') ||
+        msg.includes('Failed to fetch') ||
+        msg.includes('ERR_')
+      ) {
+        setError(
+          language === 'si'
+            ? 'Omrežna napaka. Preverite internetno povezavo in poskusite ponovno.'
+            : 'Network error. Check your internet connection and try again.'
+        );
         return;
       }
 
       console.error(`[AI Error] ${context}:`, e);
-      setError(language === 'si'
-        ? 'Napaka pri generiranju. Preverite konzolo (F12) za podrobnosti.'
-        : 'Generation error. Check console (F12) for details.');
+      setError(
+        language === 'si'
+          ? 'Napaka pri generiranju. Preverite konzolo (F12) za podrobnosti.'
+          : 'Generation error. Check console (F12) for details.'
+      );
     },
     [language, setIsSettingsOpen, setModalConfig, closeModal]
   );
@@ -130,21 +196,25 @@ export const useGeneration = ({
     async (sectionKey: string): Promise<any | null> => {
       const otherLang = language === 'en' ? 'si' : 'en';
 
+      // Recursive content checker (same logic as robustCheckSectionHasContent)
+      const hasDeepContent = (data: any): boolean => {
+        if (!data) return false;
+        if (typeof data === 'string') return data.trim().length > 0;
+        if (Array.isArray(data)) {
+          return data.some((item: any) => hasDeepContent(item));
+        }
+        if (typeof data === 'object') {
+          return Object.values(data).some((v: any) => hasDeepContent(v));
+        }
+        return false;
+      };
+
       // First check in-memory versions
       const cached = projectVersions[otherLang];
       if (cached) {
         const sectionData = cached[sectionKey];
-        if (sectionData) {
-          if (Array.isArray(sectionData) && sectionData.length > 0 &&
-              sectionData.some((item: any) => item.title?.trim() || item.description?.trim())) {
-            return cached;
-          }
-          if (typeof sectionData === 'object' && !Array.isArray(sectionData)) {
-            const hasText = Object.values(sectionData).some((v: any) =>
-              typeof v === 'string' && v.trim().length > 0
-            );
-            if (hasText) return cached;
-          }
+        if (sectionData && hasDeepContent(sectionData)) {
+          return cached;
         }
       }
 
@@ -153,17 +223,8 @@ export const useGeneration = ({
         const loaded = await storageService.loadProject(otherLang, currentProjectId);
         if (loaded) {
           const sectionData = loaded[sectionKey];
-          if (sectionData) {
-            if (Array.isArray(sectionData) && sectionData.length > 0 &&
-                sectionData.some((item: any) => item.title?.trim() || item.description?.trim())) {
-              return loaded;
-            }
-            if (typeof sectionData === 'object' && !Array.isArray(sectionData)) {
-              const hasText = Object.values(sectionData).some((v: any) =>
-                typeof v === 'string' && v.trim().length > 0
-              );
-              if (hasText) return loaded;
-            }
+          if (sectionData && hasDeepContent(sectionData)) {
+            return loaded;
           }
         }
       } catch (e) {
@@ -205,9 +266,11 @@ export const useGeneration = ({
         }));
 
         if (stats.failed > 0) {
-          setError(language === 'si'
-            ? `Prevod delno uspel: ${stats.translated}/${stats.changed} polj prevedenih.`
-            : `Translation partially done: ${stats.translated}/${stats.changed} fields translated.`);
+          setError(
+            language === 'si'
+              ? `Prevod delno uspel: ${stats.translated}/${stats.changed} polj prevedenih.`
+              : `Translation partially done: ${stats.translated}/${stats.changed} fields translated.`
+          );
         }
       } catch (e: any) {
         handleAIError(e, 'translateFromOtherLanguage');
@@ -215,8 +278,16 @@ export const useGeneration = ({
         setIsLoading(false);
       }
     },
-    [language, projectData, currentProjectId, closeModal, setProjectData,
-     setHasUnsavedTranslationChanges, setProjectVersions, handleAIError]
+    [
+      language,
+      projectData,
+      currentProjectId,
+      closeModal,
+      setProjectData,
+      setHasUnsavedTranslationChanges,
+      setProjectVersions,
+      handleAIError,
+    ]
   );
 
   // ─── Execute section generation ────────────────────────────────
@@ -252,7 +323,12 @@ export const useGeneration = ({
           // Auto-generate risks after activities
           setIsLoading(`${t.generating} ${t.subSteps.riskMitigation}...`);
           try {
-            const risksContent = await generateSectionContent('risks', newData, language, mode);
+            const risksContent = await generateSectionContent(
+              'risks',
+              newData,
+              language,
+              mode
+            );
             newData.risks = risksContent;
           } catch (e) {
             console.error(e);
@@ -267,7 +343,15 @@ export const useGeneration = ({
         setIsLoading(false);
       }
     },
-    [projectData, language, t, closeModal, setProjectData, setHasUnsavedTranslationChanges, handleAIError]
+    [
+      projectData,
+      language,
+      t,
+      closeModal,
+      setProjectData,
+      setHasUnsavedTranslationChanges,
+      handleAIError,
+    ]
   );
 
   // ─── 3-option generation modal helper (v3.3) ──────────────────
@@ -302,7 +386,7 @@ export const useGeneration = ({
     [t, language, setModalConfig, closeModal]
   );
 
-  // ─── SMART Handle generate (4-level logic — v3.3) ─────────────
+  // ─── SMART Handle generate (4-level logic — v3.4) ─────────────
 
   const handleGenerateSection = useCallback(
     async (sectionKey: string) => {
@@ -312,7 +396,9 @@ export const useGeneration = ({
       }
 
       const otherLang = language === 'en' ? 'SI' : 'EN';
-      const currentHasContent = checkSectionHasContent(sectionKey);
+
+      // v3.4 FIX: Use robust check instead of parent's broken version
+      const currentHasContent = robustCheckSectionHasContent(sectionKey);
 
       // LEVEL 1: Check if other language has content
       const otherLangData = await checkOtherLanguageHasContent(sectionKey);
@@ -321,18 +407,19 @@ export const useGeneration = ({
         // Other language has content, current is empty → translate or generate?
         setModalConfig({
           isOpen: true,
-          title: language === 'si'
-            ? `Vsebina obstaja v ${otherLang}`
-            : `Content exists in ${otherLang}`,
-          message: language === 'si'
-            ? `To poglavje že ima vsebino v ${otherLang} jeziku. Želite prevesti obstoječo vsebino ali generirati novo?`
-            : `This section already has content in ${otherLang}. Would you like to translate existing content or generate new?`,
-          confirmText: language === 'si'
-            ? `Prevedi iz ${otherLang}`
-            : `Translate from ${otherLang}`,
-          secondaryText: language === 'si'
-            ? 'Generiraj novo'
-            : 'Generate new',
+          title:
+            language === 'si'
+              ? `Vsebina obstaja v ${otherLang}`
+              : `Content exists in ${otherLang}`,
+          message:
+            language === 'si'
+              ? `To poglavje že ima vsebino v ${otherLang} jeziku. Želite prevesti obstoječo vsebino ali generirati novo?`
+              : `This section already has content in ${otherLang}. Would you like to translate existing content or generate new?`,
+          confirmText:
+            language === 'si'
+              ? `Prevedi iz ${otherLang}`
+              : `Translate from ${otherLang}`,
+          secondaryText: language === 'si' ? 'Generiraj novo' : 'Generate new',
           cancelText: language === 'si' ? 'Prekliči' : 'Cancel',
           onConfirm: () => performTranslationFromOther(otherLangData),
           onSecondary: () => executeGeneration(sectionKey, 'regenerate'),
@@ -345,18 +432,20 @@ export const useGeneration = ({
         // LEVEL 2: Both languages have content → translate or 3-option?
         setModalConfig({
           isOpen: true,
-          title: language === 'si'
-            ? `Vsebina obstaja v obeh jezikih`
-            : `Content exists in both languages`,
-          message: language === 'si'
-            ? `To poglavje ima vsebino v obeh jezikih. Želite prevesti iz ${otherLang} ali delati s trenutno vsebino?`
-            : `This section has content in both languages. Would you like to translate from ${otherLang} or work with current content?`,
-          confirmText: language === 'si'
-            ? `Prevedi iz ${otherLang}`
-            : `Translate from ${otherLang}`,
-          secondaryText: language === 'si'
-            ? 'Uporabi trenutno vsebino'
-            : 'Work with current content',
+          title:
+            language === 'si'
+              ? `Vsebina obstaja v obeh jezikih`
+              : `Content exists in both languages`,
+          message:
+            language === 'si'
+              ? `To poglavje ima vsebino v obeh jezikih. Želite prevesti iz ${otherLang} ali delati s trenutno vsebino?`
+              : `This section has content in both languages. Would you like to translate from ${otherLang} or work with current content?`,
+          confirmText:
+            language === 'si'
+              ? `Prevedi iz ${otherLang}`
+              : `Translate from ${otherLang}`,
+          secondaryText:
+            language === 'si' ? 'Uporabi trenutno vsebino' : 'Work with current content',
           cancelText: language === 'si' ? 'Prekliči' : 'Cancel',
           onConfirm: () => performTranslationFromOther(otherLangData),
           onSecondary: () => {
@@ -388,9 +477,18 @@ export const useGeneration = ({
       // LEVEL 4: Nothing exists anywhere → just generate
       executeGeneration(sectionKey, 'regenerate');
     },
-    [ensureApiKey, language, checkSectionHasContent, checkOtherLanguageHasContent,
-     executeGeneration, performTranslationFromOther, show3OptionModal,
-     setModalConfig, closeModal, setIsSettingsOpen]
+    [
+      ensureApiKey,
+      language,
+      robustCheckSectionHasContent,
+      checkOtherLanguageHasContent,
+      executeGeneration,
+      performTranslationFromOther,
+      show3OptionModal,
+      setModalConfig,
+      closeModal,
+      setIsSettingsOpen,
+    ]
   );
 
   // ─── Composite generation (outputs + outcomes + impacts + KERs) ─
@@ -403,7 +501,12 @@ export const useGeneration = ({
       }
 
       const sections = ['outputs', 'outcomes', 'impacts', 'kers'];
-      const hasContentInSections = sections.some((s) => checkSectionHasContent(s));
+
+      // v3.4 FIX: Use robust check
+      const hasContentInSections = sections.some((s) =>
+        robustCheckSectionHasContent(s)
+      );
+
       const otherLang = language === 'en' ? 'SI' : 'EN';
 
       // Check if other language has content in any of the composite sections
@@ -421,7 +524,12 @@ export const useGeneration = ({
         try {
           for (const s of sections) {
             setIsLoading(`${t.generating} ${s}...`);
-            const generatedData = await generateSectionContent(s, projectData, language, mode);
+            const generatedData = await generateSectionContent(
+              s,
+              projectData,
+              language,
+              mode
+            );
             setProjectData((prev: any) => {
               const next = { ...prev };
               next[s] = generatedData;
@@ -441,15 +549,18 @@ export const useGeneration = ({
         // Other language has results, current is empty
         setModalConfig({
           isOpen: true,
-          title: language === 'si'
-            ? `Rezultati obstajajo v ${otherLang}`
-            : `Results exist in ${otherLang}`,
-          message: language === 'si'
-            ? `Pričakovani rezultati že obstajajo v ${otherLang} jeziku. Želite prevesti ali generirati na novo?`
-            : `Expected results already exist in ${otherLang}. Would you like to translate or generate new?`,
-          confirmText: language === 'si'
-            ? `Prevedi iz ${otherLang}`
-            : `Translate from ${otherLang}`,
+          title:
+            language === 'si'
+              ? `Rezultati obstajajo v ${otherLang}`
+              : `Results exist in ${otherLang}`,
+          message:
+            language === 'si'
+              ? `Pričakovani rezultati že obstajajo v ${otherLang} jeziku. Želite prevesti ali generirati na novo?`
+              : `Expected results already exist in ${otherLang}. Would you like to translate or generate new?`,
+          confirmText:
+            language === 'si'
+              ? `Prevedi iz ${otherLang}`
+              : `Translate from ${otherLang}`,
           secondaryText: language === 'si' ? 'Generiraj novo' : 'Generate new',
           cancelText: language === 'si' ? 'Prekliči' : 'Cancel',
           onConfirm: () => performTranslationFromOther(otherLangData),
@@ -460,18 +571,22 @@ export const useGeneration = ({
         // Both languages have content → translate or work with current
         setModalConfig({
           isOpen: true,
-          title: language === 'si'
-            ? `Rezultati obstajajo v obeh jezikih`
-            : `Results exist in both languages`,
-          message: language === 'si'
-            ? `Želite prevesti iz ${otherLang} ali delati s trenutno vsebino?`
-            : `Would you like to translate from ${otherLang} or work with current content?`,
-          confirmText: language === 'si'
-            ? `Prevedi iz ${otherLang}`
-            : `Translate from ${otherLang}`,
-          secondaryText: language === 'si'
-            ? 'Uporabi trenutno vsebino'
-            : 'Work with current content',
+          title:
+            language === 'si'
+              ? `Rezultati obstajajo v obeh jezikih`
+              : `Results exist in both languages`,
+          message:
+            language === 'si'
+              ? `Želite prevesti iz ${otherLang} ali delati s trenutno vsebino?`
+              : `Would you like to translate from ${otherLang} or work with current content?`,
+          confirmText:
+            language === 'si'
+              ? `Prevedi iz ${otherLang}`
+              : `Translate from ${otherLang}`,
+          secondaryText:
+            language === 'si'
+              ? 'Uporabi trenutno vsebino'
+              : 'Work with current content',
           cancelText: language === 'si' ? 'Prekliči' : 'Cancel',
           onConfirm: () => performTranslationFromOther(otherLangData),
           onSecondary: () => {
@@ -497,10 +612,22 @@ export const useGeneration = ({
         runComposite('regenerate');
       }
     },
-    [ensureApiKey, checkSectionHasContent, checkOtherLanguageHasContent, projectData,
-     language, t, closeModal, setProjectData, setHasUnsavedTranslationChanges,
-     setIsSettingsOpen, setModalConfig, handleAIError, performTranslationFromOther,
-     show3OptionModal]
+    [
+      ensureApiKey,
+      robustCheckSectionHasContent,
+      checkOtherLanguageHasContent,
+      projectData,
+      language,
+      t,
+      closeModal,
+      setProjectData,
+      setHasUnsavedTranslationChanges,
+      setIsSettingsOpen,
+      setModalConfig,
+      handleAIError,
+      performTranslationFromOther,
+      show3OptionModal,
+    ]
   );
 
   // ─── Single field generation ───────────────────────────────────
@@ -539,13 +666,17 @@ export const useGeneration = ({
     } catch (e: any) {
       const msg = e.message || '';
       if (msg.includes('credits') || msg.includes('Quota') || msg.includes('afford')) {
-        setSummaryText(language === 'si'
-          ? 'Nezadostna sredstva AI. Dopolnite kredit ali zamenjajte model v Nastavitvah.'
-          : 'Insufficient AI credits. Top up credits or switch model in Settings.');
+        setSummaryText(
+          language === 'si'
+            ? 'Nezadostna sredstva AI. Dopolnite kredit ali zamenjajte model v Nastavitvah.'
+            : 'Insufficient AI credits. Top up credits or switch model in Settings.'
+        );
       } else {
-        setSummaryText(language === 'si'
-          ? 'Napaka pri generiranju povzetka. Poskusite ponovno.'
-          : 'Error generating summary. Please try again.');
+        setSummaryText(
+          language === 'si'
+            ? 'Napaka pri generiranju povzetka. Poskusite ponovno.'
+            : 'Error generating summary. Please try again.'
+        );
       }
       console.error('[Summary Error]:', e);
     } finally {
@@ -567,12 +698,17 @@ export const useGeneration = ({
         projectData.projectIdea?.projectTitle,
         language
       );
-      downloadBlob(blob, `Summary - ${projectData.projectIdea?.projectTitle || 'Project'}.docx`);
+      downloadBlob(
+        blob,
+        `Summary - ${projectData.projectIdea?.projectTitle || 'Project'}.docx`
+      );
     } catch (e: any) {
       console.error(e);
-      alert(language === 'si'
-        ? 'Napaka pri generiranju DOCX datoteke.'
-        : 'Failed to generate DOCX file.');
+      alert(
+        language === 'si'
+          ? 'Napaka pri generiranju DOCX datoteke.'
+          : 'Failed to generate DOCX file.'
+      );
     }
   }, [summaryText, projectData, language]);
 
