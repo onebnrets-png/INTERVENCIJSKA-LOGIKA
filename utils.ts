@@ -2,9 +2,9 @@
 // ═══════════════════════════════════════════════════════════════
 // Utility functions: deep-setter, validation, project factory,
 // completion checks, scheduling logic, language detection.
-// v4.3 — 2026-02-14 — CHANGES:
-//   - Added 'implementation' and 'organigram' sub-step completion checks
-//   - Removed obsolete 'quality-efficiency' case
+// v4.4 — 2026-02-14 — CHANGES:
+//   - FIXED: Added 'implementation' and 'organigram' sub-step completion checks
+//   - FIXED: Removed obsolete 'quality-efficiency' case
 // ═══════════════════════════════════════════════════════════════
 
 import { SUB_STEPS } from './constants.tsx';
@@ -20,24 +20,17 @@ export interface ScheduleResult {
 
 // ─── DEEP SETTER (Optimized with structural sharing) ─────────────
 
-/**
- * Immutable deep-setter utility using structural sharing.
- * Only clones objects along the update path instead of the entire tree.
- */
 export const set = (obj: any, path: (string | number)[], value: any): any => {
   if (path.length === 0) {
     return value;
   }
 
   const [head, ...rest] = path;
-
-  // Clone only the current level (array or object)
   const clone = Array.isArray(obj) ? [...obj] : { ...obj };
 
   if (rest.length === 0) {
     clone[head] = value;
   } else {
-    // If the next key doesn't exist, create an object or array based on the next path segment
     const child = clone[head] !== undefined && clone[head] !== null
       ? clone[head]
       : (typeof rest[0] === 'number' ? [] : {});
@@ -135,10 +128,6 @@ export const createEmptyProjectData = () => {
 
 // ─── SAFE MERGE ──────────────────────────────────────────────────
 
-/**
- * Safely merges user data with the default structure to prevent "undefined" errors.
- * Ensures all arrays and critical objects exist.
- */
 export const safeMerge = (importedData: any): any => {
   const defaultData = createEmptyProjectData();
 
@@ -146,26 +135,21 @@ export const safeMerge = (importedData: any): any => {
 
   const merged = { ...defaultData, ...importedData };
 
-  // Problem Analysis
   if (!merged.problemAnalysis) merged.problemAnalysis = defaultData.problemAnalysis;
   if (!merged.problemAnalysis.coreProblem) merged.problemAnalysis.coreProblem = defaultData.problemAnalysis.coreProblem;
   if (!Array.isArray(merged.problemAnalysis.causes)) merged.problemAnalysis.causes = defaultData.problemAnalysis.causes;
   if (!Array.isArray(merged.problemAnalysis.consequences)) merged.problemAnalysis.consequences = defaultData.problemAnalysis.consequences;
 
-  // Project Idea
   if (!merged.projectIdea) merged.projectIdea = defaultData.projectIdea;
   if (!merged.projectIdea.readinessLevels) merged.projectIdea.readinessLevels = defaultData.projectIdea.readinessLevels;
   if (!Array.isArray(merged.projectIdea.policies)) merged.projectIdea.policies = defaultData.projectIdea.policies;
 
-  // Project Management
   if (!merged.projectManagement) merged.projectManagement = defaultData.projectManagement;
 
-  // Top-Level Arrays
   ['activities', 'generalObjectives', 'specificObjectives', 'outputs', 'outcomes', 'impacts', 'risks', 'kers'].forEach(key => {
     if (!Array.isArray(merged[key])) merged[key] = defaultData[key];
   });
 
-  // Deep Check Activities (WPs)
   if (Array.isArray(merged.activities)) {
     merged.activities = merged.activities.map((wp: any) => ({
       ...wp,
@@ -207,18 +191,19 @@ export const isSubStepCompleted = (
         return hasText(projectData.projectIdea?.stateOfTheArt);
       case 'proposed-solution':
         return hasText(projectData.projectIdea?.proposedSolution);
-      case 'readiness-levels':
+      case 'readiness-levels': {
         const rl = projectData.projectIdea?.readinessLevels;
         if (!rl) return false;
         return rl.TRL?.level !== null || rl.SRL?.level !== null || rl.ORL?.level !== null || rl.LRL?.level !== null;
+      }
       case 'eu-policies':
         return Array.isArray(projectData.projectIdea?.policies) && projectData.projectIdea.policies.some((p: any) => hasText(p.name));
 
-      // ── Activities: Implementation (description field) ────
+      // ── Activities: Implementation ────────────────────────
       case 'implementation':
         return hasText(projectData.projectManagement?.description);
 
-      // ── Activities: Organigram (structure fields) ─────────
+      // ── Activities: Organigram ────────────────────────────
       case 'organigram': {
         const struct = projectData.projectManagement?.structure;
         if (!struct) return false;
@@ -300,14 +285,9 @@ export const downloadBlob = (blob: Blob, fileName: string): void => {
 
 // ─── LANGUAGE DETECTION ──────────────────────────────────────────
 
-/**
- * Detects whether project data is primarily in Slovenian or English.
- * Uses a comprehensive keyword list and checks all text fields in the project.
- */
 export const detectProjectLanguage = (projectData: any): 'en' | 'si' => {
   if (!projectData) return 'en';
 
-  // Collect all text content from the project into one string
   const textParts: string[] = [];
 
   const extractText = (obj: any): void => {
@@ -328,36 +308,27 @@ export const detectProjectLanguage = (projectData: any): 'en' | 'si' => {
   extractText(projectData);
   const allText = textParts.join(' ').toLowerCase();
 
-  if (allText.trim().length < 20) return 'en'; // Not enough text to decide
+  if (allText.trim().length < 20) return 'en';
 
-  // Slovenian indicators – common words, particles, prepositions, conjunctions
   const siKeywords = [
-    // Prepositions & conjunctions
     'ali', 'zato', 'ker', 'tudi', 'ter', 'oziroma', 'vendar', 'ampak', 'torej',
     'zaradi', 'med', 'pred', 'nad', 'pod', 'pri', 'proti', 'skozi', 'znotraj',
-    // Common verbs / particles
     'je', 'so', 'bo', 'biti', 'ima', 'lahko', 'mora', 'bodo', 'bila', 'bilo', 'bili',
     'potrebno', 'možno', 'nujno',
-    // Nouns common in EU projects
     'projekt', 'cilj', 'cilji', 'aktivnost', 'aktivnosti', 'rezultat', 'rezultati',
     'tveganje', 'tveganja', 'kazalnik', 'kazalniki', 'učinek', 'učinki',
     'delovni', 'paket', 'paketi', 'naloga', 'naloge', 'mejnik', 'mejniki',
     'upravljanje', 'vodenje', 'izvajanje', 'spremljanje', 'poročanje',
     'analiza', 'problema', 'problemov', 'vzrok', 'vzroki', 'posledica', 'posledice',
     'opis', 'naslov', 'pristop', 'rešitev',
-    // Characters unique to Slovenian
     'č', 'š', 'ž'
   ];
 
-  // English indicators
   const enKeywords = [
-    // Prepositions & conjunctions
     'the', 'and', 'for', 'with', 'from', 'that', 'this', 'which', 'through', 'between',
     'therefore', 'however', 'although', 'because', 'moreover', 'furthermore',
-    // Common verbs / particles
     'is', 'are', 'will', 'have', 'has', 'been', 'being', 'should', 'would', 'could',
     'can', 'must', 'shall',
-    // Nouns common in EU projects
     'project', 'objective', 'objectives', 'activity', 'activities', 'result', 'results',
     'risk', 'risks', 'indicator', 'indicators', 'impact', 'impacts',
     'work', 'package', 'packages', 'task', 'tasks', 'milestone', 'milestones',
@@ -366,14 +337,12 @@ export const detectProjectLanguage = (projectData: any): 'en' | 'si' => {
     'description', 'title', 'approach', 'solution', 'output', 'outcome'
   ];
 
-  // Count word boundary matches
   let siScore = 0;
   let enScore = 0;
 
   for (const kw of siKeywords) {
-    // For single characters (č, š, ž), just check if they exist
     if (kw.length === 1) {
-      if (allText.includes(kw)) siScore += 3; // Strong indicator
+      if (allText.includes(kw)) siScore += 3;
     } else {
       const regex = new RegExp(`\\b${kw}\\b`, 'gi');
       const matches = allText.match(regex);
@@ -410,20 +379,13 @@ const getDuration = (startStr: string, endStr: string): number => {
   return diffDays;
 };
 
-/**
- * Recalculates the entire project schedule based on strict dependencies.
- * Performs a "Forward Pass" to push tasks to their earliest valid dates.
- * Returns a ScheduleResult with the updated data, convergence status, and any warnings.
- */
 export const recalculateProjectSchedule = (projectData: any): ScheduleResult => {
   const warnings: string[] = [];
 
-  // Safety check
   if (!projectData.activities || !Array.isArray(projectData.activities)) {
     return { projectData, converged: true, iterations: 0, warnings: [] };
   }
 
-  // Flatten all tasks into a map
   const taskMap = new Map();
   const tasksArray: any[] = [];
 
@@ -448,7 +410,6 @@ export const recalculateProjectSchedule = (projectData: any): ScheduleResult => 
     }
   });
 
-  // Check for missing dependency references
   for (const task of tasksArray) {
     if (task.dependencies && task.dependencies.length > 0) {
       for (const dep of task.dependencies) {
@@ -459,7 +420,6 @@ export const recalculateProjectSchedule = (projectData: any): ScheduleResult => 
     }
   }
 
-  // Iterative Forward Pass
   let changed = true;
   let iterations = 0;
   const MAX_ITERATIONS = 50;
