@@ -392,7 +392,7 @@ const renderObjectives = (props, sectionKey) => {
     );
 }
 
-// --- RENDER PROJECT MANAGEMENT (New Section) ---
+// --- RENDER PROJECT MANAGEMENT (Updated v3.5.2 — Implementation + Organigram) ---
 const renderProjectManagement = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, isLoading, language, missingApiKey } = props;
     const { projectManagement } = projectData;
@@ -413,29 +413,39 @@ const renderProjectManagement = (props) => {
             
             <p className="text-sm text-slate-500 mb-6 -mt-2">{t.management.desc}</p>
 
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <TextArea 
-                    label={t.description} 
-                    path={[...pmPath, 'description']} 
-                    value={projectManagement?.description || ''} 
-                    onUpdate={onUpdateData} 
-                    onGenerate={onGenerateField} 
-                    isLoading={isLoading} 
-                    placeholder={t.management.placeholder} 
-                    generateTitle={`${t.generateField} ${t.description}`} 
-                    missingApiKey={missingApiKey} 
-                />
+            {/* ── IMPLEMENTACIJA ── */}
+            <div className="mb-8">
+                <div className="mb-3 border-b border-slate-200 pb-2">
+                    <h4 className="text-lg font-bold text-slate-700">{t.management.implementation}</h4>
+                    <p className="text-sm text-slate-500 mt-0.5">{t.management.implementationDesc}</p>
+                </div>
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <TextArea 
+                        label={t.description} 
+                        path={[...pmPath, 'description']} 
+                        value={projectManagement?.description || ''} 
+                        onUpdate={onUpdateData} 
+                        onGenerate={onGenerateField} 
+                        isLoading={isLoading} 
+                        placeholder={t.management.placeholder} 
+                        generateTitle={`${t.generateField} ${t.description}`} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </div>
+            </div>
 
-                <div className="mt-8 border-t border-slate-100 pt-6">
-                    <h4 className="font-bold text-slate-700 mb-4 text-lg">{t.management.organigram}</h4>
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50">
-                        <Organigram 
-                            structure={projectManagement?.structure} 
-                            activities={projectData.activities}
-                            language={language}
-                            id="organigram-interactive"
-                        />
-                    </div>
+            {/* ── ORGANIZACIJSKA STRUKTURA (ORGANIGRAM) ── */}
+            <div>
+                <div className="mb-3 border-b border-slate-200 pb-2">
+                    <h4 className="text-lg font-bold text-slate-700">{t.management.organigram}</h4>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50">
+                    <Organigram 
+                        structure={projectManagement?.structure} 
+                        activities={projectData.activities}
+                        language={language}
+                        id="organigram-interactive"
+                    />
                 </div>
             </div>
         </div>
