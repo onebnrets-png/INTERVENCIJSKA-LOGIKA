@@ -1,8 +1,15 @@
 // components/GanttChart.tsx
 // ═══════════════════════════════════════════════════════════════
-// Gantt Chart Component – v4.6 (2026-02-14)
+// Gantt Chart Component – v4.7 (2026-02-14)
 // ═══════════════════════════════════════════════════════════════
 // CHANGELOG:
+// v4.7 – FIX: Added visual inner padding (LEFT_PAD / RIGHT_PAD) so that
+//         bars, labels, markers, grid lines, and dependency paths do not
+//         touch the left or right edge of the container. All getLeft()
+//         values are offset by LEFT_PAD. chartWidth calculation reserves
+//         space for both pads. Milestone diamonds, WP bars, task bars,
+//         marker labels, grid lines, and SVG dependency paths all respect
+//         the new padding. Works for both "project" and scrollable views.
 // v4.6 – FIX: Multiple overflow prevention measures for "Project" view:
 //         1. SVG gets explicit width=chartWidth + overflow="hidden"
 //         2. Marker label filter tightened (chartWidth - 60)
@@ -27,8 +34,10 @@ import { TECHNICAL_CONFIG } from '../services/TechnicalInstructions.ts';
 // Extract constants from Technical Configuration
 const { ONE_DAY_MS, MIN_BAR_WIDTH, HEADER_HEIGHT, ROW_HEIGHT, BAR_HEIGHT, BAR_OFFSET_Y, VIEW_SETTINGS } = TECHNICAL_CONFIG.GANTT;
 
-// Side padding to prevent bars/labels from touching edges
-const SIDE_PADDING = 40;
+// ★ FIX v4.7: Visual inner padding on left and right so content never touches edges
+const LEFT_PAD = 20;
+const RIGHT_PAD = 20;
+const SIDE_PADDING = LEFT_PAD + RIGHT_PAD; // total reserved space (replaces old SIDE_PADDING = 40)
 
 // Helper to check if a date string is valid
 const isValidDate = (d: string | undefined | null): boolean => !!d && !isNaN(new Date(d).getTime());
@@ -167,17 +176,21 @@ const GanttChart: React.FC<GanttChartProps> = ({
     const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / ONE_DAY_MS) + 1;
 
     // 3. Calculate Pixels Per Day
-    // v4.5+v4.6: For "project" view, cap chart to available container width minus padding
+    // ★ FIX v4.7: Reserve LEFT_PAD + RIGHT_PAD inside the available space.
+    //   The "drawable" timeline area is (chartWidth - LEFT_PAD - RIGHT_PAD) wide,
+    //   but we keep chartWidth = full container width so the SVG and containers
+    //   span the whole area. getLeft() adds LEFT_PAD as offset.
     let pixelsPerDay: number;
     let chartWidth: number;
 
     if (viewMode === 'project') {
-        const availableWidth = Math.max(containerWidth - SIDE_PADDING, 100);
-        pixelsPerDay = availableWidth / Math.max(totalDays, 1);
-        chartWidth = availableWidth; // Strictly capped to container
+        const availableWidth = Math.max(containerWidth, 100);
+        const drawableWidth = availableWidth - SIDE_PADDING; // ★ FIX v4.7
+        pixelsPerDay = drawableWidth / Math.max(totalDays, 1);
+        chartWidth = availableWidth; // Full container width (pads are inside)
     } else {
         pixelsPerDay = VIEW_SETTINGS[viewMode]?.px || 4;
-        chartWidth = totalDays * pixelsPerDay;
+        chartWidth = (totalDays * pixelsPerDay) + SIDE_PADDING; // ★ FIX v4.7: add padding for scrollable views too
     }
 
     // Add generous buffer (80px) to chart height to prevent bottom cutoff
@@ -223,8 +236,12 @@ const GanttChart: React.FC<GanttChartProps> = ({
         if (markers.length > 1000) break;
     }
 
-    const getLeft = (date: Date): number => ((date.getTime() - minDate.getTime()) / ONE_DAY_MS) * pixelsPerDay;
-    const getWidth = (start: Date, end: Date): number => Math.max(((end.getTime() - start.getTime()) / ONE_DAY_MS) * pixelsPerDay, MIN_BAR_WIDTH);
+    // ★ FIX v4.7: getLeft now adds LEFT_PAD so all content starts offset from the left edge
+    const getLeft = (date: Date): number =>
+        LEFT_PAD + ((date.getTime() - minDate.getTime()) / ONE_DAY_MS) * pixelsPerDay;
+
+    const getWidth = (start: Date, end: Date): number =>
+        Math.max(((end.getTime() - start.getTime()) / ONE_DAY_MS) * pixelsPerDay, MIN_BAR_WIDTH);
 
     const getMarkerLabel = (date: Date): string => {
         const loc = language === 'si' ? 'sl-SI' : language;
@@ -294,7 +311,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
     };
 
     // --- Orthogonal Dependency Path Logic ---
-    // v4.6: Clamp path coordinates to [0, chartWidth] in project view
+    // v4.6+v4.7: Clamp path coordinates to [0, chartWidth] in project view
     const clampX = (x: number): number => {
         if (!isProjectView) return x;
         return Math.max(0, Math.min(x, chartWidth));
@@ -302,7 +319,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
 
     const getOrthogonalPath = (startX: number, startY: number, endX: number, endY: number, type: string): string => {
         const gap = 15;
-        // v4.6: Clamp all X coordinates in project view to prevent SVG overflow
         const sX = clampX(startX);
         const eX = clampX(endX);
         let path = `M ${sX} ${startY}`;
@@ -442,6 +458,9 @@ const GanttChart: React.FC<GanttChartProps> = ({
     // ─── Determine if we are in "project" (fit-to-container) mode ───
     const isProjectView = viewMode === 'project';
 
+    // ★ FIX v4.7: Maximum right edge for content (bars, labels) – respects RIGHT_PAD
+    const maxContentRight = chartWidth - RIGHT_PAD;
+
     return (
         <div
             ref={containerRef}
@@ -484,7 +503,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
                 className="custom-scrollbar relative w-full bg-white"
                 ref={chartRef}
                 style={{
-                    // v4.5+v4.6: project view → no horizontal scroll, chart fits inside
                     overflowX: isProjectView ? 'hidden' : 'auto',
                     overflowY: isProjectView ? 'visible' : 'auto',
                     maxHeight: isProjectView ? 'none' : '700px',
@@ -501,7 +519,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
                     }}
                     className="relative bg-white"
                 >
-                    {/* SVG Layer for Dependencies — v4.6: explicit width + overflow hidden */}
+                    {/* SVG Layer for Dependencies */}
                     <svg
                         className="absolute inset-0 pointer-events-none z-10"
                         width={isProjectView ? chartWidth : '100%'}
@@ -520,15 +538,17 @@ const GanttChart: React.FC<GanttChartProps> = ({
                         {renderDependencies()}
                     </svg>
 
-                    {/* Header: Time Markers — v4.6: tighter filter */}
+                    {/* Header: Time Markers — ★ FIX v4.7: uses LEFT_PAD-aware getLeft + maxContentRight */}
                     <div
                         className="border-b border-slate-200 bg-slate-50 sticky top-0 z-20 flex text-xs font-semibold text-slate-500 overflow-hidden"
                         style={{ height: `${HEADER_HEIGHT}px` }}
                     >
                         {markers.map((m, i) => {
                             const left = getLeft(m);
-                            // v4.6: tighter cutoff to prevent label overflow
-                            if (left > chartWidth - 60) return null;
+                            // ★ FIX v4.7: filter markers that would overflow past right pad
+                            if (left > maxContentRight - 40) return null;
+                            // Also skip markers that would be before the left pad
+                            if (left < LEFT_PAD - 5) return null;
 
                             return (
                                 <div
@@ -536,7 +556,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
                                     className="absolute border-l border-slate-300 pl-2 h-full flex items-center whitespace-nowrap overflow-hidden text-ellipsis"
                                     style={{
                                         left: `${left}px`,
-                                        maxWidth: isProjectView ? `${Math.max(chartWidth - left - 5, 30)}px` : '100px'
+                                        maxWidth: isProjectView ? `${Math.max(maxContentRight - left - 5, 30)}px` : '100px'
                                     }}
                                 >
                                     {getMarkerLabel(m)}
@@ -545,11 +565,12 @@ const GanttChart: React.FC<GanttChartProps> = ({
                         })}
                     </div>
 
-                    {/* Grid Lines */}
+                    {/* Grid Lines — ★ FIX v4.7: uses LEFT_PAD-aware getLeft */}
                     <div className="absolute inset-0 z-0 pointer-events-none top-10">
                         {markers.map((m, i) => {
                             const left = getLeft(m);
-                            if (left > chartWidth) return null;
+                            if (left > maxContentRight) return null;
+                            if (left < LEFT_PAD - 5) return null;
                             return (
                                 <div key={i} className="absolute border-l border-slate-100 h-full" style={{ left: `${left}px` }} />
                             );
@@ -591,11 +612,12 @@ const GanttChart: React.FC<GanttChartProps> = ({
                                         className="border-b border-slate-100 bg-slate-50/50 flex items-center px-4 font-bold text-xs text-slate-700 sticky left-0 z-10 w-full"
                                         style={{ height: `${ROW_HEIGHT}px` }}
                                     >
+                                        {/* ★ FIX v4.7: WP bar uses getLeft which already includes LEFT_PAD */}
                                         <div
                                             className="absolute bg-slate-700 rounded-md opacity-90"
                                             style={{
                                                 left: `${getLeft(wpStart)}px`,
-                                                width: `${Math.max(getWidth(wpStart, wpEnd), 5)}px`,
+                                                width: `${Math.max(Math.min(getWidth(wpStart, wpEnd), maxContentRight - getLeft(wpStart)), 5)}px`,
                                                 height: `${BAR_HEIGHT}px`,
                                                 top: `${BAR_OFFSET_Y}px`
                                             }}
@@ -631,13 +653,13 @@ const GanttChart: React.FC<GanttChartProps> = ({
                                                         title={`${item.id}: ${item.description}`}
                                                     />
 
-                                                    {/* Label — v4.6: clip if exceeds chartWidth */}
-                                                    {(left + 10 < chartWidth - 20) && (
+                                                    {/* Label — ★ FIX v4.7: uses maxContentRight */}
+                                                    {(left + 10 < maxContentRight - 10) && (
                                                         <div
                                                             className="absolute text-[11px] font-bold text-slate-800 whitespace-nowrap px-2 pointer-events-none flex items-center overflow-hidden"
                                                             style={{
                                                                 left: `${left + 10}px`,
-                                                                maxWidth: isProjectView ? `${Math.max(chartWidth - left - 15, 20)}px` : undefined,
+                                                                maxWidth: isProjectView ? `${Math.max(maxContentRight - left - 15, 20)}px` : undefined,
                                                                 height: '100%',
                                                                 top: 0
                                                             }}
@@ -657,13 +679,17 @@ const GanttChart: React.FC<GanttChartProps> = ({
                                             const fullLabel = `${item.id}: ${item.title}`;
                                             const textWidth = fullLabel.length * 7 + 16;
                                             const fitsInside = width >= textWidth;
-                                            const fitsRight = (left + width + textWidth + 5) <= chartWidth;
-                                            const fitsLeft = (left - textWidth - 5) >= 0;
+                                            // ★ FIX v4.7: use maxContentRight instead of chartWidth
+                                            const fitsRight = (left + width + textWidth + 5) <= maxContentRight;
+                                            const fitsLeft = (left - textWidth - 5) >= LEFT_PAD;
 
-                                            // v4.6: In project view, never use 'right' if it would overflow
-                                            let labelPos = fitsInside 
-                                                ? 'inside' 
+                                            // v4.6+v4.7: In project view, never use 'right' if it would overflow
+                                            let labelPos = fitsInside
+                                                ? 'inside'
                                                 : (fitsRight && !isProjectView ? 'right' : (fitsLeft ? 'left' : 'inside-truncate'));
+
+                                            // ★ FIX v4.7: Clamp bar width so it doesn't exceed right pad
+                                            const clampedBarWidth = Math.min(width, maxContentRight - left);
 
                                             return (
                                                 <div
@@ -675,7 +701,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
                                                         className={`absolute rounded-md shadow-sm cursor-pointer transition-all duration-200 flex items-center ${labelPos.startsWith('inside') ? 'justify-start pl-2' : 'justify-center'} ${isHovered ? 'bg-indigo-500 z-20' : 'bg-indigo-400'}`}
                                                         style={{
                                                             left: `${left}px`,
-                                                            width: `${Math.min(width, chartWidth - left)}px`,
+                                                            width: `${clampedBarWidth}px`,
                                                             height: `${BAR_HEIGHT}px`,
                                                             top: `${BAR_OFFSET_Y}px`
                                                         }}
