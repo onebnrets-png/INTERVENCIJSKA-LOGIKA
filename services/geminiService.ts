@@ -10,6 +10,14 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
+// v4.4 — 2026-02-14 — DELIVERABLE TITLE SCHEMA
+//   - FIXED: schemas.activities → deliverables now include "title"
+//     field (Type.STRING) alongside description and indicator.
+//     Required array updated to ['id','title','description','indicator'].
+//     This enables AI to generate separate title + description for each
+//     deliverable, matching Instructions.ts v4.4 DELIVERABLE FIELDS rules.
+//   - All other code unchanged from v4.3.
+//
 // v4.3 — 2026-02-14 — PROMPT ORDER + SCHEMA FIX
 //   - FIXED: Prompt assembly order — taskInstruction (section-specific
 //     rules with WP ordering, risk categories etc.) now comes BEFORE
@@ -326,6 +334,10 @@ const schemas: Record<string, any> = {
     },
     required: ['description', 'structure']
   },
+
+  // ═══════════════════════════════════════════════════════════════
+  // v4.4 FIX: Added "title" to deliverables schema
+  // ═══════════════════════════════════════════════════════════════
   activities: {
     type: Type.ARRAY,
     items: {
@@ -376,10 +388,11 @@ const schemas: Record<string, any> = {
             type: Type.OBJECT,
             properties: {
               id: { type: Type.STRING },
+              title: { type: Type.STRING },        // ← v4.4 NEW
               description: { type: Type.STRING },
               indicator: { type: Type.STRING }
             },
-            required: ['id', 'description', 'indicator']
+            required: ['id', 'title', 'description', 'indicator']  // ← v4.4 UPDATED
           }
         }
       },
@@ -642,8 +655,6 @@ const getPromptAndSchemaForSection = (
   const qualityGate = getQualityGate(sectionKey, language);
 
   // ═══ v4.3 REORDERED PROMPT ASSEMBLY ═══
-  // Specific rules FIRST (beginning), general rules in MIDDLE,
-  // quality gate at END — maximizes AI compliance.
   const prompt = [
     langDirective,                              // 1. LANGUAGE (mandatory override)
     langMismatchNotice,                         // 2. Language mismatch warning
