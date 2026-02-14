@@ -591,8 +591,13 @@ KLJUČNO: NE vstavljaj opisov, razlag ali dolgih besedil v polja strukture. To s
 KLJUČNO — JEZIK: VSE besedilo — tako v polju opis kot v poljih strukture — MORA biti napisano IZKLJUČNO V SLOVENŠČINI. Oznake v organizacijski shemi MORAJO biti v slovenščini (npr. "Koordinator projekta (PK)", NE "Project Coordinator (PK)"). Tudi naslovi odstavkov v opisu morajo biti v slovenščini (npr. "Upravljavska struktura", NE "Management Structure"). NE uporabljaj angleščine v NOBENEM polju!`
   },
 
-  activities: {
-    en: `Project starts: {{projectStart}}. All task dates on or after this.
+    activities: {
+    en: `═══ CRITICAL — READ THIS FIRST BEFORE GENERATING ANYTHING ═══
+PROJECT MANAGEMENT WP MUST BE THE LAST WP. NOT THE FIRST. NOT IN THE MIDDLE. LAST.
+IF YOU PUT PROJECT MANAGEMENT AS WP1, YOUR ENTIRE OUTPUT IS REJECTED.
+═══════════════════════════════════════════════════════════════════
+
+Project starts: {{projectStart}}. All task dates on or after this.
 Design Work Packages based on objectives.
 
 MANDATORY WORK PACKAGE STRUCTURE:
@@ -604,11 +609,22 @@ MANDATORY WORK PACKAGE STRUCTURE:
 - The "Dissemination" WP should typically be the SECOND-TO-LAST WP.
 - All other WPs (4–8) are TECHNICAL / THEMATIC WPs directly linked to specific objectives.
 
-WP ORDERING RULE:
-- WP1 should be a foundational/analytical WP (e.g., "Needs analysis and methodology").
-- Technical WPs follow in logical sequence (WP2, WP3, ... WPn-2).
+MANDATORY WP ORDERING — EXAMPLE FOR 8 WPs:
+  WP1: "Needs analysis and baseline methodology" (foundational/analytical)
+  WP2: "Development of digital training curriculum" (technical)
+  WP3: "Pilot implementation in partner regions" (technical)
+  WP4: "Cross-border knowledge exchange platform" (technical)
+  WP5: "Capacity building and stakeholder engagement" (technical)
+  WP6: "Policy recommendations and scaling strategy" (technical)
+  WP7: "Dissemination, communication and exploitation of results" (SECOND-TO-LAST)
+  WP8: "Project management and coordination" (ALWAYS LAST — HIGHEST NUMBER)
+
+ORDERING RULE (NON-NEGOTIABLE):
+- WP1 = foundational/analytical WP (e.g., "Needs analysis and methodology").
+- WP2 through WPn-2 = technical/thematic WPs in logical sequence.
 - WPn-1 = Dissemination, Communication and Exploitation.
-- WPn = Project Management and Coordination (ALWAYS LAST).
+- WPn = Project Management and Coordination (ALWAYS THE LAST WP — NEVER WP1).
+- VIOLATION: If "Project Management" appears as WP1 or anywhere except the last position, the output is INVALID.
 
 MANDATORY TITLE FORMAT: WP titles and task titles MUST use NOUN PHRASES (action nouns), NOT infinitive verbs.
 - CORRECT WP: "Development of a cross-border digital training curriculum"
@@ -634,9 +650,21 @@ TASK RULES:
 
 FORMATTING:
 - No markdown. Vary sentence structures. Write like an experienced consultant.
-- Task descriptions: 3–5 sentences, concrete and specific.`,
+- Task descriptions: 3–5 sentences, concrete and specific.
 
-    si: `Začetek projekta: {{projectStart}}. Vsi datumi nalog na ali po tem datumu.
+FINAL CHECK BEFORE RETURNING JSON:
+☐ Is "Project Management" the LAST WP (highest WP number)? If NO → FIX IT.
+☐ Is "Dissemination" the second-to-last WP? If NO → FIX IT.
+☐ Does WP1 contain a foundational/analytical topic (NOT management)? If NO → FIX IT.
+☐ Are there between 6 and 10 WPs total? If NO → FIX IT.
+☐ Does every milestone have a date in YYYY-MM-DD format? If NO → FIX IT.`,
+
+    si: `═══ KRITIČNO — PREBERI TO NAJPREJ PREDEN KARKOLI GENERIRAŠ ═══
+DS ZA PROJEKTNO VODENJE MORA BITI ZADNJI DS. NE PRVI. NE V SREDINI. ZADNJI.
+ČE POSTAVIŠ PROJEKTNO VODENJE KOT DS1, JE CELOTEN IZHOD ZAVRNJEN.
+═══════════════════════════════════════════════════════════════════
+
+Začetek projekta: {{projectStart}}. Vsi datumi nalog na ali po tem datumu.
 Oblikuj delovne sklope na podlagi ciljev.
 
 OBVEZNA STRUKTURA DELOVNIH SKLOPOV:
@@ -648,11 +676,22 @@ OBVEZNA STRUKTURA DELOVNIH SKLOPOV:
 - DS "Diseminacija" naj bo tipično PREDZADNJI DS.
 - Vsi ostali DS (4–8) so TEHNIČNI / TEMATSKI DS, neposredno povezani s specifičnimi cilji.
 
-PRAVILO VRSTNEGA REDA DS:
-- DS1 naj bo temeljni/analitični DS (npr. "Analiza potreb in metodologija").
-- Tehnični DS sledijo v logičnem zaporedju (DS2, DS3, ... DSn-2).
+OBVEZEN VRSTNI RED DS — PRIMER ZA 8 DS:
+  WP1: "Analiza potreb in izhodiščna metodologija" (temeljni/analitični)
+  WP2: "Razvoj digitalnega učnega načrta" (tehnični)
+  WP3: "Pilotna izvedba v partnerskih regijah" (tehnični)
+  WP4: "Čezmejna platforma za izmenjavo znanj" (tehnični)
+  WP5: "Krepitev zmogljivosti in vključevanje deležnikov" (tehnični)
+  WP6: "Priporočila za politike in strategija nadgradnje" (tehnični)
+  WP7: "Diseminacija, komunikacija in izkoriščanje rezultatov" (PREDZADNJI)
+  WP8: "Upravljanje in koordinacija projekta" (VEDNO ZADNJI — NAJVIŠJA ŠTEVILKA)
+
+PRAVILO VRSTNEGA REDA (NEPREKLICNO):
+- DS1 = temeljni/analitični DS (npr. "Analiza potreb in metodologija").
+- DS2 do DSn-2 = tehnični/tematski DS v logičnem zaporedju.
 - DSn-1 = Diseminacija, komunikacija in izkoriščanje rezultatov.
-- DSn = Upravljanje in koordinacija projekta (VEDNO ZADNJI).
+- DSn = Upravljanje in koordinacija projekta (VEDNO ZADNJI DS — NIKOLI DS1).
+- KRŠITEV: Če se "Upravljanje projekta" pojavi kot DS1 ali kjerkoli razen na zadnjem mestu, je izhod NEVELJAVEN.
 
 OBVEZEN FORMAT NASLOVOV: Naslovi DS in nalog MORAJO uporabljati SAMOSTALNIŠKE ZVEZE (dejavniški samostalniki), NE nedoločnik.
 - PRAVILNO DS: "Razvoj čezmejnega digitalnega učnega načrta"
@@ -678,8 +717,16 @@ PRAVILA ZA NALOGE:
 
 OBLIKOVANJE:
 - BREZ markdown. Variraj stavčne strukture. Piši kot izkušen svetovalec.
-- Opisi nalog: 3–5 stavkov, konkretni in specifični.`
+- Opisi nalog: 3–5 stavkov, konkretni in specifični.
+
+KONČNA KONTROLA PRED VRNITVIJO JSON:
+☐ Ali je "Upravljanje projekta" ZADNJI DS (najvišja številka DS)? Če NE → POPRAVI.
+☐ Ali je "Diseminacija" predzadnji DS? Če NE → POPRAVI.
+☐ Ali DS1 vsebuje temeljno/analitično temo (NE vodenje)? Če NE → POPRAVI.
+☐ Ali je skupno med 6 in 10 DS? Če NE → POPRAVI.
+☐ Ali ima vsak mejnik datum v formatu YYYY-MM-DD? Če NE → POPRAVI.`
   },
+
   outputs: {
     en: 'At least 6 detailed tangible outputs.\nMANDATORY TITLE FORMAT: RESULT-ORIENTED NOUN PHRASE describing what was produced/established — NOT an infinitive verb.\n- CORRECT: "Established cross-border knowledge exchange platform"\n- INCORRECT: "Establish a knowledge exchange platform"\nDescription 3+ sentences, measurable indicator. No markdown. Vary sentences.',
     si: 'Vsaj 6 podrobnih neposrednih rezultatov.\nOBVEZEN FORMAT NASLOVA: REZULTATSKA SAMOSTALNIŠKA ZVEZA, ki opisuje, kaj je bilo ustvarjeno/vzpostavljeno — NE nedoločnik.\n- PRAVILNO: "Vzpostavljena platforma za čezmejno izmenjavo znanj"\n- NAPAČNO: "Vzpostaviti platformo za izmenjavo znanj"\nOpis 3+ stavki, merljiv kazalnik. BREZ markdown. Variraj stavke.'
