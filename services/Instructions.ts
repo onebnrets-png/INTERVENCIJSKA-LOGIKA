@@ -517,7 +517,8 @@ OBVEZNE ZAHTEVE:
     en: 'Define at least 5 S.M.A.R.T. objectives.\nMANDATORY: Title MUST use INFINITIVE VERB (e.g., "Develop…", "Increase…"). Measurable KPI. No markdown. Vary sentence structures.',
     si: 'Opredeli vsaj 5 S.M.A.R.T. ciljev.\nOBVEZNO: Naslov MORA uporabljati NEDOLOČNIK (npr. "Razviti…", "Povečati…"). Merljiv KPI. BREZ markdown. Variraj stavčne strukture.'
   },
-    projectManagement: {
+
+      projectManagement: {
     en: `Create a DETAILED project management section with TWO distinct parts:
 
 PART 1 — DESCRIPTION FIELD (projectManagement.description):
@@ -570,7 +571,9 @@ Ta polja se prikazujejo kot OZNAKE v organizacijski shemi. MORAJO vsebovati SAMO
 - steeringCommittee: npr. "Usmerjevalni odbor (UO)"
 - advisoryBoard: npr. "Svetovalni odbor (SO)"
 - wpLeaders: npr. "Vodje delovnih sklopov (VDS)"
-KLJUČNO: NE vstavljaj opisov, razlag ali dolgih besedil v polja strukture. To so SAMO oznake za shemo. Vsi podrobni opisi gredo v polje opis zgoraj.`
+KLJUČNO: NE vstavljaj opisov, razlag ali dolgih besedil v polja strukture. To so SAMO oznake za shemo. Vsi podrobni opisi gredo v polje opis zgoraj.
+
+KLJUČNO — JEZIK: VSE besedilo — tako v polju opis kot v poljih strukture — MORA biti napisano IZKLJUČNO V SLOVENŠČINI. Oznake v organizacijski shemi MORAJO biti v slovenščini (npr. "Koordinator projekta (PK)", NE "Project Coordinator (PK)"). Tudi naslovi odstavkov v opisu morajo biti v slovenščini (npr. "Upravljavska struktura", NE "Management Structure"). NE uporabljaj angleščine v NOBENEM polju!`
   },
 
   activities: {
