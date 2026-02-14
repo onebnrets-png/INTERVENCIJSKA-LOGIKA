@@ -1104,3 +1104,71 @@ export const getSectionTaskInstruction = (
   }
   return template;
 };
+// ═══════════════════════════════════════════════════════════════════
+// SETTINGS MODAL SUPPORT — v4.4
+// Exports consumed by SettingsModal.tsx (Instructions editor tab)
+// Storage via storageService.getCustomInstructions / saveCustomInstructions
+// ═══════════════════════════════════════════════════════════════════
+
+export const CHAPTER_LABELS: Record<string, string> = {
+  chapter1_problemAnalysis: 'Chapter 1 — Problem Analysis',
+  chapter2_projectIdea: 'Chapter 2 — Project Idea',
+  chapter3_4_objectives: 'Chapters 3–4 — Objectives',
+  chapter5_activities: 'Chapter 5 — Activities, Management & Risks',
+  chapter6_results: 'Chapter 6 — Results & KERs',
+};
+
+export const FIELD_RULE_LABELS: Record<string, string> = {
+  title: 'Title',
+  description: 'Description',
+  indicator: 'Indicator',
+  mitigation: 'Mitigation Strategy',
+  exploitationStrategy: 'Exploitation Strategy',
+  mainAim: 'Main Aim',
+  projectTitle: 'Project Title',
+};
+
+const INSTRUCTIONS_VERSION = '4.4';
+
+function buildDefaultInstructions() {
+  return {
+    version: INSTRUCTIONS_VERSION,
+    GLOBAL_RULES: GLOBAL_RULES,
+    CHAPTERS: { ...CHAPTERS },
+    FIELD_RULES: Object.fromEntries(
+      Object.entries(FIELD_RULES).map(([key, val]) => [key, val.en])
+    ),
+    TRANSLATION_RULES: TRANSLATION_RULES.en.join('\n'),
+    SUMMARY_RULES: SUMMARY_RULES.en.join('\n'),
+  };
+}
+
+export function getDefaultInstructions() {
+  return buildDefaultInstructions();
+}
+
+export function getFullInstructions() {
+  try {
+    const saved = storageService.getCustomInstructions();
+    if (saved) {
+      const parsed = typeof saved === 'string' ? JSON.parse(saved) : saved;
+      if (parsed && parsed.version === INSTRUCTIONS_VERSION) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('[Instructions] Could not load saved instructions, using defaults:', e);
+  }
+  return buildDefaultInstructions();
+}
+
+export async function saveAppInstructions(instructions: any): Promise<void> {
+  const toSave = { ...instructions, version: INSTRUCTIONS_VERSION };
+  await storageService.saveCustomInstructions(toSave);
+}
+
+export async function resetAppInstructions(): Promise<any> {
+  const defaults = buildDefaultInstructions();
+  await storageService.saveCustomInstructions(defaults);
+  return defaults;
+}
