@@ -530,6 +530,12 @@ This is the MAIN content field. It MUST contain a comprehensive text (minimum 50
 6. CONFLICT RESOLUTION – Escalation: informal → mediation by coordinator → formal arbitration.
 7. DATA MANAGEMENT AND OPEN SCIENCE – FAIR principles, access types, repository details.
 Write as flowing prose paragraphs, not bullet lists. No markdown. Write like an experienced consultant.
+CRITICAL: Do NOT put descriptions, explanations, or long text in structure fields. These are chart labels ONLY. All detailed descriptions go in the description field above.`,
+    FORMATTING OF DESCRIPTION:
+- Structure the description into CLEAR PARAGRAPHS separated by double newlines (\\n\\n).
+- Each major topic (management structure, decision-making, quality assurance, risk management, communication, conflict resolution, data management) should be its OWN PARAGRAPH.
+- Begin each paragraph with the topic as a plain text header on its own line, e.g.: "Management Structure" followed by a newline, then the descriptive text.
+- Do NOT write one continuous block of text. The text must be readable with clear visual separation between topics.
 
 PART 2 — STRUCTURE FIELDS (projectManagement.structure):
 These fields appear as LABELS in the organigram chart. They MUST contain ONLY short role titles (max 5–8 words each):
@@ -538,6 +544,7 @@ These fields appear as LABELS in the organigram chart. They MUST contain ONLY sh
 - advisoryBoard: e.g., "Advisory Board (SO)"
 - wpLeaders: e.g., "WP Leaders (VDS)"
 CRITICAL: Do NOT put descriptions, explanations, or long text in structure fields. These are chart labels ONLY. All detailed descriptions go in the description field above.`,
+   
     si: `Ustvari PODROBEN razdelek o upravljanju projekta z DVEMA ločenima deloma:
 
 DEL 1 — POLJE OPIS (projectManagement.description):
@@ -550,7 +557,12 @@ To je GLAVNO vsebinsko polje. MORA vsebovati celovito besedilo (najmanj 500 bese
 6. REŠEVANJE KONFLIKTOV – Eskalacija: neformalno → mediacija koordinatorja → formalna arbitraža.
 7. UPRAVLJANJE PODATKOV IN ODPRTA ZNANOST – Načela FAIR, vrste dostopa, podrobnosti repozitorija.
 Piši v tekočih odstavkih, ne v seznamih s pikicami. BREZ markdown. Piši kot izkušen svetovalec.
-
+OBLIKOVANJE OPISA:
+- Opis strukturiraj v JASNE ODSTAVKE, ločene z dvojnimi novimi vrsticami (\\n\\n).
+- Vsaka večja tema (upravljavska struktura, mehanizmi odločanja, zagotavljanje kakovosti, obvladovanje tveganj, komunikacija, reševanje konfliktov, upravljanje podatkov) naj bo LASTEN ODSTAVEK.
+- Začni vsak odstavek z naslovom teme v goli obliki v svoji vrstici, npr.: "Upravljavska struktura", nato nova vrsta in opisno besedilo.
+- NE piši enega neprekinjenega bloka besedila. Besedilo mora biti berljivo z jasno vizualno ločitvijo med temami.
+  
 DEL 2 — POLJA STRUKTURE (projectManagement.structure):
 Ta polja se prikazujejo kot OZNAKE v organizacijski shemi. MORAJO vsebovati SAMO kratke nazive vlog (največ 5–8 besed):
 - coordinator: npr. "Koordinator projekta (PK)"
