@@ -14,9 +14,13 @@
 //  - Post-processing responses (JSON parsing, sanitization, merging)
 //
 // v3.3 — 2026-02-14 — FIXES:
-//   1. getContext() now includes sections when EITHER title OR description exists
+//   1. getContext() includes sections when EITHER title OR description exists
 //   2. generateFieldContent() injects sibling field values into prompt
 //   3. Strong bilingual language directive in every prompt
+//   4. New 'enhance' mode for professional deepening of existing content
+//   5. Quality Enforcement block at the end of every section prompt
+//   6. Strengthened section-specific task instructions with explicit
+//      citation/depth requirements
 // ═══════════════════════════════════════════════════════════════
 
 import { storageService } from './storageService.ts';
@@ -66,21 +70,90 @@ is partially or fully in Slovenian.
 ═══════════════════════════════════════════════════════════════════`;
 };
 
+// ─── QUALITY ENFORCEMENT (appended to every section prompt) ──────
+
+const getQualityEnforcement = (sectionKey: string, language: 'en' | 'si'): string => {
+  const checks: Record<string, { en: string[]; si: string[] }> = {
+    problemAnalysis: {
+      en: [
+        'Every cause description contains ≥1 specific citation in format (Source Name, Year) — e.g. (Eurostat, 2023)',
+        'Every consequence description contains ≥1 specific citation in format (Source Name, Year)',
+        'The core problem statement includes at least one quantitative indicator (percentage, number, trend)',
+        'Every description paragraph has ≥3 substantive, analytical sentences — no filler',
+        'No vague phrases such as "various stakeholders", "different aspects", "multiple factors" — be specific',
+        'At least 4 distinct, non-overlapping causes are listed',
+        'At least 4 distinct consequences are listed, with at least one referencing an EU-level policy concern',
+        'Causes are logically ordered: root causes first, then proximate causes',
+        'All cited sources are real, verifiable EU/international publications — do NOT fabricate statistics',
+      ],
+      si: [
+        'Vsak opis vzroka vsebuje ≥1 specifičen citat v formatu (Ime vira, Leto) — npr. (Eurostat, 2023)',
+        'Vsak opis posledice vsebuje ≥1 specifičen citat v formatu (Ime vira, Leto)',
+        'Izjava o osrednjem problemu vključuje vsaj en kvantitativni kazalnik (odstotek, število, trend)',
+        'Vsak opisni odstavek ima ≥3 vsebinske, analitične stavke — brez polnil',
+        'Brez nejasnih fraz kot "različni deležniki", "različni vidiki", "številni dejavniki" — bodi specifičen',
+        'Navedenih je vsaj 5 ločenih, neprekrivajočih se vzrokov',
+        'Navedene so vsaj 4 ločene posledice, vsaj ena se sklicuje na skrb na ravni EU politike',
+        'Vzroki so logično urejeni: najprej temeljni vzroki, nato neposredni',
+        'Vsi navedeni viri so resnični, preverljivi EU/mednarodni dokumenti — NE izmišljuj statistik',
+      ]
+    },
+    projectIdea: {
+      en: [
+        'State of the Art references ≥3 specific existing projects, products, or studies with names and years',
+        'Proposed Solution is structured in clear phases with specific methodological descriptions',
+        'Main Aim is one comprehensive sentence starting with "The main aim..."',
+        'At least 3 relevant EU policies are listed with specific descriptions of alignment',
+        'All readiness levels include a specific justification (not just the number)',
+      ],
+      si: [
+        'Stanje tehnike navaja ≥3 specifične obstoječe projekte, produkte ali študije z imeni in letnicami',
+        'Predlagana rešitev je strukturirana v jasne faze s specifičnimi metodološkimi opisi',
+        'Glavni cilj je en celovit stavek, ki se začne z "Glavni cilj..."',
+        'Navedene so vsaj 3 relevantne EU politike s specifičnimi opisi usklajenosti',
+        'Vse stopnje pripravljenosti vključujejo specifično utemeljitev (ne samo številke)',
+      ]
+    },
+    _default: {
+      en: [
+        'Every description has ≥3 substantive sentences',
+        'All titles begin with an infinitive verb',
+        'No vague filler phrases — be specific and analytical',
+        'Content is directly linked to the project context and problem analysis',
+      ],
+      si: [
+        'Vsak opis ima ≥3 vsebinske stavke',
+        'Vsi naslovi se začnejo z glagolom v nedoločniku',
+        'Brez nejasnih fraz — bodi specifičen in analitičen',
+        'Vsebina je neposredno povezana s kontekstom projekta in analizo problemov',
+      ]
+    }
+  };
+
+  const lang = language;
+  const sectionChecks = checks[sectionKey]?.[lang] || checks._default[lang];
+
+  const header = language === 'si'
+    ? '═══ KONTROLA KAKOVOSTI — PREVERI PRED ODDAJO ODGOVORA ═══'
+    : '═══ QUALITY GATE — VERIFY BEFORE RETURNING YOUR RESPONSE ═══';
+  const footer = language === 'si'
+    ? 'Če katerakoli točka NI izpolnjena, POPRAVI odgovor preden ga vrneš.'
+    : 'If ANY check FAILS, REVISE your response before returning it.';
+
+  return `\n${header}\n${sectionChecks.map((c, i) => `☐ ${i + 1}. ${c}`).join('\n')}\n${footer}\n═══════════════════════════════════════════════════════════════════`;
+};
+
 // ─── PROJECT CONTEXT BUILDER (v3.3 — fixed) ─────────────────────
-// FIX: check title OR description for every section, so user-entered
-//      descriptions are passed to the AI even when title is still empty.
 
 const getContext = (projectData: any): string => {
   const sections: string[] = [];
 
-  // FIX v3.3: check title OR description (was: title only)
   const pa = projectData.problemAnalysis;
   if (pa?.coreProblem?.title || pa?.coreProblem?.description ||
       pa?.causes?.length > 0 || pa?.consequences?.length > 0) {
     sections.push(`Problem Analysis:\n${JSON.stringify(pa, null, 2)}`);
   }
 
-  // FIX v3.3: check mainAim OR stateOfTheArt OR proposedSolution
   const pi = projectData.projectIdea;
   if (pi?.mainAim || pi?.stateOfTheArt || pi?.proposedSolution) {
     sections.push(`Project Idea:\n${JSON.stringify(pi, null, 2)}`);
@@ -461,7 +534,7 @@ const getRulesForSection = (sectionKey: string, language: 'en' | 'si'): string =
   return '';
 };
 
-// ─── PROMPT BUILDER ──────────────────────────────────────────────
+// ─── PROMPT BUILDER (v3.3) ───────────────────────────────────────
 
 const getPromptAndSchemaForSection = (
   sectionKey: string,
@@ -488,36 +561,57 @@ const getPromptAndSchemaForSection = (
   // v3.3: Strong language directive
   const langDirective = getLanguageDirective(language);
 
-  // Fill vs regenerate instruction
-  const fillInstruction = mode === 'fill'
-    ? (language === 'si'
-      ? `\nPOMEMBNO: NAČIN DOPOLNJEVANJA.\nUporabnik je podal obstoječe podatke za ta razdelek: ${JSON.stringify(currentSectionData)}.\nNaloga: DOPOLNI to podatkovno strukturo.\nPRAVILA:\n1. OHRANI vsa obstoječa neprazna polja natančno takšna, kot so.\n2. GENERIRAJ strokovno vsebino SAMO za polja, ki so prazni nizi ("") ali manjkajoča.\n3. Če ima seznam manj elementov od priporočenega (glej PRAVILA spodaj), DODAJ NOVE ELEMENTE.\n4. Zagotovi, da je končni izhod veljaven JSON objekt, ki ustreza celotni shemi.\n`
-      : `\nIMPORTANT: COMPLETION MODE.\nThe user has provided existing data for this section: ${JSON.stringify(currentSectionData)}.\nYour task is to COMPLETE this data structure.\nRULES:\n1. KEEP all existing non-empty fields exactly as they are.\n2. GENERATE professional content ONLY for fields that are empty strings ("") or missing.\n3. If a list has fewer items than recommended (see RULES below), ADD NEW ITEMS.\n4. Ensure the final output is a valid JSON object matching the full schema.\n`)
-    : (language === 'si'
-      ? "Generiraj popolnoma nov, celovit odgovor za ta razdelek na podlagi konteksta."
-      : "Generate a completely new, full response for this section based on the context.");
+  // v3.3: Mode instruction (fill / enhance / regenerate)
+  let modeInstruction: string;
+
+  if (mode === 'fill') {
+    modeInstruction = language === 'si'
+      ? `\nNAČIN: DOPOLNJEVANJE MANJKAJOČEGA.\nObstoječi podatki: ${JSON.stringify(currentSectionData)}\nPRAVILA:\n1. OHRANI vsa obstoječa neprazna polja natančno takšna, kot so — NE spreminjaj jih.\n2. GENERIRAJ strokovno vsebino SAMO za polja, ki so prazni nizi ("") ali manjkajoča.\n3. Če ima seznam manj elementov od priporočenega, DODAJ NOVE ELEMENTE.\n4. Zagotovi veljaven JSON objekt.\n`
+      : `\nMODE: FILL MISSING ONLY.\nExisting data: ${JSON.stringify(currentSectionData)}\nRULES:\n1. KEEP all existing non-empty fields exactly as they are — do NOT modify them.\n2. GENERATE professional content ONLY for fields that are empty strings ("") or missing.\n3. If a list has fewer items than recommended, ADD NEW ITEMS.\n4. Ensure valid JSON output.\n`;
+
+  } else if (mode === 'enhance') {
+    modeInstruction = language === 'si'
+      ? `\nNAČIN: STROKOVNA IZBOLJŠAVA OBSTOJEČEGA BESEDILA.\nObstoječi podatki: ${JSON.stringify(currentSectionData)}\n\nNaloga: STROKOVNO IZBOLJŠAJ, POGLOBI in DODELAJ obstoječo vsebino po pravilih EU projektov.\n\nPRAVILA:\n1. OHRANI pomen in tematiko — NE spreminjaj vsebinskega fokusa ali teme.\n2. IZBOLJŠAJ: dodaj strokovno EU terminologijo, poglobi argumente.\n3. DODAJ CITATE: vsak vzrok/posledica/opis MORA vsebovati vsaj en specifičen citat iz realnega vira v formatu (Ime vira, Leto) — npr. (Eurostat, 2023), (OECD, 2024), (Evropska komisija, 2023).\n4. PODALJŠAJ: kratka polja razširi na vsaj 3–5 vsebinskih, analitičnih stavkov.\n5. DOPOLNI: če je seznam kratek, DODAJ NOVE ELEMENTE.\n6. POPRAVI: odpravi slovnične napake, nedoslednosti, nejasnosti.\n7. NE BRIŠI: nikoli ne odstranjuj obstoječih elementov.\n8. FORMATIRAJ: zagotovi skladnost z globalnimi pravili (nedoločniški glagoli, citati, EU terminologija).\n9. Zagotovi veljaven JSON objekt.\n`
+      : `\nMODE: PROFESSIONAL ENHANCEMENT OF EXISTING CONTENT.\nExisting data: ${JSON.stringify(currentSectionData)}\n\nTask: PROFESSIONALLY ENHANCE, DEEPEN, and REFINE the existing content according to EU project proposal standards.\n\nRULES:\n1. PRESERVE the meaning and topic of every field — do NOT change the subject or thematic focus.\n2. ENHANCE: add professional EU terminology, deepen arguments with specific evidence.\n3. ADD CITATIONS: every cause/consequence/description MUST contain at least one specific citation from a real source in format (Source Name, Year) — e.g. (Eurostat, 2023), (OECD, 2024), (European Commission, 2023).\n4. EXPAND: extend short fields to at least 3–5 substantive, analytical sentences.\n5. SUPPLEMENT: if a list has fewer items than recommended, ADD NEW ITEMS.\n6. CORRECT: fix grammatical errors, inconsistencies, ambiguities.\n7. NEVER REMOVE: do not delete existing items or list entries.\n8. FORMAT: ensure compliance with all global rules (infinitive verbs in titles, citations, EU terminology).\n9. Ensure valid JSON output.\n`;
+
+  } else {
+    modeInstruction = language === 'si'
+      ? "NAČIN: POPOLNA PONOVNA GENERACIJA.\nGeneriraj popolnoma nov, celovit, strokoven odgovor za ta razdelek na podlagi konteksta. Vsak opis MORA vsebovati specifične citate iz realnih virov."
+      : "MODE: FULL REGENERATION.\nGenerate a completely new, comprehensive, professional response for this section based on the context. Every description MUST contain specific citations from real sources.";
+  }
 
   const globalRulesHeader = language === 'si' ? 'GLOBALNA PRAVILA' : 'GLOBAL RULES';
 
   // Section-specific task instruction
   const taskInstruction = getSectionTaskInstruction(sectionKey, projectData, language);
 
-  // v3.3: Language directive is FIRST — before everything else
+  // v3.3: Quality enforcement as the LAST element (highest attention)
+  const qualityGate = getQualityEnforcement(sectionKey, language);
+
+  // v3.3: Prompt order optimized for AI attention:
+  // 1. Language (FIRST — highest priority)
+  // 2. Context (what the project is about)
+  // 3. Mode (what to do)
+  // 4. Global rules
+  // 5. Section rules
+  // 6. Schema (if needed)
+  // 7. Task instruction
+  // 8. Quality gate (LAST — second highest priority due to recency bias)
   const prompt = [
     langDirective,
     context,
-    fillInstruction,
+    modeInstruction,
     `${globalRulesHeader}:\n${globalRules}`,
     sectionRules,
     textSchema,
-    taskInstruction
+    taskInstruction,
+    qualityGate
   ].filter(Boolean).join('\n\n');
 
   return { prompt, schema };
 };
 
-// ─── SECTION-SPECIFIC TASK INSTRUCTIONS ──────────────────────────
-// v3.3: Now references BOTH title AND description of core problem
+// ─── SECTION-SPECIFIC TASK INSTRUCTIONS (v3.3 — strengthened) ────
 
 const getSectionTaskInstruction = (
   sectionKey: string,
@@ -526,7 +620,6 @@ const getSectionTaskInstruction = (
 ): string => {
   switch (sectionKey) {
     case 'problemAnalysis': {
-      // v3.3 FIX: include BOTH title and description in the instruction
       const cp = projectData.problemAnalysis?.coreProblem;
       const titleStr = cp?.title?.trim() || '';
       const descStr = cp?.description?.trim() || '';
@@ -540,66 +633,62 @@ const getSectionTaskInstruction = (
         : (language === 'si' ? '(uporabnik še ni vnesel podatkov)' : '(no user input yet)');
 
       return language === 'si'
-        ? `UPORABNIKOV VNOS ZA OSREDNJI PROBLEM:\n${userInput}\n\nNa podlagi ZGORNJEGA VNOSA ustvari (ali dopolni) zelo podrobno analizo problemov v skladu s pravili. Generirani naslov in opis MORATA biti neposredno vsebinsko povezana z uporabnikovim vnosom. NE izmišljuj nepovezanih tem.`
-        : `USER INPUT FOR CORE PROBLEM:\n${userInput}\n\nBased STRICTLY on the USER INPUT ABOVE, create (or complete) a very detailed problem analysis following the rules provided. The generated title and description MUST be directly and substantively related to the user's input. Do NOT invent unrelated topics.`;
+        ? `UPORABNIKOV VNOS ZA OSREDNJI PROBLEM:\n${userInput}\n\nNALOGA: Na podlagi ZGORNJEGA VNOSA ustvari (ali dopolni) podrobno analizo problemov.\n\nOBVEZNE ZAHTEVE:\n- Generirani naslov in opis MORATA biti neposredno vsebinsko povezana z uporabnikovim vnosom.\n- NE izmišljuj nepovezanih tem.\n- Vsak VZROK mora vsebovati: naslov (samostalnik ali gerund), opis s 3–5 stavki, IN vsaj 1 specifičen statistični podatek s citacijo iz realnega vira — npr. "(Eurostat, 2023: 47 % energetskih omrežij v EU...)".\n- Vsaka POSLEDICA mora vsebovati: naslov, opis s 3–5 stavki, IN vsaj 1 citat iz realnega vira.\n- Osrednji problem MORA vključevati vsaj en kvantitativni kazalnik.\n- NIKOLI ne piši generičnih opisov brez podatkov.`
+        : `USER INPUT FOR CORE PROBLEM:\n${userInput}\n\nTASK: Based STRICTLY on the USER INPUT ABOVE, create (or complete) a detailed problem analysis.\n\nMANDATORY REQUIREMENTS:\n- The generated title and description MUST be directly related to the user's input.\n- Do NOT invent unrelated topics.\n- Every CAUSE must contain: a title (noun/gerund), a 3–5 sentence description, AND at least 1 specific statistical data point with citation from a real source — e.g. "(Eurostat, 2023: 47% of EU energy grids...)".\n- Every CONSEQUENCE must contain: a title, a 3–5 sentence description, AND at least 1 citation from a real source.\n- The core problem MUST include at least one quantitative indicator.\n- NEVER write generic descriptions without evidence.`;
     }
 
     case 'projectIdea':
       return language === 'si'
-        ? 'Na podlagi analize problemov razvij (ali dopolni) celovito projektno idejo. Upoštevaj posebna pravila oblikovanja za predlagano rešitev.'
-        : 'Based on the problem analysis, develop (or complete) a comprehensive project idea. Follow the specific formatting rules for the Proposed Solution.';
+        ? 'Na podlagi analize problemov razvij (ali dopolni) celovito projektno idejo.\n\nOBVEZNE ZAHTEVE:\n- Stanje tehnike (State of the Art) MORA navajati vsaj 3 specifične obstoječe projekte ali študije z imeni in letnicami.\n- Predlagana rešitev MORA biti strukturirana v jasne faze (Faza 1, 2, 3...) s specifičnimi metodami.\n- EU politike morajo biti resnične in preverljive — NE izmišljuj imen politik.'
+        : 'Based on the problem analysis, develop (or complete) a comprehensive project idea.\n\nMANDATORY REQUIREMENTS:\n- State of the Art MUST reference at least 3 specific existing projects or studies with names and years.\n- Proposed Solution MUST be structured in clear phases (Phase 1, 2, 3...) with specific methods.\n- EU policies must be real and verifiable — do NOT invent policy names.';
 
     case 'generalObjectives':
       return language === 'si'
-        ? 'Opredeli (ali dopolni) 3 do 5 širokih splošnih ciljev. Dosledno upoštevaj pravilo skladnje z GLAGOLOM V NEDOLOČNIKU.'
-        : 'Define (or complete) 3 to 5 broader, overall general objectives. Adhere strictly to the INFINITIVE VERB syntax rule.';
+        ? 'Opredeli (ali dopolni) 3 do 5 širokih splošnih ciljev.\n\nOBVEZNO: Vsak naslov cilja se MORA začeti z glagolom v nedoločniku (npr. "Okrepiti...", "Razviti...", "Vzpostaviti...").\nVsak opis mora imeti vsaj 3 vsebinske stavke.'
+        : 'Define (or complete) 3 to 5 broader general objectives.\n\nMANDATORY: Every objective title MUST begin with an infinitive verb (e.g. "Strengthen...", "Develop...", "Establish...").\nEvery description must have at least 3 substantive sentences.';
 
     case 'specificObjectives':
       return language === 'si'
-        ? 'Opredeli (ali dopolni) vsaj 5 ustvarjalnih, specifičnih S.M.A.R.T. ciljev. Dosledno upoštevaj pravilo skladnje z GLAGOLOM V NEDOLOČNIKU.'
-        : 'Define (or complete) at least 5 creative, specific S.M.A.R.T. objectives. Adhere strictly to the INFINITIVE VERB syntax rule.';
+        ? 'Opredeli (ali dopolni) vsaj 5 specifičnih S.M.A.R.T. ciljev.\n\nOBVEZNO: Vsak naslov cilja se MORA začeti z glagolom v nedoločniku.\nVsak cilj mora imeti merljiv kazalnik (KPI), ki meri uspeh, ne le dokončanje naloge.'
+        : 'Define (or complete) at least 5 specific S.M.A.R.T. objectives.\n\nMANDATORY: Every objective title MUST begin with an infinitive verb.\nEvery objective must have a measurable indicator (KPI) that measures success, not just task completion.';
 
     case 'projectManagement':
       return language === 'si'
-        ? 'Ustvari VISOKO PROFESIONALEN, PODROBEN razdelek \'Upravljanje in organizacija\' v skladu s strogimi EU najboljšimi praksami in posebnimi vsebinskimi pravili.'
-        : "Create a HIGHLY PROFESSIONAL, DETAILED 'Management and Organization' section following strict EU best practices and the specific content rules provided.";
+        ? 'Ustvari VISOKO PROFESIONALEN, PODROBEN razdelek o upravljanju in organizaciji projekta.\n\nVsebovati mora: koordinacijo, usmerjevalni odbor, WP voditelje, mehanizme odločanja, zagotavljanje kakovosti, obvladovanje konfliktov in poročanje.'
+        : "Create a HIGHLY PROFESSIONAL, DETAILED project management and organization section.\n\nMust include: coordination structure, steering committee, WP leaders, decision-making mechanisms, quality assurance, conflict resolution, and reporting.";
 
     case 'activities': {
       const today = new Date().toISOString().split('T')[0];
       const projectStart = projectData.projectIdea?.startDate || today;
-      const dateNote = language === 'si'
-        ? `Projekt se strogo začne dne ${projectStart}. Vsi začetni datumi nalog MORAJO biti na ali po tem datumu.`
-        : `The project is strictly scheduled to start on ${projectStart}. All task Start Dates MUST be on or after this date.`;
-      const task = language === 'si'
-        ? 'Na podlagi specifičnih ciljev in rezultatov oblikuj (ali dopolni) podroben nabor delovnih sklopov (DS) v skladu s pravili glede količine, nalog in logike.'
-        : 'Based on the specific objectives and outputs, design (or complete) a detailed set of Work Packages (WPs) following the rules regarding quantity, tasks, and logic.';
-      return `${dateNote}\n${task}`;
+      return language === 'si'
+        ? `Projekt se strogo začne dne ${projectStart}. Vsi začetni datumi nalog MORAJO biti na ali po tem datumu.\n\nNa podlagi specifičnih ciljev oblikuj (ali dopolni) podroben nabor delovnih sklopov (DS).\n\nOBVEZNO:\n- Vsak DS mora imeti: naslov z nedoločniškim glagolom, vsaj 3 naloge, vsaj 1 mejnik, vsaj 1 predvideni rezultat.\n- Predvideni rezultati morajo biti preverljivi z "desk review" — konkretni dokazi (PDF poročilo, spletna platforma, podpisan seznam prisotnih).\n- NE uporabljaj nejasnih opisov kot "izboljšano sodelovanje".`
+        : `The project starts strictly on ${projectStart}. All task Start Dates MUST be on or after this date.\n\nBased on specific objectives, design (or complete) a detailed set of Work Packages (WPs).\n\nMANDATORY:\n- Each WP must have: title with infinitive verb, at least 3 tasks, at least 1 milestone, at least 1 deliverable.\n- Deliverables must be verifiable via desk review — concrete evidence (PDF report, web platform, signed attendance list).\n- Do NOT use vague descriptions like "improved cooperation".`;
     }
 
     case 'outputs':
       return language === 'si'
-        ? 'Navedi (ali dopolni) vsaj 6 zelo podrobnih, oprijemljivih neposrednih rezultatov (predvidenih rezultatov).'
-        : 'List (or complete) at least 6 very detailed, tangible results (deliverables).';
+        ? 'Navedi (ali dopolni) vsaj 6 zelo podrobnih, oprijemljivih neposrednih rezultatov.\n\nVsak rezultat mora imeti: naslov z nedoločniškim glagolom, opis s 3+ stavki, in merljiv kazalnik.'
+        : 'List (or complete) at least 6 very detailed, tangible outputs.\n\nEach output must have: title with infinitive verb, description with 3+ sentences, and a measurable indicator.';
 
     case 'outcomes':
       return language === 'si'
-        ? 'Opiši (ali dopolni) vsaj 6 vmesnih učinkov (srednjeročne spremembe).'
-        : 'Describe (or complete) at least 6 intangible results (medium-term changes).';
+        ? 'Opiši (ali dopolni) vsaj 6 vmesnih učinkov (srednjeročne spremembe).\n\nVsak učinek mora imeti: naslov z nedoločniškim glagolom, opis s 3+ stavki, in merljiv kazalnik.'
+        : 'Describe (or complete) at least 6 medium-term outcomes.\n\nEach outcome must have: title with infinitive verb, description with 3+ sentences, and a measurable indicator.';
 
     case 'impacts':
       return language === 'si'
-        ? 'Opiši (ali dopolni) vsaj 6 dolgoročnih vplivov.'
-        : 'Describe (or complete) at least 6 long-term impacts.';
+        ? 'Opiši (ali dopolni) vsaj 6 dolgoročnih vplivov.\n\nVsak vpliv mora imeti: naslov z nedoločniškim glagolom, opis s 3+ stavki (vključno s Pathway to Impact narativom), in merljiv kazalnik.'
+        : 'Describe (or complete) at least 6 long-term impacts.\n\nEach impact must have: title with infinitive verb, description with 3+ sentences (including Pathway to Impact narrative), and a measurable indicator.';
 
     case 'risks':
       return language === 'si'
-        ? 'Identificiraj (ali dopolni) vsaj 5 potencialnih kritičnih tveganj (Tehnično, Družbeno, Ekonomsko) z ustrezno logiko semaforja za izvoz v Docx.'
-        : 'Identify (or complete) at least 5 potential critical risks (Technical, Social, Economic) with correct Traffic Light coloring logic for Docx export in mind.';
+        ? 'Identificiraj (ali dopolni) vsaj 5 potencialnih kritičnih tveganj (Tehnično, Družbeno, Ekonomsko).\n\nVsako tveganje mora imeti: specifičen naslov, podroben opis, utemeljeno verjetnost in vpliv, ter konkretne ukrepe za ublažitev.'
+        : 'Identify (or complete) at least 5 potential critical risks (Technical, Social, Economic).\n\nEach risk must have: specific title, detailed description, justified likelihood and impact, and concrete mitigation measures.';
 
     case 'kers':
       return language === 'si'
-        ? 'Identificiraj (ali dopolni) vsaj 5 ključnih izkoriščljivih rezultatov (KIR).'
-        : 'Identify (or complete) at least 5 Key Exploitable Results (KERs).';
+        ? 'Identificiraj (ali dopolni) vsaj 5 ključnih izkoriščljivih rezultatov (KIR).\n\nVsak KIR mora imeti: specifičen naslov, podroben opis, in konkretno strategijo izkoriščanja.'
+        : 'Identify (or complete) at least 5 Key Exploitable Results (KERs).\n\nEach KER must have: specific title, detailed description, and a concrete exploitation strategy.';
 
     default:
       return '';
@@ -648,6 +737,9 @@ export const generateSectionContent = async (
     parsedData.proposedSolution = text;
   }
 
+  // v3.3: Only smartMerge in 'fill' mode
+  // 'enhance' mode: AI returns the full improved version — use directly
+  // 'regenerate' mode: AI returns completely new content — use directly
   if (mode === 'fill' && currentSectionData) {
     parsedData = smartMerge(currentSectionData, parsedData);
   }
@@ -655,9 +747,7 @@ export const generateSectionContent = async (
   return parsedData;
 };
 
-// ─── FIELD CONTENT GENERATION (v3.3 — major fix) ─────────────────
-// FIX: Now injects sibling field values so AI always has context
-//      even when generating a single field (e.g., title from description)
+// ─── FIELD CONTENT GENERATION (v3.3) ─────────────────────────────
 
 export const generateFieldContent = async (
   path: (string | number)[],
@@ -672,23 +762,17 @@ export const generateFieldContent = async (
   const globalRules = instructions.GLOBAL_RULES.join('\n');
   const globalRulesHeader = language === 'si' ? 'GLOBALNA PRAVILA' : 'GLOBAL RULES';
 
-  // v3.3: Strong language directive
   const langDirective = getLanguageDirective(language);
 
-  // Get field-specific rule from Instructions.ts
   const fieldRule = getFieldRule(fieldName, language);
   const fieldRuleText = fieldRule
     ? `\n${language === 'si' ? 'PRAVILO ZA TO POLJE' : 'FIELD-SPECIFIC RULE'}:\n${fieldRule}\n`
     : '';
 
-  // ──────────────────────────────────────────────────────────────
-  // v3.3 FIX: Inject sibling field values as direct context
-  // This ensures the AI sees user-entered data in related fields
-  // ──────────────────────────────────────────────────────────────
+  // v3.3: Inject sibling field values
   let siblingContext = '';
   try {
     let parentObj: any = projectData;
-    // Navigate to the parent object of the field being generated
     for (let i = 0; i < path.length - 1; i++) {
       if (parentObj && parentObj[path[i]] !== undefined) {
         parentObj = parentObj[path[i]];
@@ -706,7 +790,7 @@ export const generateFieldContent = async (
       }
       if (siblings.length > 0) {
         const header = language === 'si'
-          ? 'OBSTOJEČI PODATKI V ISTEM RAZDELKU (uporabi kot osnovo za generiranje)'
+          ? 'OBSTOJEČI PODATKI V ISTEM RAZDELKU (uporabi kot osnovo)'
           : 'EXISTING DATA IN THE SAME SECTION (use as the basis for generation)';
         siblingContext = `\n${header}:\n${siblings.join('\n')}\n`;
       }
@@ -715,7 +799,6 @@ export const generateFieldContent = async (
     console.warn('[generateFieldContent] Could not extract sibling context:', e);
   }
 
-  // Build contextual information based on the field path
   let specificContext = '';
   let extraInstruction = '';
 
@@ -744,7 +827,6 @@ export const generateFieldContent = async (
       : `the field "${fieldName}"`;
   }
 
-  // v3.3: Enhanced task line — explicitly tells AI to base output on sibling data
   const anchorNote = siblingContext
     ? (language === 'si'
       ? ' Generirano besedilo MORA biti neposredno vsebinsko povezano z obstoječimi podatki zgoraj.'
@@ -752,10 +834,9 @@ export const generateFieldContent = async (
     : '';
 
   const taskLine = language === 'si'
-    ? `Generiraj profesionalno vrednost za ${specificContext} znotraj razdelka "${sectionName}". Vrni samo besedilo.${anchorNote}`
-    : `Generate a professional value for ${specificContext} within "${sectionName}". Just return the text value.${anchorNote}`;
+    ? `Generiraj profesionalno, strokovno vrednost za ${specificContext} znotraj razdelka "${sectionName}". Vrni samo besedilo. Če je primerno, vključi specifičen citat iz realnega vira.${anchorNote}`
+    : `Generate a professional, expert-level value for ${specificContext} within "${sectionName}". Just return the text value. Where appropriate, include a specific citation from a real source.${anchorNote}`;
 
-  // v3.3: Language directive FIRST, sibling context prominently placed
   const prompt = [
     langDirective,
     context,
@@ -777,8 +858,6 @@ export const generateProjectSummary = async (
   const context = getContext(projectData);
   const summaryRules = getSummaryRules(language);
   const summaryRulesHeader = language === 'si' ? 'PRAVILA ZA POVZETEK' : 'SUMMARY RULES';
-
-  // v3.3: Strong language directive
   const langDirective = getLanguageDirective(language);
 
   const prompt = [
