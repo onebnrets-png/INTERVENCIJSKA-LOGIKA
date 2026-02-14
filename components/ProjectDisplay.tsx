@@ -861,45 +861,50 @@ const renderActivities = (props) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// MAIN EXPORT
+// MAIN EXPORT — v4.7
 // ═══════════════════════════════════════════════════════════════
 
-const ProjectDisplay = (props) => {
-    const { activeStepId, language } = props;
-
-    const steps = getSteps(language);
-    const currentStepObj = steps.find(s => s.id === activeStepId);
+const ProjectDisplay = ({ projectData, activeStepId, language, onUpdateData, onGenerateSection, onGenerateCompositeSection, onGenerateField, onAddItem, onRemoveItem, isLoading, error, missingApiKey }) => {
+    const STEPS = getSteps(language);
+    const currentStepObj = STEPS.find(s => s.id === activeStepId);
     const stepKey = currentStepObj?.key;
+
+    const sharedProps = { projectData, onUpdateData, onGenerateSection, onGenerateCompositeSection, onGenerateField, onAddItem, onRemoveItem, isLoading, error, language, missingApiKey };
 
     const renderContent = () => {
         switch (stepKey) {
             case 'problemAnalysis':
-                return renderProblemAnalysis(props);
+                return renderProblemAnalysis(sharedProps);
             case 'projectIdea':
-                return renderProjectIdea(props);
+                return renderProjectIdea(sharedProps);
             case 'generalObjectives':
-                return renderObjectives(props, 'generalObjectives');
+                return renderObjectives(sharedProps, 'generalObjectives');
             case 'specificObjectives':
-                return renderObjectives(props, 'specificObjectives');
+                return renderObjectives(sharedProps, 'specificObjectives');
             case 'activities':
-                return renderActivities(props);
+                return renderActivities(sharedProps);
             case 'expectedResults':
                 return (
                     <>
-                        {renderGenericResults(props, 'outputs')}
-                        {renderGenericResults(props, 'outcomes')}
-                        {renderGenericResults(props, 'impacts')}
-                        {renderKERs(props)}
+                        {renderGenericResults(sharedProps, 'outputs')}
+                        {renderGenericResults(sharedProps, 'outcomes')}
+                        {renderGenericResults(sharedProps, 'impacts')}
+                        {renderKERs(sharedProps)}
                     </>
                 );
             default:
-                return <div className="p-8 text-slate-400 text-center">Unknown step: {stepKey || activeStepId}</div>;
+                return null;
         }
     };
 
     return (
         <div id="main-scroll-container" className="flex-1 overflow-y-auto">
             <div className="max-w-4xl mx-auto px-6 py-8">
+                {error && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        {error}
+                    </div>
+                )}
                 {renderContent()}
             </div>
         </div>
