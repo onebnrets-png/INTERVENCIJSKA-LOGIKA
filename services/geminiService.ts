@@ -10,9 +10,11 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
-// v4.0 — 2026-02-14 — SINGLE SOURCE OF TRUTH REFACTOR
-//   All rule functions removed. Every rule block is now imported
+// v4.1 — 2026-02-14 — SINGLE SOURCE OF TRUTH REFACTOR
+//   All rule functions removed. Every rule block is imported
 //   from Instructions.ts. Changing Instructions.ts = changing the law.
+//   Fixed SECTION_TO_CHAPTER mapping to match Instructions.ts keys.
+//   Fixed getRulesForSection to read chapter text as string (not .RULES array).
 // ═══════════════════════════════════════════════════════════════
 
 import { storageService } from './storageService.ts';
@@ -21,7 +23,6 @@ import {
   getFieldRule,
   getTranslationRules,
   getSummaryRules,
-  // v4.0: ALL rule blocks from Instructions.ts
   getLanguageDirective,
   getLanguageMismatchNotice,
   getAcademicRigorRules,
@@ -66,8 +67,6 @@ const formatRulesAsList = (rules: string | string[]): string => {
 };
 
 // ─── INPUT LANGUAGE DETECTION ────────────────────────────────────
-// Detects mismatch between UI language and actual text language.
-// Returns the mismatch notice from Instructions.ts or empty string.
 
 const detectInputLanguageMismatch = (
   projectData: any,
@@ -103,33 +102,25 @@ const detectInputLanguageMismatch = (
 
   if (detectedLang === 'unknown' || detectedLang === uiLanguage) return '';
 
-  // Use the template from Instructions.ts
   return getLanguageMismatchNotice(detectedLang, uiLanguage);
 };
 
 // ─── SANITIZE PROJECT TITLE ─────────────────────────────────────
-// Post-processing to enforce title constraints after AI generation.
-// This is a TECHNICAL function, not a rule — rules are in Instructions.ts.
 
 const sanitizeProjectTitle = (title: string): string => {
   if (!title || typeof title !== 'string') return title;
 
   let clean = title.trim();
 
-  // Remove markdown
   clean = clean
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/`([^`]+)`/g, '$1');
 
-  // Remove surrounding quotes
   clean = clean.replace(/^["'«»„""]|["'«»"""]$/g, '').trim();
-
-  // Remove leading "Project Title:" or "Naziv projekta:" prefix
   clean = clean.replace(/^(Project\s*Title|Naziv\s*projekta)\s*[:–—-]\s*/i, '').trim();
 
-  // Remove acronym prefix if AI added it (e.g., "ACRONYM – Title")
   const acronymPattern = /^[A-ZČŠŽ]{2,10}\s*[–—:-]\s*/;
   if (acronymPattern.test(clean)) {
     const withoutAcronym = clean.replace(acronymPattern, '').trim();
@@ -138,7 +129,6 @@ const sanitizeProjectTitle = (title: string): string => {
     }
   }
 
-  // Enforce max 200 characters
   if (clean.length > 200) {
     clean = clean.substring(0, 200).replace(/\s+\S*$/, '').trim();
   }
@@ -146,7 +136,7 @@ const sanitizeProjectTitle = (title: string): string => {
   return clean;
 };
 
-// ─── STRIP MARKDOWN (post-processor) ─────────────────────────────
+// ─── STRIP MARKDOWN ──────────────────────────────────────────────
 
 const stripMarkdown = (obj: any): any => {
   if (typeof obj === 'string') {
@@ -429,13 +419,20 @@ const schemas: Record<string, any> = {
   }
 };
 
-// ─── MAPPINGS ────────────────────────────────────────────────────
+// ─── MAPPINGS (v4.1 — FIXED to match Instructions.ts CHAPTERS keys) ─
 
 const SECTION_TO_CHAPTER: Record<string, string> = {
-  problemAnalysis: '1', projectIdea: '2',
-  generalObjectives: '3_AND_4', specificObjectives: '3_AND_4',
-  projectManagement: '5', activities: '5', risks: '5',
-  outputs: '6', outcomes: '6', impacts: '6', kers: '6',
+  problemAnalysis: 'chapter1_problemAnalysis',
+  projectIdea: 'chapter2_projectIdea',
+  generalObjectives: 'chapter3_4_objectives',
+  specificObjectives: 'chapter3_4_objectives',
+  projectManagement: 'chapter5_activities',
+  activities: 'chapter5_activities',
+  risks: 'chapter5_activities',
+  outputs: 'chapter6_results',
+  outcomes: 'chapter6_results',
+  impacts: 'chapter6_results',
+  kers: 'chapter6_results',
 };
 
 const SECTION_TO_SCHEMA: Record<string, string> = {
@@ -503,16 +500,22 @@ const smartMerge = (original: any, generated: any): any => {
   return original !== null && original !== undefined ? original : generated;
 };
 
-// ─── RULES ASSEMBLER ─────────────────────────────────────────────
+// ─── RULES ASSEMBLER (v4.1 — reads chapter TEXT, not .RULES array) ─
 
 const getRulesForSection = (sectionKey: string, language: 'en' | 'si'): string => {
   const instructions = getAppInstructions(language);
   const chapterKey = SECTION_TO_CHAPTER[sectionKey];
   if (chapterKey && instructions.CHAPTERS?.[chapterKey]) {
-    const rules = instructions.CHAPTERS[chapterKey].RULES || [];
-    if (Array.isArray(rules) && rules.length > 0) {
+    const chapterContent = instructions.CHAPTERS[chapterKey];
+    // CHAPTERS values are strings (full chapter text), not objects with .RULES
+    if (typeof chapterContent === 'string' && chapterContent.trim().length > 0) {
+      const header = language === 'si' ? 'PODROBNA PRAVILA ZA TO POGLAVJE' : 'DETAILED CHAPTER RULES';
+      return `\n${header}:\n${chapterContent}\n`;
+    }
+    // Backward compat: if someone stored an object with .RULES array
+    if (typeof chapterContent === 'object' && Array.isArray(chapterContent.RULES) && chapterContent.RULES.length > 0) {
       const header = language === 'si' ? 'STROGA PRAVILA ZA TA RAZDELEK' : 'STRICT RULES FOR THIS SECTION';
-      return `\n${header}:\n- ${rules.join('\n- ')}\n`;
+      return `\n${header}:\n- ${chapterContent.RULES.join('\n- ')}\n`;
     }
   }
   return '';
@@ -563,7 +566,7 @@ const buildTaskInstruction = (
   return getSectionTaskInstruction(sectionKey, language, placeholders);
 };
 
-// ─── PROMPT BUILDER (v4.0 — ALL RULES FROM Instructions.ts) ─────
+// ─── PROMPT BUILDER (v4.1 — ALL RULES FROM Instructions.ts) ─────
 
 const getPromptAndSchemaForSection = (
   sectionKey: string,
@@ -684,7 +687,7 @@ export const generateSectionContent = async (
   return parsedData;
 };
 
-// ─── FIELD CONTENT GENERATION (v4.0) ─────────────────────────────
+// ─── FIELD CONTENT GENERATION (v4.1) ─────────────────────────────
 
 export const generateFieldContent = async (
   path: (string | number)[],
@@ -714,6 +717,9 @@ export const generateFieldContent = async (
     (sectionName === 'projectIdea' && fieldName === 'title' && path.length <= 2);
 
   const titleRules = isProjectTitle ? getProjectTitleRules(language) : '';
+
+  // v4.1: Include chapter rules for field-level generation too
+  const sectionRules = getRulesForSection(sectionName, language);
 
   let siblingContext = '';
   try {
@@ -799,6 +805,7 @@ export const generateFieldContent = async (
     context,
     siblingContext,
     `${globalRulesHeader}:\n${globalRules}`,
+    sectionRules,
     fieldRuleText,
     extraInstruction,
     taskLine
