@@ -10,13 +10,13 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
-// v4.2 — 2026-02-14 — RISK SCHEMA FIX
-//   - FIXED: schemas.risks category enum — added 'environmental',
-//     changed all values to lowercase to match RiskCategory type
-//     and Instructions.ts rules.
-//   - FIXED: schemas.risks likelihood/impact enums — changed from
-//     uppercase ('Low','Medium','High') to lowercase ('low','medium','high')
-//     to match RiskLikelihood/RiskImpact types and ProjectDisplay.tsx.
+// v4.3 — 2026-02-14 — PROMPT ORDER + SCHEMA FIX
+//   - FIXED: Prompt assembly order — taskInstruction (section-specific
+//     rules with WP ordering, risk categories etc.) now comes BEFORE
+//     globalRules and sectionRules. AI pays most attention to the
+//     beginning and end of the prompt. Specific rules first = followed.
+//   - FIXED: schemas.risks — category enum lowercase + 'environmental';
+//     likelihood/impact enums lowercase. Matches types.ts + Instructions.ts.
 //   - All other code unchanged from v4.1.
 //
 // v4.1 — 2026-02-14 — SINGLE SOURCE OF TRUTH REFACTOR
@@ -401,11 +401,7 @@ const schemas: Record<string, any> = {
   },
 
   // ═══════════════════════════════════════════════════════════════
-  // v4.2 FIX: Risk schema — lowercase enums + added 'environmental'
-  // These enum values MUST match:
-  //   - types.ts → RiskCategory, RiskLikelihood, RiskImpact
-  //   - Instructions.ts → SECTION_TASK_INSTRUCTIONS.risks
-  //   - ProjectDisplay.tsx → <select> option values + trafficColors keys
+  // v4.3 FIX: Risk schema — lowercase enums + added 'environmental'
   // ═══════════════════════════════════════════════════════════════
   risks: {
     type: Type.ARRAY,
@@ -527,12 +523,10 @@ const getRulesForSection = (sectionKey: string, language: 'en' | 'si'): string =
   const chapterKey = SECTION_TO_CHAPTER[sectionKey];
   if (chapterKey && instructions.CHAPTERS?.[chapterKey]) {
     const chapterContent = instructions.CHAPTERS[chapterKey];
-    // CHAPTERS values are strings (full chapter text), not objects with .RULES
     if (typeof chapterContent === 'string' && chapterContent.trim().length > 0) {
       const header = language === 'si' ? 'PODROBNA PRAVILA ZA TO POGLAVJE' : 'DETAILED CHAPTER RULES';
       return `\n${header}:\n${chapterContent}\n`;
     }
-    // Backward compat: if someone stored an object with .RULES array
     if (typeof chapterContent === 'object' && Array.isArray(chapterContent.RULES) && chapterContent.RULES.length > 0) {
       const header = language === 'si' ? 'STROGA PRAVILA ZA TA RAZDELEK' : 'STRICT RULES FOR THIS SECTION';
       return `\n${header}:\n- ${chapterContent.RULES.join('\n- ')}\n`;
@@ -586,7 +580,28 @@ const buildTaskInstruction = (
   return getSectionTaskInstruction(sectionKey, language, placeholders);
 };
 
-// ─── PROMPT BUILDER (v4.1 — ALL RULES FROM Instructions.ts) ─────
+// ═══════════════════════════════════════════════════════════════
+// PROMPT BUILDER (v4.3 — REORDERED: task instruction FIRST)
+//
+// AI models pay most attention to the BEGINNING and END of prompts.
+// The middle gets "lost in the middle" (Liu et al., 2023).
+//
+// NEW ORDER:
+//   1. langDirective (mandatory — overrides everything)
+//   2. langMismatchNotice (if applicable)
+//   3. taskInstruction (SPECIFIC section rules — WP ordering etc.)
+//   4. qualityGate (checklist — at the end of "important stuff")
+//   5. textSchema (JSON structure)
+//   6. context (existing project data)
+//   7. modeInstruction (fill/enhance/regenerate)
+//   8. academicRules (general)
+//   9. humanRules (general)
+//   10. titleRules (if applicable)
+//   11. globalRules (very long — goes to the "forgotten middle")
+//   12. sectionRules (chapter text — also long)
+//
+// This ensures AI reads the SPECIFIC instructions FIRST.
+// ═══════════════════════════════════════════════════════════════
 
 const getPromptAndSchemaForSection = (
   sectionKey: string,
@@ -626,20 +641,22 @@ const getPromptAndSchemaForSection = (
   const taskInstruction = buildTaskInstruction(sectionKey, projectData, language);
   const qualityGate = getQualityGate(sectionKey, language);
 
-  // Prompt assembly — order matters
+  // ═══ v4.3 REORDERED PROMPT ASSEMBLY ═══
+  // Specific rules FIRST (beginning), general rules in MIDDLE,
+  // quality gate at END — maximizes AI compliance.
   const prompt = [
-    langDirective,
-    langMismatchNotice,
-    academicRules,
-    humanRules,
-    titleRules,
-    context,
-    modeInstruction,
-    `${globalRulesHeader}:\n${globalRules}`,
-    sectionRules,
-    textSchema,
-    taskInstruction,
-    qualityGate
+    langDirective,                              // 1. LANGUAGE (mandatory override)
+    langMismatchNotice,                         // 2. Language mismatch warning
+    taskInstruction,                            // 3. ★ SPECIFIC TASK RULES (WP ordering, formats, etc.)
+    textSchema,                                 // 4. JSON schema constraint
+    qualityGate,                                // 5. ★ QUALITY CHECKLIST (end of "important" block)
+    context,                                    // 6. Project data context
+    modeInstruction,                            // 7. Fill/enhance/regenerate mode
+    titleRules,                                 // 8. Title rules (if applicable)
+    academicRules,                              // 9. Academic rigor (general)
+    humanRules,                                 // 10. Humanization (general)
+    `${globalRulesHeader}:\n${globalRules}`,    // 11. Global rules (long — "forgotten middle")
+    sectionRules,                               // 12. Chapter rules (long)
   ].filter(Boolean).join('\n\n');
 
   return { prompt, schema };
