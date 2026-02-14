@@ -308,7 +308,7 @@ export const useGeneration = ({
           // Generated BEFORE risks so it has full activities context,
           // and risks in turn have full projectManagement context.
           // ────────────────────────────────────────────────────────
-          setIsLoading(`${t.generating} ${t.subSteps.qualityEfficiency}...`);
+          setIsLoading(`${t.generating} ${t.subSteps.implementation}...`);
           try {
             const pmContent = await generateSectionContent(
               'projectManagement',
