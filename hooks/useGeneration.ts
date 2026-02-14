@@ -343,13 +343,21 @@ export const useGeneration = ({
           // Auto-generate risks after activities + projectManagement
           setIsLoading(`${t.generating} ${t.subSteps.riskMitigation}...`);
           try {
-            const risksContent = await generateSectionContent(
+              const risksContent = await generateSectionContent(
               'risks',
               newData,
               language,
               mode
             );
-            newData.risks = risksContent;
+            // ★ FIX: Ensure risks is always an array
+            if (Array.isArray(risksContent)) {
+              newData.risks = risksContent;
+            } else if (risksContent && Array.isArray(risksContent.risks)) {
+              newData.risks = risksContent.risks;
+            } else {
+              console.warn('[executeGeneration] risks: unexpected format, keeping original');
+            }
+
           } catch (e) {
             console.error(e);
           }
