@@ -12,6 +12,11 @@
 //  - Assembling prompts by combining Instructions rules + context
 //  - Calling the AI provider
 //  - Post-processing responses (JSON parsing, sanitization, merging)
+//
+// v3.3 — 2026-02-14 — FIXES:
+//   1. getContext() now includes sections when EITHER title OR description exists
+//   2. generateFieldContent() injects sibling field values into prompt
+//   3. Strong bilingual language directive in every prompt
 // ═══════════════════════════════════════════════════════════════
 
 import { storageService } from './storageService.ts';
@@ -41,17 +46,46 @@ export const validateApiKey = async (apiKey: string): Promise<boolean> => {
 
 export const validateProviderApiKey = validateProviderKey;
 
-// ─── PROJECT CONTEXT BUILDER ─────────────────────────────────────
+// ─── STRONG LANGUAGE DIRECTIVE (used in every prompt) ────────────
+
+const getLanguageDirective = (language: 'en' | 'si'): string => {
+  if (language === 'si') {
+    return `═══ LANGUAGE DIRECTIVE (MANDATORY — OVERRIDES ALL OTHER INSTRUCTIONS) ═══
+You MUST write ALL output content — every title, every description,
+every indicator, every single text value — EXCLUSIVELY in Slovenian
+(slovenščina). Do NOT use English for ANY field value, even if the
+context below is partially or fully in English. Translate concepts
+into Slovenian; do not copy English phrases.
+═══════════════════════════════════════════════════════════════════`;
+  }
+  return `═══ LANGUAGE DIRECTIVE (MANDATORY — OVERRIDES ALL OTHER INSTRUCTIONS) ═══
+You MUST write ALL output content — every title, every description,
+every indicator, every single text value — EXCLUSIVELY in British
+English. Do NOT use any other language, even if the context below
+is partially or fully in Slovenian.
+═══════════════════════════════════════════════════════════════════`;
+};
+
+// ─── PROJECT CONTEXT BUILDER (v3.3 — fixed) ─────────────────────
+// FIX: check title OR description for every section, so user-entered
+//      descriptions are passed to the AI even when title is still empty.
 
 const getContext = (projectData: any): string => {
   const sections: string[] = [];
 
-  if (projectData.problemAnalysis?.coreProblem?.title) {
-    sections.push(`Problem Analysis:\n${JSON.stringify(projectData.problemAnalysis, null, 2)}`);
+  // FIX v3.3: check title OR description (was: title only)
+  const pa = projectData.problemAnalysis;
+  if (pa?.coreProblem?.title || pa?.coreProblem?.description ||
+      pa?.causes?.length > 0 || pa?.consequences?.length > 0) {
+    sections.push(`Problem Analysis:\n${JSON.stringify(pa, null, 2)}`);
   }
-  if (projectData.projectIdea?.mainAim) {
-    sections.push(`Project Idea:\n${JSON.stringify(projectData.projectIdea, null, 2)}`);
+
+  // FIX v3.3: check mainAim OR stateOfTheArt OR proposedSolution
+  const pi = projectData.projectIdea;
+  if (pi?.mainAim || pi?.stateOfTheArt || pi?.proposedSolution) {
+    sections.push(`Project Idea:\n${JSON.stringify(pi, null, 2)}`);
   }
+
   if (projectData.generalObjectives?.length > 0) {
     sections.push(`General Objectives:\n${JSON.stringify(projectData.generalObjectives, null, 2)}`);
   }
@@ -427,14 +461,6 @@ const getRulesForSection = (sectionKey: string, language: 'en' | 'si'): string =
   return '';
 };
 
-// ─── LANGUAGE INSTRUCTIONS (read from global rules) ──────────────
-
-const getLanguageInstruction = (language: 'en' | 'si'): string => {
-  const instructions = getAppInstructions(language);
-  // The first global rule always specifies the language requirement
-  return instructions.GLOBAL_RULES[0] || '';
-};
-
 // ─── PROMPT BUILDER ──────────────────────────────────────────────
 
 const getPromptAndSchemaForSection = (
@@ -455,15 +481,12 @@ const getPromptAndSchemaForSection = (
     throw new Error(`Unknown section key: ${sectionKey}`);
   }
 
-  // Determine if we need text schema for non-Gemini providers
   const config = getProviderConfig();
   const needsTextSchema = config.provider !== 'gemini';
   const textSchema = needsTextSchema ? schemaToTextInstruction(schema) : '';
 
-  // Language instruction
-  const langInstruction = language === 'si'
-    ? "KRITIČNO: Uporabnik je izbral SLOVENŠČINO. Celoten odgovor (naslovi, opisi, kazalniki itd.) MORA biti v SLOVENSKEM jeziku. Tudi če je podan kontekst v angleščini, MORAŠ generirati novo vsebino v slovenščini. Zagotovi visokokakovostno strokovno slovensko terminologijo."
-    : "CRITICAL: The user has selected ENGLISH language. Write the response in English. If the context is in Slovenian, translate the logic/ideas into English for the new content.";
+  // v3.3: Strong language directive
+  const langDirective = getLanguageDirective(language);
 
   // Fill vs regenerate instruction
   const fillInstruction = mode === 'fill'
@@ -474,16 +497,15 @@ const getPromptAndSchemaForSection = (
       ? "Generiraj popolnoma nov, celovit odgovor za ta razdelek na podlagi konteksta."
       : "Generate a completely new, full response for this section based on the context.");
 
-  // Global rules header
   const globalRulesHeader = language === 'si' ? 'GLOBALNA PRAVILA' : 'GLOBAL RULES';
 
   // Section-specific task instruction
   const taskInstruction = getSectionTaskInstruction(sectionKey, projectData, language);
 
-  // Assemble the prompt — NO hardcoded rules, everything comes from Instructions.ts
+  // v3.3: Language directive is FIRST — before everything else
   const prompt = [
+    langDirective,
     context,
-    langInstruction,
     fillInstruction,
     `${globalRulesHeader}:\n${globalRules}`,
     sectionRules,
@@ -495,8 +517,7 @@ const getPromptAndSchemaForSection = (
 };
 
 // ─── SECTION-SPECIFIC TASK INSTRUCTIONS ──────────────────────────
-// These are structural/contextual prompts, NOT content rules.
-// They tell the AI WHAT to generate, not HOW (the HOW is in Instructions.ts).
+// v3.3: Now references BOTH title AND description of core problem
 
 const getSectionTaskInstruction = (
   sectionKey: string,
@@ -504,10 +525,24 @@ const getSectionTaskInstruction = (
   language: 'en' | 'si'
 ): string => {
   switch (sectionKey) {
-    case 'problemAnalysis':
+    case 'problemAnalysis': {
+      // v3.3 FIX: include BOTH title and description in the instruction
+      const cp = projectData.problemAnalysis?.coreProblem;
+      const titleStr = cp?.title?.trim() || '';
+      const descStr = cp?.description?.trim() || '';
+
+      let contextParts: string[] = [];
+      if (titleStr) contextParts.push(language === 'si' ? `Naslov: "${titleStr}"` : `Title: "${titleStr}"`);
+      if (descStr) contextParts.push(language === 'si' ? `Opis: "${descStr}"` : `Description: "${descStr}"`);
+
+      const userInput = contextParts.length > 0
+        ? contextParts.join('\n')
+        : (language === 'si' ? '(uporabnik še ni vnesel podatkov)' : '(no user input yet)');
+
       return language === 'si'
-        ? `Na podlagi osrednjega problema "${projectData.problemAnalysis?.coreProblem?.title || ''}" ustvari (ali dopolni) zelo podrobno analizo problemov v skladu s pravili.`
-        : `Based on the core problem "${projectData.problemAnalysis?.coreProblem?.title || ''}", create (or complete) a very detailed problem analysis following the rules provided.`;
+        ? `UPORABNIKOV VNOS ZA OSREDNJI PROBLEM:\n${userInput}\n\nNa podlagi ZGORNJEGA VNOSA ustvari (ali dopolni) zelo podrobno analizo problemov v skladu s pravili. Generirani naslov in opis MORATA biti neposredno vsebinsko povezana z uporabnikovim vnosom. NE izmišljuj nepovezanih tem.`
+        : `USER INPUT FOR CORE PROBLEM:\n${userInput}\n\nBased STRICTLY on the USER INPUT ABOVE, create (or complete) a very detailed problem analysis following the rules provided. The generated title and description MUST be directly and substantively related to the user's input. Do NOT invent unrelated topics.`;
+    }
 
     case 'projectIdea':
       return language === 'si'
@@ -596,7 +631,6 @@ export const generateSectionContent = async (
   const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
   let parsedData = JSON.parse(jsonStr);
 
-  // Post-processing: validation and sanitization
   if (sectionKey === 'projectIdea' && jsonStr.startsWith('[')) {
     throw new Error("API returned an array for projectIdea section, expected an object.");
   }
@@ -621,6 +655,10 @@ export const generateSectionContent = async (
   return parsedData;
 };
 
+// ─── FIELD CONTENT GENERATION (v3.3 — major fix) ─────────────────
+// FIX: Now injects sibling field values so AI always has context
+//      even when generating a single field (e.g., title from description)
+
 export const generateFieldContent = async (
   path: (string | number)[],
   projectData: any,
@@ -634,16 +672,48 @@ export const generateFieldContent = async (
   const globalRules = instructions.GLOBAL_RULES.join('\n');
   const globalRulesHeader = language === 'si' ? 'GLOBALNA PRAVILA' : 'GLOBAL RULES';
 
-  // Language instruction
-  const langInstruction = language === 'si'
-    ? "POMEMBNO: Odgovor napiši strogo v slovenskem jeziku."
-    : "Provide the response in English.";
+  // v3.3: Strong language directive
+  const langDirective = getLanguageDirective(language);
 
   // Get field-specific rule from Instructions.ts
   const fieldRule = getFieldRule(fieldName, language);
   const fieldRuleText = fieldRule
     ? `\n${language === 'si' ? 'PRAVILO ZA TO POLJE' : 'FIELD-SPECIFIC RULE'}:\n${fieldRule}\n`
     : '';
+
+  // ──────────────────────────────────────────────────────────────
+  // v3.3 FIX: Inject sibling field values as direct context
+  // This ensures the AI sees user-entered data in related fields
+  // ──────────────────────────────────────────────────────────────
+  let siblingContext = '';
+  try {
+    let parentObj: any = projectData;
+    // Navigate to the parent object of the field being generated
+    for (let i = 0; i < path.length - 1; i++) {
+      if (parentObj && parentObj[path[i]] !== undefined) {
+        parentObj = parentObj[path[i]];
+      } else {
+        parentObj = null;
+        break;
+      }
+    }
+    if (parentObj && typeof parentObj === 'object') {
+      const siblings: string[] = [];
+      for (const [key, value] of Object.entries(parentObj)) {
+        if (key !== fieldName && typeof value === 'string' && value.trim().length > 0) {
+          siblings.push(`  ${key}: "${value}"`);
+        }
+      }
+      if (siblings.length > 0) {
+        const header = language === 'si'
+          ? 'OBSTOJEČI PODATKI V ISTEM RAZDELKU (uporabi kot osnovo za generiranje)'
+          : 'EXISTING DATA IN THE SAME SECTION (use as the basis for generation)';
+        siblingContext = `\n${header}:\n${siblings.join('\n')}\n`;
+      }
+    }
+  } catch (e) {
+    console.warn('[generateFieldContent] Could not extract sibling context:', e);
+  }
 
   // Build contextual information based on the field path
   let specificContext = '';
@@ -674,13 +744,22 @@ export const generateFieldContent = async (
       : `the field "${fieldName}"`;
   }
 
-  const taskLine = language === 'si'
-    ? `Generiraj profesionalno vrednost za ${specificContext} znotraj razdelka "${sectionName}". Vrni samo besedilo.`
-    : `Generate a professional value for ${specificContext} within "${sectionName}". Just return the text value.`;
+  // v3.3: Enhanced task line — explicitly tells AI to base output on sibling data
+  const anchorNote = siblingContext
+    ? (language === 'si'
+      ? ' Generirano besedilo MORA biti neposredno vsebinsko povezano z obstoječimi podatki zgoraj.'
+      : ' The generated text MUST be directly and substantively related to the existing data above.')
+    : '';
 
+  const taskLine = language === 'si'
+    ? `Generiraj profesionalno vrednost za ${specificContext} znotraj razdelka "${sectionName}". Vrni samo besedilo.${anchorNote}`
+    : `Generate a professional value for ${specificContext} within "${sectionName}". Just return the text value.${anchorNote}`;
+
+  // v3.3: Language directive FIRST, sibling context prominently placed
   const prompt = [
+    langDirective,
     context,
-    langInstruction,
+    siblingContext,
     `${globalRulesHeader}:\n${globalRules}`,
     fieldRuleText,
     extraInstruction,
@@ -696,18 +775,15 @@ export const generateProjectSummary = async (
   language: 'en' | 'si' = 'en'
 ) => {
   const context = getContext(projectData);
-
-  // Get summary rules from Instructions.ts
   const summaryRules = getSummaryRules(language);
   const summaryRulesHeader = language === 'si' ? 'PRAVILA ZA POVZETEK' : 'SUMMARY RULES';
 
-  const langInstruction = language === 'si'
-    ? 'Napiši povzetek v profesionalnem slovenskem jeziku.'
-    : 'Write the summary in professional English.';
+  // v3.3: Strong language directive
+  const langDirective = getLanguageDirective(language);
 
   const prompt = [
+    langDirective,
     context,
-    langInstruction,
     `${summaryRulesHeader}:\n- ${summaryRules.join('\n- ')}`
   ].join('\n\n');
 
@@ -720,8 +796,6 @@ export const translateProjectContent = async (
   targetLanguage: 'en' | 'si'
 ) => {
   const langName = targetLanguage === 'si' ? 'Slovenian' : 'English';
-
-  // Get translation rules from Instructions.ts
   const translationRules = getTranslationRules(targetLanguage);
 
   const prompt = [
