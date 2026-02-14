@@ -960,24 +960,35 @@ STRUCTURE
 - Sequential numbering: WP1, WP2, WP3, …
 
 WORK PACKAGE TITLES
-- Each MUST begin with an infinitive verb.
-- CORRECT: "Develop a cross-border digital training curriculum"
-- INCORRECT: "Development of training curriculum"
+- Each MUST use a NOUN PHRASE (action noun), NOT an infinitive verb.
+- CORRECT: "Development of a cross-border digital training curriculum"
+- CORRECT: "Razvoj čezmejnega digitalnega učnega načrta"
+- INCORRECT: "Develop a cross-border digital training curriculum" (infinitive — wrong for WP)
+- INCORRECT: "Razviti čezmejni digitalni učni načrt" (infinitive — wrong for WP)
 
 TASKS
-- ≥5 tasks per WP. Each ≥3 sentences: methodology, responsible partner/role, expected result.
-- Logical sequence within WP.
+- ≥5 tasks per WP. Each task title MUST use a NOUN PHRASE (action noun), NOT an infinitive verb.
+- CORRECT: "Design of the semantic data model", "Oblikovanje semantičnega podatkovnega modela"
+- INCORRECT: "Design the semantic data model", "Oblikovati semantični podatkovni model"
+- Each task: ≥3 sentences describing methodology, responsible partner/role, expected result.
 
 TIMING AND DEPENDENCIES
 - Start/end dates (YYYY-MM-DD) for every WP and task.
 - Dependency types: FS, SS, FF, SF.
 
 MILESTONES
-- ≥1 per WP. IDs: M[WP].[seq] (M1.1, M2.1). Title, date, measurable verification criterion.
-- Distributed across timeline, not clustered at end.
+- ≥1 per WP. IDs: M[WP].[seq] (M1.1, M2.1).
+- Milestone title MUST use a NOUN PHRASE describing the event/completion, NOT an infinitive.
+- CORRECT: "Completion of pilot testing phase", "Zaključek pilotne faze testiranja"
+- INCORRECT: "Complete pilot testing", "Zaključiti pilotno testiranje"
+- Each: title, date, measurable verification criterion.
 
 DELIVERABLES
-- ≥1 per WP. IDs: D[WP].[seq] (D1.1, D2.1). Title, description (≥2 sentences), due date, type, quality indicator.
+- ≥1 per WP. IDs: D[WP].[seq] (D1.1, D2.1).
+- Deliverable title MUST use a NOUN PHRASE describing the product, NOT an infinitive.
+- CORRECT: "Training curriculum document (PDF, 50+ pages)", "Dokument učnega načrta (PDF, 50+ strani)"
+- INCORRECT: "Develop training curriculum", "Razviti učni načrt"
+- Each: title, description (≥2 sentences), due date, type, quality indicator.
 
 LUMP SUM COMPATIBILITY
 - Every deliverable must be verifiable through desk review by an EU officer with no prior project knowledge.
@@ -1006,13 +1017,17 @@ CHAPTER 6 – EXPECTED RESULTS
 PURPOSE: Define the full results chain: Outputs → Outcomes → Impacts → KERs.
 
 ─── 6A. OUTPUTS ───
-- ≥6 outputs. Each title begins with infinitive verb.
+- ≥6 outputs. Each title MUST use a RESULT-ORIENTED NOUN PHRASE (what was produced/established), NOT an infinitive verb.
+- CORRECT: "Established cross-border knowledge exchange platform", "Vzpostavljena platforma za čezmejno izmenjavo znanj"
+- INCORRECT: "Establish a platform" (infinitive — wrong for output), "Vzpostaviti platformo" (infinitive — wrong)
 - Each: title, description (3–5 sentences), measurable indicator, link to WP deliverable (by ID).
 - Outputs = tangible, countable products.
 - Include at least one citation or benchmark per output description.
 
 ─── 6B. OUTCOMES ───
-- ≥6 outcomes. Each title begins with infinitive verb.
+- ≥6 outcomes. Each title MUST use a RESULT-ORIENTED NOUN PHRASE (what changed), NOT an infinitive verb.
+- CORRECT: "Strengthened digital competences of 200 SME managers", "Okrepljene digitalne kompetence 200 vodij MSP"
+- INCORRECT: "Strengthen digital competences" (infinitive — wrong for outcome)
 - Each: title, description (3–5 sentences), specific target group(s), timeframe, reference to output(s).
 - Outcomes = changes in behaviour, capacity, practice, or policy.
 - Include at least one citation or benchmark per outcome description.
@@ -1026,12 +1041,14 @@ IMPACT PATHWAY NARRATIVE
 - CORRECT: "By adopting the project's new digital mentorship model (Outcome 2), 50 regional public employment services across 6 Danube countries will integrate structured youth mentoring, leading to a 15 % reduction in youth unemployment within 5 years, contributing to EU Youth Strategy 2019–2027."
 - INCORRECT: "Reduce youth unemployment."
 
-- ≥6 impacts. Each title begins with infinitive verb.
+- ≥6 impacts. Each title MUST use a RESULT-ORIENTED NOUN PHRASE (what long-term change occurred), NOT an infinitive verb.
+- CORRECT: "Reduced youth unemployment in Danube region by 15%", "Zmanjšana brezposelnost mladih v Podonavju za 15 %"
+- INCORRECT: "Reduce youth unemployment" (infinitive — wrong for impact)
 - Each: title, Impact Pathway description, EU policy link, reference to outcome(s).
 - All EU policy references must be real and verifiable.
 
 ─── 6D. KEY EXPLOITABLE RESULTS (KERs) ───
-- ≥5 KERs. Each: ID (KER1, KER2…), title (≤12 words, infinitive verb or specific noun), description (≥4 sentences: what, why valuable, who can use, how different), exploitation strategy (≥3 sentences: WHO, HOW, WHEN), link to WP deliverable/output.
+- ≥5 KERs. Each: ID (KER1, KER2…), title (≤12 words, SPECIFIC NOUN PHRASE naming the asset — NOT an infinitive verb), description (≥4 sentences: what, why valuable, who can use, how different), exploitation strategy (≥3 sentences: WHO, HOW, WHEN), link to WP deliverable/output.
 `
   },
 
