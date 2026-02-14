@@ -562,26 +562,91 @@ KLJUČNO: NE vstavljaj opisov, razlag ali dolgih besedil v polja strukture. To s
   activities: {
     en: `Project starts: {{projectStart}}. All task dates on or after this.
 Design Work Packages based on objectives.
+
+MANDATORY WORK PACKAGE STRUCTURE:
+- A complex project MUST have between 6 and 10 Work Packages (WPs).
+- This MUST include exactly 2 ADMINISTRATIVE / HORIZONTAL WPs:
+  a) A "Dissemination, Communication and Exploitation" WP — focused on project visibility, stakeholder engagement, exploitation of results, and communication activities.
+  b) A "Project Management and Coordination" WP — focused on consortium coordination, quality assurance, reporting, financial management, and risk monitoring.
+- The "Project Management and Coordination" WP MUST ALWAYS be the LAST WP (highest number).
+- The "Dissemination" WP should typically be the SECOND-TO-LAST WP.
+- All other WPs (4–8) are TECHNICAL / THEMATIC WPs directly linked to specific objectives.
+
+WP ORDERING RULE:
+- WP1 should be a foundational/analytical WP (e.g., "Needs analysis and methodology").
+- Technical WPs follow in logical sequence (WP2, WP3, ... WPn-2).
+- WPn-1 = Dissemination, Communication and Exploitation.
+- WPn = Project Management and Coordination (ALWAYS LAST).
+
 MANDATORY TITLE FORMAT: WP titles and task titles MUST use NOUN PHRASES (action nouns), NOT infinitive verbs.
 - CORRECT WP: "Development of a cross-border digital training curriculum"
 - INCORRECT WP: "Develop a cross-border digital training curriculum"
 - CORRECT task: "Design of the semantic data model"
 - INCORRECT task: "Design the semantic data model"
-Milestone titles: noun phrase describing the event (e.g., "Completion of pilot phase").
-Deliverable titles: noun phrase describing the product (e.g., "Training curriculum document").
-At least 3 tasks, 1 milestone, 1 deliverable per WP.
-Deliverables verifiable via desk review. No vague descriptions. No markdown. Vary sentences.`,
+
+MILESTONE RULES:
+- Each WP MUST have at least 1 milestone.
+- Every milestone MUST include a realistic date in YYYY-MM-DD format.
+- Milestone dates must be AFTER the project start date and logically placed within or at the end of the WP timeline.
+- Milestone titles: noun phrase describing the event (e.g., "Completion of pilot phase").
+
+DELIVERABLE RULES:
+- Each WP MUST have at least 1 deliverable.
+- Deliverable titles: noun phrase describing the product (e.g., "Training curriculum document").
+- Deliverables must be verifiable via desk review. No vague descriptions.
+
+TASK RULES:
+- At least 3 tasks per WP (technical WPs), at least 2 tasks per administrative WP.
+- Each task MUST have realistic startDate and endDate in YYYY-MM-DD format.
+- Tasks within a WP should have logical dependencies (FS type preferred).
+
+FORMATTING:
+- No markdown. Vary sentence structures. Write like an experienced consultant.
+- Task descriptions: 3–5 sentences, concrete and specific.`,
+
     si: `Začetek projekta: {{projectStart}}. Vsi datumi nalog na ali po tem datumu.
 Oblikuj delovne sklope na podlagi ciljev.
+
+OBVEZNA STRUKTURA DELOVNIH SKLOPOV:
+- Kompleksen projekt MORA imeti med 6 in 10 delovnih sklopov (DS oz. WP).
+- To MORA vključevati natanko 2 ADMINISTRATIVNA / HORIZONTALNA DS:
+  a) DS za "Diseminacijo, komunikacijo in izkoriščanje rezultatov" — osredotočen na vidnost projekta, vključevanje deležnikov, izkoriščanje rezultatov in komunikacijske aktivnosti.
+  b) DS za "Upravljanje in koordinacijo projekta" — osredotočen na koordinacijo konzorcija, zagotavljanje kakovosti, poročanje, finančno upravljanje in spremljanje tveganj.
+- DS "Upravljanje in koordinacija projekta" MORA biti VEDNO ZADNJI DS (najvišja številka).
+- DS "Diseminacija" naj bo tipično PREDZADNJI DS.
+- Vsi ostali DS (4–8) so TEHNIČNI / TEMATSKI DS, neposredno povezani s specifičnimi cilji.
+
+PRAVILO VRSTNEGA REDA DS:
+- DS1 naj bo temeljni/analitični DS (npr. "Analiza potreb in metodologija").
+- Tehnični DS sledijo v logičnem zaporedju (DS2, DS3, ... DSn-2).
+- DSn-1 = Diseminacija, komunikacija in izkoriščanje rezultatov.
+- DSn = Upravljanje in koordinacija projekta (VEDNO ZADNJI).
+
 OBVEZEN FORMAT NASLOVOV: Naslovi DS in nalog MORAJO uporabljati SAMOSTALNIŠKE ZVEZE (dejavniški samostalniki), NE nedoločnik.
 - PRAVILNO DS: "Razvoj čezmejnega digitalnega učnega načrta"
 - NAPAČNO DS: "Razviti čezmejni digitalni učni načrt"
 - PRAVILNO naloga: "Oblikovanje semantičnega podatkovnega modela"
 - NAPAČNO naloga: "Oblikovati semantični podatkovni model"
-Naslovi mejnikov: samostalniška zveza z opisom dogodka (npr. "Zaključek pilotne faze").
-Naslovi dosežkov: samostalniška zveza z opisom produkta (npr. "Dokument učnega načrta").
-Vsaj 3 naloge, 1 mejnik, 1 dosežek na DS.
-Dosežki preverljivi z desk review. BREZ nejasnih opisov. BREZ markdown. Variraj stavke.`
+
+PRAVILA ZA MEJNIKE:
+- Vsak DS MORA imeti vsaj 1 mejnik.
+- Vsak mejnik MORA vključevati realističen datum v formatu YYYY-MM-DD.
+- Datumi mejnikov morajo biti PO datumu začetka projekta in logično umeščeni znotraj ali na koncu časovnice DS.
+- Naslovi mejnikov: samostalniška zveza z opisom dogodka (npr. "Zaključek pilotne faze").
+
+PRAVILA ZA DOSEŽKE (DELIVERABLES):
+- Vsak DS MORA imeti vsaj 1 dosežek.
+- Naslovi dosežkov: samostalniška zveza z opisom produkta (npr. "Dokument učnega načrta").
+- Dosežki morajo biti preverljivi z namiznim pregledom. Brez nejasnih opisov.
+
+PRAVILA ZA NALOGE:
+- Vsaj 3 naloge na DS (tehnični DS), vsaj 2 nalogi na administrativni DS.
+- Vsaka naloga MORA imeti realistična datuma startDate in endDate v formatu YYYY-MM-DD.
+- Naloge znotraj DS naj imajo logične odvisnosti (tip FS je prednosten).
+
+OBLIKOVANJE:
+- BREZ markdown. Variraj stavčne strukture. Piši kot izkušen svetovalec.
+- Opisi nalog: 3–5 stavkov, konkretni in specifični.`
   },
   outputs: {
     en: 'At least 6 detailed tangible outputs.\nMANDATORY TITLE FORMAT: RESULT-ORIENTED NOUN PHRASE describing what was produced/established — NOT an infinitive verb.\n- CORRECT: "Established cross-border knowledge exchange platform"\n- INCORRECT: "Establish a knowledge exchange platform"\nDescription 3+ sentences, measurable indicator. No markdown. Vary sentences.',
