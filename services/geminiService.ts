@@ -10,6 +10,15 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
+// v4.2 — 2026-02-14 — RISK SCHEMA FIX
+//   - FIXED: schemas.risks category enum — added 'environmental',
+//     changed all values to lowercase to match RiskCategory type
+//     and Instructions.ts rules.
+//   - FIXED: schemas.risks likelihood/impact enums — changed from
+//     uppercase ('Low','Medium','High') to lowercase ('low','medium','high')
+//     to match RiskLikelihood/RiskImpact types and ProjectDisplay.tsx.
+//   - All other code unchanged from v4.1.
+//
 // v4.1 — 2026-02-14 — SINGLE SOURCE OF TRUTH REFACTOR
 //   All rule functions removed. Every rule block is imported
 //   from Instructions.ts. Changing Instructions.ts = changing the law.
@@ -390,22 +399,31 @@ const schemas: Record<string, any> = {
       required: ['title', 'description', 'indicator']
     }
   },
+
+  // ═══════════════════════════════════════════════════════════════
+  // v4.2 FIX: Risk schema — lowercase enums + added 'environmental'
+  // These enum values MUST match:
+  //   - types.ts → RiskCategory, RiskLikelihood, RiskImpact
+  //   - Instructions.ts → SECTION_TASK_INSTRUCTIONS.risks
+  //   - ProjectDisplay.tsx → <select> option values + trafficColors keys
+  // ═══════════════════════════════════════════════════════════════
   risks: {
     type: Type.ARRAY,
     items: {
       type: Type.OBJECT,
       properties: {
         id: { type: Type.STRING },
-        category: { type: Type.STRING, enum: ['Technical', 'Social', 'Economic'] },
+        category: { type: Type.STRING, enum: ['technical', 'social', 'economic', 'environmental'] },
         title: { type: Type.STRING },
         description: { type: Type.STRING },
-        likelihood: { type: Type.STRING, enum: ['Low', 'Medium', 'High'] },
-        impact: { type: Type.STRING, enum: ['Low', 'Medium', 'High'] },
+        likelihood: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
+        impact: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
         mitigation: { type: Type.STRING }
       },
       required: ['id', 'category', 'title', 'description', 'likelihood', 'impact', 'mitigation']
     }
   },
+
   kers: {
     type: Type.ARRAY,
     items: {
