@@ -1,3 +1,12 @@
+// utils.ts
+// ═══════════════════════════════════════════════════════════════
+// Utility functions: deep-setter, validation, project factory,
+// completion checks, scheduling logic, language detection.
+// v4.3 — 2026-02-14 — CHANGES:
+//   - Added 'implementation' and 'organigram' sub-step completion checks
+//   - Removed obsolete 'quality-efficiency' case
+// ═══════════════════════════════════════════════════════════════
+
 import { SUB_STEPS } from './constants.tsx';
 
 // ─── SCHEDULING RESULT TYPE ──────────────────────────────────────
@@ -183,7 +192,7 @@ export const isSubStepCompleted = (
     const checkArrayContent = (arr: any[]) => Array.isArray(arr) && arr.length > 0 && arr.some(item => hasText(item.title) || hasText(item.description));
 
     switch (subStepId) {
-      // Problem Analysis
+      // ── Problem Analysis ──────────────────────────────────
       case 'core-problem':
         return hasText(projectData.problemAnalysis?.coreProblem?.title);
       case 'causes':
@@ -191,7 +200,7 @@ export const isSubStepCompleted = (
       case 'consequences':
         return checkArrayContent(projectData.problemAnalysis?.consequences);
 
-      // Project Idea
+      // ── Project Idea ──────────────────────────────────────
       case 'main-aim':
         return hasText(projectData.projectIdea?.mainAim);
       case 'state-of-the-art':
@@ -205,19 +214,34 @@ export const isSubStepCompleted = (
       case 'eu-policies':
         return Array.isArray(projectData.projectIdea?.policies) && projectData.projectIdea.policies.some((p: any) => hasText(p.name));
 
-      // Activities
-      case 'quality-efficiency':
+      // ── Activities: Implementation (description field) ────
+      case 'implementation':
         return hasText(projectData.projectManagement?.description);
+
+      // ── Activities: Organigram (structure fields) ─────────
+      case 'organigram': {
+        const struct = projectData.projectManagement?.structure;
+        if (!struct) return false;
+        return hasText(struct.coordinator) || hasText(struct.steeringCommittee) || hasText(struct.advisoryBoard);
+      }
+
+      // ── Activities: Work Plan ─────────────────────────────
       case 'workplan':
         return Array.isArray(projectData.activities) && projectData.activities.some((wp: any) => hasText(wp.title) || (wp.tasks && wp.tasks.length > 0 && hasText(wp.tasks[0].title)));
+
+      // ── Activities: Gantt Chart ───────────────────────────
       case 'gantt-chart':
         return Array.isArray(projectData.activities) && projectData.activities.some((wp: any) => wp.tasks && wp.tasks.length > 0 && wp.tasks.some((t: any) => t.startDate && t.endDate));
+
+      // ── Activities: PERT Chart ────────────────────────────
       case 'pert-chart':
         return Array.isArray(projectData.activities) && projectData.activities.some((wp: any) => wp.tasks && wp.tasks.length > 0 && wp.tasks.some((t: any) => hasText(t.title)));
+
+      // ── Activities: Risk Mitigation ───────────────────────
       case 'risk-mitigation':
         return Array.isArray(projectData.risks) && projectData.risks.some((r: any) => hasText(r.title));
 
-      // Expected Results
+      // ── Expected Results ──────────────────────────────────
       case 'outputs':
         return checkArrayContent(projectData.outputs);
       case 'outcomes':
