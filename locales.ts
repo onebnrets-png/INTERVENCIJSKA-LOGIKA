@@ -1,14 +1,10 @@
 // locales.ts
 // ═══════════════════════════════════════════════════════════════
 // UI text strings — English (en) & Slovenian (si)
-// v4.4 — 2026-02-14 — CHANGES:
-//   - Added environmental risk category translations
-//   - Added implementation / organigram sub-step translations
-//   - Fixed all Slovene diacritics (č, š, ž)
-//   - FIXED: Added missing 'implementation' and 'organigram' keys
-//     in subSteps (required by constants.tsx getSubSteps)
-//   - FIXED: Added missing 'implementation' and 'implementationDesc'
-//     keys in management (required by ProjectDisplay.tsx)
+// v4.5 — 2026-02-14 — CHANGES:
+//   - RENAMED: "Quality & Efficiency of Implementation" → "Implementation"
+//     in management.implementation, management.title, subSteps.implementation
+//   - All previous v4.4 changes preserved.
 // ═══════════════════════════════════════════════════════════════
 
 export const TEXT = {
@@ -165,8 +161,8 @@ export const TEXT = {
         strategyPlaceholder: "Professional, precise, and deep exploitation strategy..."
     },
     management: {
-        title: "Quality and Efficiency of the Implementation",
-        implementation: "Quality and Efficiency of the Implementation",
+        title: "Implementation",                                                    // ★ v4.5 CHANGE
+        implementation: "Implementation",                                           // ★ v4.5 CHANGE
         implementationDesc: "Describe the project management structure, decision-making processes, and quality assurance mechanisms.",
         desc: "Describe the project management structure, decision-making processes, and quality assurance mechanisms.",
         placeholder: "Describe how the project will be managed (e.g., Steering Committee, WP Leaders, conflict resolution, quality control)...",
@@ -201,7 +197,7 @@ export const TEXT = {
       proposedSolution: "Proposed Solution",
       readinessLevels: "Readiness Levels",
       euPolicies: "EU Policies",
-      implementation: "Quality & Efficiency of Implementation",
+      implementation: "Implementation",                                             // ★ v4.5 CHANGE
       organigram: "Organizational Structure",
       qualityEfficiency: "Quality & Efficiency",
       workplan: "Workplan",
@@ -485,8 +481,8 @@ export const TEXT = {
         strategyPlaceholder: "Strokovna, natančna in poglobljena strategija izkoriščanja..."
     },
     management: {
-        title: "Kakovost in učinkovitost izvedbe",
-        implementation: "Kakovost in učinkovitost izvedbe",
+        title: "Implementacija",                                                    // ★ v4.5 CHANGE
+        implementation: "Implementacija",                                           // ★ v4.5 CHANGE
         implementationDesc: "Opišite strukturo vodenja projekta, procese odločanja in mehanizme zagotavljanja kakovosti.",
         desc: "Opišite strukturo vodenja projekta, procese odločanja in mehanizme zagotavljanja kakovosti.",
         placeholder: "Opišite, kako bo projekt voden (npr. usmerjevalni odbor, vodje DS, reševanje konfliktov, nadzor kakovosti)...",
@@ -521,7 +517,7 @@ export const TEXT = {
       proposedSolution: "Predlagana rešitev",
       readinessLevels: "Stopnje pripravljenosti",
       euPolicies: "Politike EU",
-      implementation: "Kakovost in učinkovitost izvedbe",
+      implementation: "Implementacija",                                             // ★ v4.5 CHANGE
       organigram: "Organizacijska struktura",
       qualityEfficiency: "Kakovost in učinkovitost",
       workplan: "Načrt dela (WP)",
