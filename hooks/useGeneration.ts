@@ -291,6 +291,17 @@ export const useGeneration = ({
         let newData = { ...projectData };
         if (['problemAnalysis', 'projectIdea'].includes(sectionKey)) {
           newData[sectionKey] = { ...newData[sectionKey], ...generatedData };
+        } else if (sectionKey === 'activities') {
+          // ★ FIX: AI sometimes returns { activities: [...] } wrapper or single object
+          if (Array.isArray(generatedData)) {
+            newData[sectionKey] = generatedData;
+          } else if (generatedData && Array.isArray(generatedData.activities)) {
+            newData[sectionKey] = generatedData.activities;
+          } else if (generatedData && typeof generatedData === 'object' && !Array.isArray(generatedData)) {
+            newData[sectionKey] = [generatedData];
+          } else {
+            console.warn('[executeGeneration] activities: unexpected format, keeping original');
+          }
         } else {
           newData[sectionKey] = generatedData;
         }
