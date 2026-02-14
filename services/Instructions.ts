@@ -1,27 +1,558 @@
 // services/Instructions.ts
 // ═══════════════════════════════════════════════════════════════════
-// Single Source of Truth for all AI-generated content rules.
-// Version 3.4 – 2026-02-14
-// 
-// CHANGES v3.4:
-//   - Added ACADEMIC_RIGOR_AND_CITATION_POLICY to GLOBAL_RULES
-//   - Strengthened anti-hallucination language throughout
-//   - Added placeholder format requirement: "[Insert verified data: ...]"
-//   - Strengthened EVIDENCE AND CITATIONS section
-//   - Chapter-specific rules now include explicit citation count minimums
+// SINGLE SOURCE OF TRUTH for ALL AI content rules.
+// Version 4.0 – 2026-02-14
 //
-// English-only (AI interprets rules in English regardless of output
-// language). Slovenian output is governed by TRANSLATION_RULES.
+// ARCHITECTURE PRINCIPLE:
+//   This file is the ONLY place where content rules are defined.
+//   geminiService.ts reads from here — it has ZERO own rules.
+//   Anything changed here IS THE LAW — no exceptions.
+//
+// CHANGES v4.0:
+//   - Migrated ALL rule blocks from geminiService.ts into this file:
+//     * LANGUAGE_DIRECTIVES (EN/SI)
+//     * LANGUAGE_MISMATCH_TEMPLATE
+//     * ACADEMIC_RIGOR_RULES (EN/SI)
+//     * HUMANIZATION_RULES (EN/SI)
+//     * PROJECT_TITLE_RULES (EN/SI)
+//     * QUALITY_GATES (per section, EN/SI)
+//     * SECTION_TASK_INSTRUCTIONS (per section, EN/SI)
+//     * MODE_INSTRUCTIONS (fill/enhance/regenerate, EN/SI)
+//   - New exports for every rule block
+//   - geminiService.ts now imports everything — defines nothing
+//   - All rules editable via Settings UI → instant effect
+//
+// English-only default text (AI interprets rules in English regardless
+// of output language). Slovenian prompt variants are stored alongside.
 // ═══════════════════════════════════════════════════════════════════
 
 import { storageService } from './storageService';
 
 // ───────────────────────────────────────────────────────────────
-// DEFAULT INSTRUCTIONS (English only)
+// LANGUAGE DIRECTIVES
+// ───────────────────────────────────────────────────────────────
+
+export const LANGUAGE_DIRECTIVES: Record<string, string> = {
+  en: `═══ LANGUAGE DIRECTIVE (MANDATORY — OVERRIDES ALL OTHER INSTRUCTIONS) ═══
+You MUST write ALL output content — every title, every description,
+every indicator, every single text value — EXCLUSIVELY in British
+English. Do NOT use any other language, even if the context below
+is partially or fully in Slovenian.
+═══════════════════════════════════════════════════════════════════`,
+
+  si: `═══ LANGUAGE DIRECTIVE (MANDATORY — OVERRIDES ALL OTHER INSTRUCTIONS) ═══
+You MUST write ALL output content — every title, every description,
+every indicator, every single text value — EXCLUSIVELY in Slovenian
+(slovenščina). Do NOT use English for ANY field value, even if the
+context below is partially or fully in English. Translate concepts
+into Slovenian; do not copy English phrases.
+═══════════════════════════════════════════════════════════════════`
+};
+
+// ───────────────────────────────────────────────────────────────
+// LANGUAGE MISMATCH TEMPLATE
+// ───────────────────────────────────────────────────────────────
+
+export const LANGUAGE_MISMATCH_TEMPLATE = `═══ INPUT LANGUAGE NOTICE ═══
+The user's existing content appears to be written in {{detectedName}},
+but the current application language is set to {{targetName}}.
+INSTRUCTIONS:
+1. UNDERSTAND and PRESERVE the semantic meaning of the user's input regardless of its language.
+2. Generate ALL new content in {{targetName}} as required by the Language Directive.
+3. If enhancing existing content, translate it into {{targetName}} while improving it.
+4. Do NOT discard or ignore the user's input just because it is in a different language.
+5. The user's input defines the TOPIC — always stay on that topic.
+═══════════════════════════════════════════════════════════════════`;
+
+// ───────────────────────────────────────────────────────────────
+// ACADEMIC RIGOR RULES
+// ───────────────────────────────────────────────────────────────
+
+export const ACADEMIC_RIGOR_RULES: Record<string, string> = {
+  en: `═══ MANDATORY ACADEMIC RIGOR & CITATION RULES ═══
+These rules apply to ALL generated content WITHOUT EXCEPTION.
+
+1. EVIDENCE-BASED CONTENT ONLY
+   - Every claim, statistic, or trend MUST be supported by a verifiable source.
+   - Do NOT generate plausible-sounding but unverifiable statements.
+   - Preferred sources: Eurostat, OECD, World Bank, European Commission reports,
+     UN agencies, peer-reviewed journals, national statistical offices, ACER, IEA,
+     JRC, EEA, CEDEFOP, Eurofound, WHO.
+
+2. CITATION FORMAT
+   - Use inline citations: (Author/Organization, Year).
+   - MINIMUM 2–3 citations per major paragraph or claim cluster.
+
+3. ZERO-HALLUCINATION POLICY
+   - NEVER invent organisation names, project names, or study titles.
+   - NEVER fabricate statistics or percentages.
+   - If a specific data point is needed but unknown, write:
+     "[Insert verified data: <description of what is needed>]"
+
+4. DOUBLE-VERIFICATION STANDARD
+   - Before including any factual claim, verify:
+     a) Does this organisation/report actually exist?
+     b) Is this statistic plausible and from a credible source?
+     c) Is the year/date accurate?
+   - If ANY doubt exists, use the placeholder format from rule 3.
+═══════════════════════════════════════════════════════════════════`,
+
+  si: `═══ OBVEZNA PRAVILA AKADEMSKE STROGOSTI IN CITIRANJA ═══
+Ta pravila veljajo za VSO generirano vsebino BREZ IZJEME.
+
+1. VSEBINA TEMELJI IZKLJUČNO NA DOKAZIH
+   - Vsaka trditev, statistika ali trend MORA biti podprta s preverljivim virom.
+   - NE generiraj verjetno zvenečih, a nepreverivih izjav.
+   - Prednostni viri: Eurostat, OECD, Svetovna banka, poročila Evropske komisije,
+     agencije OZN, recenzirane revije, nacionalni statistični uradi, ACER, IEA,
+     JRC, EEA, CEDEFOP, Eurofound, WHO.
+
+2. FORMAT CITIRANJA
+   - Uporabi inline citate: (Avtor/Organizacija, Leto).
+   - MINIMUM 2–3 citati na večji odstavek ali skupino trditev.
+
+3. POLITIKA NIČELNE HALUCINACIJE
+   - NIKOLI ne izmišljuj imen organizacij, projektov ali študij.
+   - NIKOLI ne izmišljuj statistik ali odstotkov.
+   - Če ne poznaš specifičnega podatka, napiši:
+     "[Vstavite preverjen podatek: <opis potrebnega>]"
+
+4. STANDARD DVOJNE PREVERJAVE
+   - Pred vključitvijo katerekoli dejstvene trditve preveri:
+     a) Ali ta organizacija/poročilo dejansko obstaja?
+     b) Ali je ta statistika verjetna in iz verodostojnega vira?
+     c) Ali je leto/datum točen?
+   - Če obstaja KAKRŠENKOLI dvom, uporabi format označbe iz pravila 3.
+═══════════════════════════════════════════════════════════════════`
+};
+
+// ───────────────────────────────────────────────────────────────
+// HUMANIZATION RULES
+// ───────────────────────────────────────────────────────────────
+
+export const HUMANIZATION_RULES: Record<string, string> = {
+  en: `═══ HUMANIZATION RULES (MANDATORY) ═══
+Content must read as if written by an experienced human EU project consultant.
+EU evaluators and AI detection tools easily identify machine-generated text.
+
+1. SENTENCE STRUCTURE VARIATION
+   - Mix short sentences (8–12 words) with medium (15–20) and occasional long (25–35).
+   - NEVER write 3+ consecutive sentences of similar length or structure.
+   - Start sentences with different parts of speech: noun, prepositional phrase,
+     subordinate clause, adverb.
+
+2. BANNED AI FINGERPRINT PHRASES — do NOT use:
+   - "In today's rapidly evolving...", "It is important to note that..."
+   - "plays a crucial/pivotal/key role", "aims to address"
+   - "comprehensive/holistic/multifaceted approach"
+   - "foster/leverage/synergy/harness/robust/cutting-edge"
+   - "paving the way for", "serves as a catalyst", "the landscape of"
+   - "navigating the complexities", "it is worth noting", "a testament to"
+   - "in light of the above", "cannot be overstated"
+   - Instead use direct, specific language a senior consultant would write.
+
+3. PROFESSIONAL IMPERFECTION
+   - Do NOT give every list item the same sentence structure or sentence count.
+   - Vary description lengths slightly: some items 3 sentences, others 4 or 5.
+   - Use occasional parenthetical remarks (like this) and em-dashes — for asides.
+
+4. CONCRETE OVER ABSTRACT
+   - Replace every abstract statement with a concrete, specific one.
+   - WRONG: "Various stakeholders will benefit from improved digital capacities."
+   - RIGHT: "Municipal energy managers in 12 partner regions will gain hands-on
+     experience with the GridSense dashboard, reducing anomaly response time
+     from 48 hours to under 4 hours."
+
+5. VARIED LOGICAL CONNECTORS
+   - Use: "Consequently,", "In parallel,", "A related challenge is",
+     "Building on this,", "Against this backdrop,", "While progress has been
+     made in X, the situation regarding Y remains critical."
+   - Do NOT repeat: "Furthermore,", "Moreover,", "Additionally," — these are AI markers.
+
+6. ACTIVE VOICE PREFERENCE
+   - "The consortium will develop..." NOT "A platform will be developed..."
+   - Use passive only when the actor is genuinely unknown.
+
+7. QUANTIFIED SPECIFICITY
+   - Never "significant improvement" — say "a 23% reduction in processing time."
+   - Never "multiple partners" — say "7 partners across 4 EU Member States."
+   - Never "various activities" — say "3 workshops, 2 pilots, and 1 hackathon."
+═══════════════════════════════════════════════════════════════════`,
+
+  si: `═══ PRAVILA ZA HUMANIZACIJO BESEDILA (OBVEZNO) ═══
+Besedilo mora delovati kot da ga je napisal izkušen človeški EU svetovalec.
+EU ocenjevalci in AI detektorji zlahka prepoznajo strojno generirano besedilo.
+
+1. VARIACIJA STAVČNIH STRUKTUR
+   - Mešaj kratke stavke (8–12 besed) s srednje dolgimi (15–20) in občasno daljšimi (25–35).
+   - NIKOLI ne piši 3+ zaporednih stavkov enake dolžine ali strukture.
+   - Začni stavke z različnimi besednimi vrstami: samostalnik, predložna fraza, podredni odvisnik, prislov.
+
+2. PREPOVEDANE AI FRAZE — NE uporabljaj:
+   - "V današnjem hitro spreminjajočem se okolju..."
+   - "Pomembno je poudariti, da..."
+   - "igra ključno/odločilno vlogo"
+   - "celosten/holističen pristop"
+   - "izkoriščati sinergije"
+   - "služi kot katalizator"
+   - "utira pot"
+   - "večplasten pristop"
+   - "v luči zgoraj navedenega"
+   - "ni mogoče preceniti"
+   - Namesto tega piši neposredno, specifično, kot bi pisal izkušen svetovalec.
+
+3. PROFESIONALNA NEPOPOLNOST
+   - Resnično človeško pisanje ni simetrično. NE dajaj vsakemu elementu v seznamu
+     natančno enako strukturo stavkov ali enako število stavkov.
+   - Rahlo variraj dolžine opisov: nekateri vzroki imajo 3 stavke, drugi 4 ali 5.
+   - Občasno uporabi oklepaje (kot tukaj) za dodatni kontekst.
+   - Občasno uporabi pomišljaje — za poudarek ali stransko opombo.
+
+4. KONKRETNO NAD ABSTRAKTNIM
+   - Zamenjaj vsako abstraktno trditev s konkretno, specifično.
+   - NAPAČNO: "Različni deležniki bodo imeli koristi od izboljšanih zmogljivosti."
+   - PRAVILNO: "Občinski upravljavci energije v 12 partnerskih regijah bodo pridobili
+     praktične izkušnje z nadzorno ploščo, kar bo zmanjšalo odzivni čas s 48 ur na manj kot 4 ure."
+
+5. RAZNOVRSTNI LOGIČNI POVEZOVALCI
+   - Uporabljaj: "Posledično,", "Vzporedno s tem,", "Soroden izziv je",
+     "Na podlagi tega,", "Ob tem ozadju,", "Čeprav je bil dosežen napredek pri X,
+     stanje glede Y ostaja kritično."
+   - NE ponavljaj: "Poleg tega,", "Nadalje,", "Prav tako," — to so AI markerji.
+
+6. PREDNOST TVORNIKU
+   - "Konzorcij bo razvil..." NE "Platforma bo razvita..."
+   - Trpnik uporabi le kadar je akter resnično neznan ali nepomemben.
+
+7. KVANTIFICIRANA SPECIFIČNOST
+   - Nikoli "znatno izboljšanje" — ampak "23-odstotno zmanjšanje časa obdelave."
+   - Nikoli "številni partnerji" — ampak "7 partnerjev iz 4 držav članic EU."
+   - Nikoli "različne dejavnosti" — ampak "3 usposabljanja, 2 pilotni uvedbi in 1 hackathon."
+═══════════════════════════════════════════════════════════════════`
+};
+
+// ───────────────────────────────────────────────────────────────
+// PROJECT TITLE RULES
+// ───────────────────────────────────────────────────────────────
+
+export const PROJECT_TITLE_RULES: Record<string, string> = {
+  en: `═══ STRICT RULES FOR PROJECT TITLE (projectTitle) ═══
+ATTENTION: These rules apply ONLY to the "projectTitle" field (project name).
+The acronym is generated SEPARATELY — the title MUST NOT contain an acronym.
+
+1. LENGTH: between 30 and 200 characters (NOT shorter, NOT longer)
+2. FORMAT: concise NOUN PHRASE — NOT a full sentence, NOT a verb form
+3. NO ACRONYM — that is generated separately
+4. NO CONJUGATED VERBS (NOT "The project will develop...", NOT "We develop...")
+5. NO generic AI phrases ("An innovative approach to comprehensive development...")
+6. NO comma-separated enumerations ("development, implementation, testing and dissemination...")
+7. NO adjective chains ("Innovative, sustainable, comprehensive and advanced solution")
+8. Title MUST answer: "What does this project DELIVER / ACHIEVE?"
+9. Title is a PROJECT BRAND — concise, memorable, professional
+
+GOOD TITLE EXAMPLES:
+- "Digital Transformation of Artisan Skills in Cross-Border Regions"
+- "Circular Economy in the Wood Processing Industry of the Danube Region"
+- "Green Mobility Transition in Medium-Sized Cities"
+- "Strengthening Digital Competences of Rural Youth"
+- "Sustainable Food Supply Chain in the Alpine Space"
+- "Intergenerational Knowledge Transfer in Cultural Heritage"
+
+BAD TITLE EXAMPLES (FORBIDDEN):
+- "Project for developing innovative solutions for sustainable transformation" (too generic)
+- "We develop new approaches to comprehensively solving challenges" (sentence with verb)
+- "Innovative, sustainable, comprehensive and advanced solution" (adjective chain)
+- "GREENTRANS – Green Urban Transport Transformation" (contains acronym — FORBIDDEN)
+- "The project will establish a platform for..." (sentence with verb — FORBIDDEN)
+═══════════════════════════════════════════════════════════════════`,
+
+  si: `═══ STROGA PRAVILA ZA NAZIV PROJEKTA (projectTitle) ═══
+POZOR: To so pravila SAMO za polje "projectTitle" (naziv projekta).
+Akronim se generira LOČENO — naziv NE sme vsebovati akronima.
+
+1. DOLŽINA: med 30 in 200 znakov (NE krajši, NE daljši)
+2. OBLIKA: jedrnata IMENSKI IZRAZ — NE cel stavek, NE glagolska oblika
+3. BREZ AKRONIMA — ta se generira posebej
+4. BREZ GLAGOLOV v osebni obliki (NE "Projekt bo razvil...", NE "Razvijamo...")
+5. BREZ generičnih AI fraz ("Inovativen pristop k celovitemu razvoju...")
+6. BREZ naštevanja s vejicami ("razvoj, implementacija, testiranje in diseminacija...")
+7. BREZ naštevanja pridevnikov ("Inovativna, trajnostna, celovita in napredna rešitev")
+8. Naziv MORA odgovoriti na vprašanje: "Kaj ta projekt PRINESE / NAREDI?"
+9. Naziv je BLAGOVNA ZNAMKA projekta — jedrnat, zapomnljiv, strokoven
+
+VZORCI DOBRIH NAZIVOV:
+- "Digitalna preobrazba obrtniških veščin v čezmejnem prostoru"
+- "Krožno gospodarstvo v lesnopredelovalni industriji Podonavja"
+- "Zeleni prehod mobilnosti v srednje velikih mestih"
+- "Krepitev digitalnih kompetenc mladih na podeželju"
+- "Trajnostna prehranska veriga v alpskem prostoru"
+- "Medgeneracijski prenos znanj v kulturni dediščini"
+
+VZORCI SLABIH NAZIVOV (PREPOVEDANO):
+- "Projekt za razvoj inovativnih rešitev za trajnostno preobrazbo" (preveč generično)
+- "Razvijamo nove pristope k celovitemu reševanju izzivov" (stavek z glagolom)
+- "Inovativna, trajnostna, celovita in napredna rešitev" (naštevanje pridevnikov)
+- "GREENTRANS – Zelena preobrazba prometa" (vsebuje akronim — PREPOVEDANO)
+- "Projekt bo vzpostavil platformo za..." (stavek z glagolom — PREPOVEDANO)
+═══════════════════════════════════════════════════════════════════`
+};
+
+// ───────────────────────────────────────────────────────────────
+// MODE INSTRUCTIONS (fill / enhance / regenerate)
+// ───────────────────────────────────────────────────────────────
+
+export const MODE_INSTRUCTIONS: Record<string, Record<string, string>> = {
+  fill: {
+    en: `MODE: FILL MISSING ONLY.
+RULES:
+1. KEEP all existing non-empty fields exactly as they are — do NOT modify them.
+2. GENERATE professional content ONLY for fields that are empty strings ("") or missing.
+3. If a list has fewer items than recommended, ADD NEW ITEMS.
+4. Ensure valid JSON output.`,
+    si: `NAČIN: DOPOLNJEVANJE MANJKAJOČEGA.
+PRAVILA:
+1. OHRANI vsa obstoječa neprazna polja natančno takšna, kot so — NE spreminjaj jih.
+2. GENERIRAJ strokovno vsebino SAMO za polja, ki so prazni nizi ("") ali manjkajoča.
+3. Če ima seznam manj elementov od priporočenega, DODAJ NOVE ELEMENTE.
+4. Zagotovi veljaven JSON objekt.`
+  },
+  enhance: {
+    en: `MODE: PROFESSIONAL ENHANCEMENT OF EXISTING CONTENT.
+
+Task: PROFESSIONALLY ENHANCE, DEEPEN, and REFINE the existing content.
+
+RULES:
+1. PRESERVE the meaning and topic — do NOT change the thematic focus.
+2. ENHANCE: add EU terminology, deepen arguments with evidence.
+3. ADD CITATIONS from REAL sources.
+4. EXPAND short fields to 3–5 sentences.
+5. SUPPLEMENT: add new items if lists are short.
+6. CORRECT errors.
+7. NEVER REMOVE existing items.
+8. ZERO HALLUCINATION — if unsure: "[Insert verified data: ...]".
+9. NO MARKDOWN: do not use ** ## \`.
+10. HUMANIZE: write like an experienced human consultant, vary sentence structure.
+11. Ensure valid JSON output.`,
+    si: `NAČIN: STROKOVNA IZBOLJŠAVA OBSTOJEČEGA BESEDILA.
+
+Naloga: STROKOVNO IZBOLJŠAJ, POGLOBI in DODELAJ obstoječo vsebino.
+
+PRAVILA:
+1. OHRANI pomen in tematiko — NE spreminjaj vsebinskega fokusa.
+2. IZBOLJŠAJ: dodaj strokovno EU terminologijo, poglobi argumente.
+3. DODAJ CITATE iz REALNIH virov.
+4. PODALJŠAJ: kratka polja razširi na vsaj 3–5 stavkov.
+5. DOPOLNI: če je seznam kratek, DODAJ NOVE ELEMENTE.
+6. POPRAVI napake.
+7. NE BRIŠI obstoječih elementov.
+8. NE HALUCINIRAJ — če nisi prepričan: "[Vstavite preverjen podatek: ...]".
+9. BREZ MARKDOWN: ne uporabljaj ** ## \`.
+10. HUMANIZIRAJ: piši kot izkušen človeški svetovalec, variraj stavke.
+11. Zagotovi veljaven JSON objekt.`
+  },
+  regenerate: {
+    en: `MODE: FULL REGENERATION.
+Generate completely new, comprehensive, professional content. Every description MUST contain citations from REAL sources. NO markdown (**, ##, \`). Write like an experienced human consultant — vary sentence structures. If unknown: '[Insert verified data: ...]'.`,
+    si: `NAČIN: POPOLNA PONOVNA GENERACIJA.
+Generiraj popolnoma nov, celovit, strokoven odgovor. Vsak opis MORA vsebovati citate iz REALNIH virov. BREZ markdown (**, ##, \`). Piši kot izkušen človeški svetovalec — variraj stavčne strukture. Če ne poznaš podatka: '[Vstavite preverjen podatek: ...]'.`
+  }
+};
+
+// ───────────────────────────────────────────────────────────────
+// QUALITY GATES (per section)
+// ───────────────────────────────────────────────────────────────
+
+export const QUALITY_GATES: Record<string, Record<string, string[]>> = {
+  problemAnalysis: {
+    en: [
+      'Every cause description contains ≥1 specific citation in format (Source Name, Year)',
+      'Every consequence description contains ≥1 specific citation in format (Source Name, Year)',
+      'The core problem statement includes at least one quantitative indicator',
+      'Every description paragraph has ≥3 substantive, analytical sentences — no filler',
+      'No vague phrases such as "various stakeholders", "different aspects" — be specific',
+      'At least 4 distinct, non-overlapping causes are listed',
+      'At least 4 distinct consequences are listed, at least one referencing EU-level policy',
+      'Causes are logically ordered: root causes first, then proximate causes',
+      'All cited sources are real, verifiable — do NOT fabricate statistics',
+      'If unsure about a number, use "[Insert verified data: ...]" placeholder',
+      'No banned AI phrases (leverage, synergy, holistic, foster, cutting-edge, etc.)',
+      'Sentence lengths vary — no 3+ consecutive sentences of similar length',
+    ],
+    si: [
+      'Vsak opis vzroka vsebuje ≥1 specifičen citat v formatu (Ime vira, Leto)',
+      'Vsak opis posledice vsebuje ≥1 specifičen citat v formatu (Ime vira, Leto)',
+      'Izjava o osrednjem problemu vključuje vsaj en kvantitativni kazalnik',
+      'Vsak opisni odstavek ima ≥3 vsebinske, analitične stavke — brez polnil',
+      'Brez nejasnih fraz kot "različni deležniki", "različni vidiki" — bodi specifičen',
+      'Navedenih je vsaj 5 ločenih, neprekrivajočih se vzrokov',
+      'Navedene so vsaj 4 ločene posledice, vsaj ena se sklicuje na EU politiko',
+      'Vzroki so logično urejeni: najprej temeljni vzroki, nato neposredni',
+      'Vsi navedeni viri so resnični, preverljivi — NE izmišljuj statistik',
+      'Če nisi prepričan o številki, uporabi "[Vstavite preverjen podatek: ...]"',
+      'Brez prepovedanih AI fraz (sinergije, holističen, celosten, katalizator itd.)',
+      'Dolžine stavkov se razlikujejo — brez 3+ zaporednih stavkov enake dolžine',
+    ]
+  },
+  projectIdea: {
+    en: [
+      'projectTitle is a concise noun phrase (30–200 chars), NO acronym, NO full sentence',
+      'State of the Art references ≥3 specific existing projects/studies with names and years',
+      'Proposed Solution BEGINS with a 5–8 sentence introductory paragraph BEFORE any phases',
+      'Proposed Solution phases use plain text headers (no ** or ## markdown)',
+      'Main Aim is one comprehensive sentence starting with an infinitive verb',
+      'At least 3 relevant EU policies listed with specific alignment descriptions',
+      'All readiness levels include a specific justification (not just the number)',
+      'All cited projects and policies are real and verifiable — no fabricated names',
+      'No banned AI phrases — write like a senior human consultant',
+      'Sentence lengths and structures vary naturally throughout',
+    ],
+    si: [
+      'projectTitle je jedrnata imenski izraz (30–200 znakov), BREZ akronima, BREZ celega stavka',
+      'Stanje tehnike navaja ≥3 specifične obstoječe projekte/študije z imeni in letnicami',
+      'Predlagana rešitev se ZAČNE s 5–8 stavkov dolgim uvodnim odstavkom PRED fazami',
+      'Faze predlagane rešitve uporabljajo golo besedilo za naslove (brez ** ali ## markdown)',
+      'Glavni cilj je en celovit stavek, ki se začne z glagolom v nedoločniku',
+      'Navedene so vsaj 3 relevantne EU politike s specifičnimi opisi usklajenosti',
+      'Vse stopnje pripravljenosti vključujejo specifično utemeljitev (ne samo številke)',
+      'Vsi navedeni projekti in politike so resnični in preverljivi — brez izmišljenih imen',
+      'Brez prepovedanih AI fraz — piši kot izkušen človeški svetovalec',
+      'Dolžine in strukture stavkov se naravno razlikujejo skozi besedilo',
+    ]
+  },
+  _default: {
+    en: [
+      'Every description has ≥3 substantive sentences',
+      'All titles begin with an infinitive verb',
+      'No vague filler phrases — be specific and analytical',
+      'Content is directly linked to the project context and problem analysis',
+      'Any cited source must be real and verifiable',
+      'No markdown formatting (no **, no ##, no `) in output text',
+      'No banned AI phrases (leverage, synergy, holistic, foster, cutting-edge, etc.)',
+      'Sentence lengths vary — no 3+ consecutive sentences of similar length',
+    ],
+    si: [
+      'Vsak opis ima ≥3 vsebinske stavke',
+      'Vsi naslovi se začnejo z glagolom v nedoločniku',
+      'Brez nejasnih fraz — bodi specifičen in analitičen',
+      'Vsebina je neposredno povezana s kontekstom projekta in analizo problemov',
+      'Vsak naveden vir mora biti resničen in preverljiv',
+      'Brez markdown formatiranja (brez **, brez ##, brez `)',
+      'Brez prepovedanih AI fraz (sinergije, holističen, celosten, katalizator itd.)',
+      'Dolžine stavkov se razlikujejo — brez 3+ zaporednih stavkov enake dolžine',
+    ]
+  }
+};
+
+// ───────────────────────────────────────────────────────────────
+// SECTION TASK INSTRUCTIONS
+// Templates with {{placeholders}} replaced at runtime
+// ───────────────────────────────────────────────────────────────
+
+export const SECTION_TASK_INSTRUCTIONS: Record<string, Record<string, string>> = {
+  problemAnalysis: {
+    en: `USER INPUT FOR CORE PROBLEM:
+{{userInput}}
+
+TASK: Based STRICTLY on the USER INPUT ABOVE, create (or complete) a detailed problem analysis.
+
+MANDATORY:
+- Title and description MUST be directly related to user's input.
+- Do NOT invent unrelated topics.
+- Every CAUSE: title + 3–5 sentence description + at least 1 citation from REAL source.
+- Every CONSEQUENCE: title + 3–5 sentence description + at least 1 citation from REAL source.
+- Core problem MUST include a quantitative indicator.
+- NEVER write generic descriptions without evidence.
+- If unknown: "[Insert verified data: <description>]".
+- NO markdown (**, ##, \`).
+- Write like an experienced human consultant — vary sentence structures.`,
+    si: `UPORABNIKOV VNOS ZA OSREDNJI PROBLEM:
+{{userInput}}
+
+NALOGA: Na podlagi ZGORNJEGA VNOSA ustvari (ali dopolni) podrobno analizo problemov.
+
+OBVEZNE ZAHTEVE:
+- Generirani naslov in opis MORATA biti neposredno povezana z uporabnikovim vnosom.
+- NE izmišljuj nepovezanih tem.
+- Vsak VZROK: naslov + opis s 3–5 stavki + vsaj 1 citat iz REALNEGA vira.
+- Vsaka POSLEDICA: naslov + opis s 3–5 stavki + vsaj 1 citat iz REALNEGA vira.
+- Osrednji problem MORA vključevati kvantitativni kazalnik.
+- NIKOLI generičnih opisov brez podatkov.
+- Če ne poznaš podatka: "[Vstavite preverjen podatek: <opis>]".
+- BREZ markdown (**, ##, \`).
+- Piši kot izkušen človeški svetovalec — variraj stavke.`
+  },
+  projectIdea: {
+    en: `{{titleContext}}Based on the problem analysis, develop (or complete) a comprehensive project idea.
+
+MANDATORY:
+- State of the Art MUST reference at least 3 REAL existing projects/studies with names and years.
+- Proposed Solution MUST BEGIN with a COMPREHENSIVE INTRODUCTORY PARAGRAPH (5–8 sentences) before phases.
+- Phase headers: plain text "Phase 1: Title" — NOT "**Phase 1: Title**".
+- EU policies must be real and verifiable.
+- If unknown project: "[Insert verified project: <topic>]".
+- NO markdown (**, ##, \`).
+- Write like an experienced human consultant — vary sentences, avoid AI phrases.`,
+    si: `{{titleContext}}Na podlagi analize problemov razvij (ali dopolni) celovito projektno idejo.
+
+OBVEZNE ZAHTEVE:
+- Stanje tehnike MORA navajati vsaj 3 RESNIČNE obstoječe projekte/študije z imeni in letnicami.
+- Predlagana rešitev MORA začeti s CELOVITIM UVODNIM ODSTAVKOM (5–8 stavkov) pred fazami.
+- Faze: golo besedilo "Faza 1: Naslov" — NE "**Faza 1: Naslov**".
+- EU politike morajo biti resnične in preverljive.
+- Če ne poznaš projekta: "[Vstavite preverjen projekt: <tematika>]".
+- BREZ markdown (**, ##, \`).
+- Piši kot izkušen človeški svetovalec — variraj stavke, izogibaj se AI frazam.`
+  },
+  generalObjectives: {
+    en: 'Define 3–5 general objectives.\nMANDATORY: Title with infinitive verb. At least 3 substantive sentences. No markdown. Vary sentence structures.',
+    si: 'Opredeli 3–5 splošnih ciljev.\nOBVEZNO: Naslov z nedoločniškim glagolom. Vsaj 3 vsebinske stavke. BREZ markdown. Variraj stavčne strukture.'
+  },
+  specificObjectives: {
+    en: 'Define at least 5 S.M.A.R.T. objectives.\nMANDATORY: Title with infinitive verb. Measurable KPI. No markdown. Vary sentence structures.',
+    si: 'Opredeli vsaj 5 S.M.A.R.T. ciljev.\nOBVEZNO: Naslov z nedoločniškim glagolom. Merljiv KPI. BREZ markdown. Variraj stavčne strukture.'
+  },
+  projectManagement: {
+    en: 'Create a DETAILED project management section.\nMust include: coordination, steering committee, WP leaders, decision-making, quality, conflicts, reporting.\nNo markdown. Write like an experienced consultant.',
+    si: 'Ustvari PODROBEN razdelek o upravljanju projekta.\nVsebovati mora: koordinacijo, usmerjevalni odbor, WP voditelje, odločanje, kakovost, konflikte, poročanje.\nBREZ markdown. Piši kot izkušen svetovalec.'
+  },
+  activities: {
+    en: `Project starts: {{projectStart}}. All task dates on or after this.
+Design Work Packages based on objectives.
+MANDATORY: Title with infinitive verb, at least 3 tasks, 1 milestone, 1 deliverable.
+Deliverables verifiable via desk review. No vague descriptions. No markdown. Vary sentences.`,
+    si: `Začetek projekta: {{projectStart}}. Vsi datumi nalog na ali po tem datumu.
+Oblikuj delovne sklope na podlagi ciljev.
+OBVEZNO: Naslov z nedoločniškim glagolom, vsaj 3 naloge, 1 mejnik, 1 dosežek.
+Dosežki preverljivi z desk review. BREZ nejasnih opisov. BREZ markdown. Variraj stavke.`
+  },
+  outputs: {
+    en: 'At least 6 detailed tangible outputs.\nTitle with infinitive verb, description 3+ sentences, measurable indicator.\nNo markdown. Vary sentences.',
+    si: 'Vsaj 6 podrobnih neposrednih rezultatov.\nNaslov z nedoločniškim glagolom, opis 3+ stavki, merljiv kazalnik.\nBREZ markdown. Variraj stavke.'
+  },
+  outcomes: {
+    en: 'At least 6 medium-term outcomes.\nTitle with infinitive verb, description 3+ sentences, measurable indicator.\nNo markdown. Vary sentences.',
+    si: 'Vsaj 6 vmesnih učinkov.\nNaslov z nedoločniškim glagolom, opis 3+ stavki, merljiv kazalnik.\nBREZ markdown. Variraj stavke.'
+  },
+  impacts: {
+    en: 'At least 6 long-term impacts.\nTitle with infinitive verb, description 3+ sentences with Pathway to Impact, measurable indicator.\nNo markdown. Vary sentences.',
+    si: 'Vsaj 6 dolgoročnih vplivov.\nNaslov z nedoločniškim glagolom, opis 3+ stavki s Pathway to Impact, merljiv kazalnik.\nBREZ markdown. Variraj stavke.'
+  },
+  risks: {
+    en: 'At least 5 risks (Technical, Social, Economic).\nSpecific title, detailed description, likelihood, impact, mitigation.\nNo markdown. Vary sentences.',
+    si: 'Vsaj 5 tveganj (Tehnično, Družbeno, Ekonomsko).\nSpecifičen naslov, podroben opis, verjetnost, vpliv, ukrepi za ublažitev.\nBREZ markdown. Variraj stavke.'
+  },
+  kers: {
+    en: 'At least 5 Key Exploitable Results.\nSpecific title, detailed description, exploitation strategy.\nNo markdown. Vary sentences.',
+    si: 'Vsaj 5 ključnih izkoriščljivih rezultatov.\nSpecifičen naslov, podroben opis, strategija izkoriščanja.\nBREZ markdown. Variraj stavke.'
+  }
+};
+
+// ───────────────────────────────────────────────────────────────
+// DEFAULT INSTRUCTIONS (original structure — unchanged)
 // ───────────────────────────────────────────────────────────────
 
 const DEFAULT_INSTRUCTIONS = {
-  version: '3.4',
+  version: '4.0',
   lastUpdated: '2026-02-14',
 
   GLOBAL_RULES: `
@@ -274,8 +805,11 @@ CHAPTER 2 – PROJECT IDEA
 PURPOSE: Present the project's core concept, positioning it within the existing landscape and demonstrating its added value. This chapter bridges the problem analysis (Chapter 1) with the goal framework (Chapters 3–4).
 
 PROJECT TITLE
-- Maximum 15 words. Descriptive, memorable, clearly conveys the project's purpose.
-- Avoid generic terms like "project", "initiative", or "programme" as the primary descriptor.
+- Between 30 and 200 characters. Descriptive, memorable, clearly conveys the project's purpose.
+- Must be a concise NOUN PHRASE — not a full sentence, not a verb form.
+- Must NOT contain an acronym (generated separately).
+- Must NOT contain generic terms like "project", "initiative", or "programme" as the primary descriptor.
+- Avoid generic AI phrases, comma-separated enumerations, or adjective chains.
 
 PROJECT ACRONYM
 - 3–8 uppercase characters. Pronounceable and ideally meaningful.
@@ -455,7 +989,7 @@ IMPACT PATHWAY NARRATIVE
   },
 
   FIELD_RULES: {
-    projectTitle: "Maximum 15 words. Descriptive and memorable. No generic filler words like 'project' or 'initiative' as the main descriptor. Must clearly convey the project's thematic focus and geographical or sectoral scope.",
+    projectTitle: "Between 30 and 200 characters. Must be a concise noun phrase — not a full sentence, not a verb form. Must NOT contain an acronym (generated separately). Must NOT contain generic terms like 'project' or 'initiative' as the primary descriptor. Must clearly convey the project's thematic focus and geographical or sectoral scope. Must answer: 'What does this project deliver/achieve?' Must be a project BRAND — concise, memorable, professional. No comma-separated enumerations, no adjective chains, no conjugated verbs.",
     projectAcronym: "3–8 uppercase characters. Should be pronounceable and, if possible, form a meaningful word or abbreviation related to the project topic. Do not use periods or spaces.",
     mainAim: "Exactly one sentence. Must begin with the infinitive particle 'To' followed by a verb. Must include: the core action, the target group or sector, and the expected change or achievement. Example: 'To establish a cross-border digital innovation hub that reduces youth unemployment in the Danube region by 15 % within three years.'",
     stateOfTheArt: "Must reference at least 3 specific, real, verifiable projects or initiatives. For each, provide: project name, funding programme, implementation period, and key results. ALL names must be real — do NOT invent projects. If unsure, use '[Insert verified project: <topic>]'. Conclude with a clear statement of the gap that this project will fill.",
@@ -570,6 +1104,64 @@ export function getTranslationRules(_language?: string) {
 export function getSummaryRules(_language?: string) {
   const instructions = getAppInstructions();
   return instructions.SUMMARY_RULES || '';
+}
+
+// NEW v4.0: Typed accessors for migrated rule blocks
+
+export function getLanguageDirective(language: 'en' | 'si'): string {
+  return LANGUAGE_DIRECTIVES[language] || LANGUAGE_DIRECTIVES.en;
+}
+
+export function getLanguageMismatchNotice(detectedLang: 'en' | 'si', uiLanguage: 'en' | 'si'): string {
+  if (detectedLang === uiLanguage) return '';
+  const detectedName = detectedLang === 'si' ? 'Slovenian' : 'English';
+  const targetName = uiLanguage === 'si' ? 'Slovenian' : 'English';
+  return LANGUAGE_MISMATCH_TEMPLATE
+    .replace(/\{\{detectedName\}\}/g, detectedName)
+    .replace(/\{\{targetName\}\}/g, targetName);
+}
+
+export function getAcademicRigorRules(language: 'en' | 'si'): string {
+  return ACADEMIC_RIGOR_RULES[language] || ACADEMIC_RIGOR_RULES.en;
+}
+
+export function getHumanizationRules(language: 'en' | 'si'): string {
+  return HUMANIZATION_RULES[language] || HUMANIZATION_RULES.en;
+}
+
+export function getProjectTitleRules(language: 'en' | 'si'): string {
+  return PROJECT_TITLE_RULES[language] || PROJECT_TITLE_RULES.en;
+}
+
+export function getModeInstruction(mode: string, language: 'en' | 'si'): string {
+  const modeBlock = MODE_INSTRUCTIONS[mode] || MODE_INSTRUCTIONS.regenerate;
+  return modeBlock[language] || modeBlock.en;
+}
+
+export function getQualityGate(sectionKey: string, language: 'en' | 'si'): string {
+  const checks = QUALITY_GATES[sectionKey]?.[language] || QUALITY_GATES._default[language] || QUALITY_GATES._default.en;
+  const header = language === 'si'
+    ? '═══ KONTROLA KAKOVOSTI — PREVERI PRED ODDAJO ODGOVORA ═══'
+    : '═══ QUALITY GATE — VERIFY BEFORE RETURNING YOUR RESPONSE ═══';
+  const footer = language === 'si'
+    ? 'Če katerakoli točka NI izpolnjena, POPRAVI odgovor preden ga vrneš.'
+    : 'If ANY check FAILS, REVISE your response before returning it.';
+  return `\n${header}\n${checks.map((c: string, i: number) => `☐ ${i + 1}. ${c}`).join('\n')}\n${footer}\n═══════════════════════════════════════════════════════════════════`;
+}
+
+export function getSectionTaskInstruction(
+  sectionKey: string,
+  language: 'en' | 'si',
+  placeholders: Record<string, string> = {}
+): string {
+  const template = SECTION_TASK_INSTRUCTIONS[sectionKey]?.[language]
+    || SECTION_TASK_INSTRUCTIONS[sectionKey]?.en
+    || '';
+  let result = template;
+  for (const [key, value] of Object.entries(placeholders)) {
+    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+  }
+  return result;
 }
 
 export function getFullInstructions() {
