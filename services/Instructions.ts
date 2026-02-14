@@ -1,12 +1,21 @@
 // services/Instructions.ts
 // ═══════════════════════════════════════════════════════════════════
 // SINGLE SOURCE OF TRUTH for ALL AI content rules.
-// Version 4.1 – 2026-02-14
+// Version 4.2 – 2026-02-14
 //
 // ARCHITECTURE PRINCIPLE:
 //   This file is the ONLY place where content rules are defined.
 //   geminiService.ts reads from here — it has ZERO own rules.
 //   Anything changed here IS THE LAW — no exceptions.
+//
+// CHANGES v4.2:
+//   - FIXED: projectManagement section now has TWO distinct parts:
+//     * description field → ALL detailed narrative content (Implementation)
+//     * structure fields → SHORT role labels ONLY (for Organigram chart)
+//   - Updated SECTION_TASK_INSTRUCTIONS.projectManagement (EN + SI)
+//   - Updated CHAPTERS.chapter5_activities section 5A to enforce
+//     short labels in structure fields and full prose in description
+//   - All previous v4.1 changes preserved.
 //
 // CHANGES v4.1:
 //   - TITLE FORMAT RULES: Infinitive verb ONLY for objectives.
@@ -509,8 +518,46 @@ OBVEZNE ZAHTEVE:
     si: 'Opredeli vsaj 5 S.M.A.R.T. ciljev.\nOBVEZNO: Naslov MORA uporabljati NEDOLOČNIK (npr. "Razviti…", "Povečati…"). Merljiv KPI. BREZ markdown. Variraj stavčne strukture.'
   },
   projectManagement: {
-    en: 'Create a DETAILED project management section.\nMust include: coordination, steering committee, WP leaders, decision-making, quality, conflicts, reporting.\nNo markdown. Write like an experienced consultant.',
-    si: 'Ustvari PODROBEN razdelek o upravljanju projekta.\nVsebovati mora: koordinacijo, usmerjevalni odbor, WP voditelje, odločanje, kakovost, konflikte, poročanje.\nBREZ markdown. Piši kot izkušen svetovalec.'
+    en: `Create a DETAILED project management section with TWO distinct parts:
+
+PART 1 — DESCRIPTION FIELD (projectManagement.description):
+This is the MAIN content field. It MUST contain a comprehensive text (minimum 500 words) covering ALL of the following:
+1. MANAGEMENT STRUCTURE – Roles with EU abbreviations: PK, UO, SO, VDS. Responsibilities and authority of each.
+2. DECISION-MAKING MECHANISMS – Operational, strategic, escalation levels. Voting, quorum, meeting frequency.
+3. QUALITY ASSURANCE – Internal reviews, peer evaluations, external audits, benchmarks, reporting standards.
+4. RISK MANAGEMENT APPROACH – Identification, assessment, monitoring, mitigation. Reference risk register (5C).
+5. INTERNAL COMMUNICATION – Tools, schedules, reporting chains, document management.
+6. CONFLICT RESOLUTION – Escalation: informal → mediation by coordinator → formal arbitration.
+7. DATA MANAGEMENT AND OPEN SCIENCE – FAIR principles, access types, repository details.
+Write as flowing prose paragraphs, not bullet lists. No markdown. Write like an experienced consultant.
+
+PART 2 — STRUCTURE FIELDS (projectManagement.structure):
+These fields appear as LABELS in the organigram chart. They MUST contain ONLY short role titles (max 5–8 words each):
+- coordinator: e.g., "Project Coordinator (PK)"
+- steeringCommittee: e.g., "Steering Committee (UO)"
+- advisoryBoard: e.g., "Advisory Board (SO)"
+- wpLeaders: e.g., "WP Leaders (VDS)"
+CRITICAL: Do NOT put descriptions, explanations, or long text in structure fields. These are chart labels ONLY. All detailed descriptions go in the description field above.`,
+    si: `Ustvari PODROBEN razdelek o upravljanju projekta z DVEMA ločenima deloma:
+
+DEL 1 — POLJE OPIS (projectManagement.description):
+To je GLAVNO vsebinsko polje. MORA vsebovati celovito besedilo (najmanj 500 besed), ki pokriva VSE naslednje:
+1. UPRAVLJAVSKA STRUKTURA – Vloge z EU kraticami: PK, UO, SO, VDS. Odgovornosti in pooblastila vsake vloge.
+2. MEHANIZMI ODLOČANJA – Operativna, strateška, eskalacijska raven. Glasovanje, sklepčnost, pogostost sestankov.
+3. ZAGOTAVLJANJE KAKOVOSTI – Notranje revizije, recenzije, zunanji pregledi, merila, standardi poročanja.
+4. PRISTOP K OBVLADOVANJU TVEGANJ – Identifikacija, ocena, spremljanje, ublažitev. Sklic na register tveganj (5C).
+5. NOTRANJA KOMUNIKACIJA – Orodja, urniki, poročevalske verige, upravljanje dokumentov.
+6. REŠEVANJE KONFLIKTOV – Eskalacija: neformalno → mediacija koordinatorja → formalna arbitraža.
+7. UPRAVLJANJE PODATKOV IN ODPRTA ZNANOST – Načela FAIR, vrste dostopa, podrobnosti repozitorija.
+Piši v tekočih odstavkih, ne v seznamih s pikicami. BREZ markdown. Piši kot izkušen svetovalec.
+
+DEL 2 — POLJA STRUKTURE (projectManagement.structure):
+Ta polja se prikazujejo kot OZNAKE v organizacijski shemi. MORAJO vsebovati SAMO kratke nazive vlog (največ 5–8 besed):
+- coordinator: npr. "Koordinator projekta (PK)"
+- steeringCommittee: npr. "Usmerjevalni odbor (UO)"
+- advisoryBoard: npr. "Svetovalni odbor (SO)"
+- wpLeaders: npr. "Vodje delovnih sklopov (VDS)"
+KLJUČNO: NE vstavljaj opisov, razlag ali dolgih besedil v polja strukture. To so SAMO oznake za shemo. Vsi podrobni opisi gredo v polje opis zgoraj.`
   },
   activities: {
     en: `Project starts: {{projectStart}}. All task dates on or after this.
@@ -559,11 +606,11 @@ Dosežki preverljivi z desk review. BREZ nejasnih opisov. BREZ markdown. Variraj
 };
 
 // ───────────────────────────────────────────────────────────────
-// DEFAULT INSTRUCTIONS (original structure — updated v4.1)
+// DEFAULT INSTRUCTIONS (original structure — updated v4.2)
 // ───────────────────────────────────────────────────────────────
 
 const DEFAULT_INSTRUCTIONS = {
-  version: '4.1',
+  version: '4.2',
   lastUpdated: '2026-02-14',
 
   GLOBAL_RULES: `
@@ -959,19 +1006,30 @@ TITLE FORMAT REMINDER: Work package, task, milestone, and deliverable titles use
 
 ─── 5A. PROJECT MANAGEMENT ───
 
-ORGANIGRAM
-- Display ONLY role names/function titles (e.g., "Project Coordinator", "WP Lead", "Quality Manager").
-- Do NOT include personal names, emails, or institutional names.
+This section has TWO distinct components with DIFFERENT purposes:
 
-PROJECT MANAGEMENT DESCRIPTION (minimum 500 words)
-Must cover ALL sections, clearly separated:
-1. MANAGEMENT STRUCTURE – Roles with EU abbreviations: PK, UO, SO, VDS. Responsibilities and authority.
-2. DECISION-MAKING MECHANISMS – Operational, strategic, escalation levels. Voting, quorum, meeting frequency.
-3. QUALITY ASSURANCE – Internal reviews, peer evaluations, external audits, benchmarks, reporting standards.
-4. RISK MANAGEMENT APPROACH – Identification, assessment, monitoring, mitigation. Reference risk register (5C).
-5. INTERNAL COMMUNICATION – Tools, schedules, reporting chains, document management.
-6. CONFLICT RESOLUTION – Escalation: informal → mediation by coordinator → formal arbitration.
-7. DATA MANAGEMENT AND OPEN SCIENCE – If project involves data collection: FAIR principles (Findable, Accessible, Interoperable, Reusable). For each data deliverable: specify access type (Open Access / Embargo / Restricted with justification). Example: "To establish a FAIR-compliant data repository ensuring open access to all anonymised research findings within six months of publication, using the Zenodo platform and DOI registration." If no data collection: state explicitly.
+A1. IMPLEMENTATION DESCRIPTION (projectManagement.description field)
+This is the main narrative content. Minimum 500 words of flowing prose.
+Must cover ALL of the following sections, clearly separated by double line breaks:
+1. MANAGEMENT STRUCTURE – Roles with EU abbreviations: PK (Project Coordinator), UO (Steering Committee), SO (Advisory Board), VDS (WP Leaders). Describe responsibilities and authority of each role IN DETAIL.
+2. DECISION-MAKING MECHANISMS – Operational decisions (PK), strategic decisions (UO), escalation procedures. Voting rules, quorum requirements, meeting frequency.
+3. QUALITY ASSURANCE – Internal reviews, peer evaluations, external audits, benchmarks, reporting standards. Specify frequency and responsible persons/roles.
+4. RISK MANAGEMENT APPROACH – How risks are identified, assessed, monitored, and mitigated. Reference the risk register (Section 5C).
+5. INTERNAL COMMUNICATION – Tools (e.g., MS Teams, shared drive), meeting schedules, reporting chains, document management protocols.
+6. CONFLICT RESOLUTION – Three-step escalation: informal resolution → mediation by coordinator → formal arbitration by steering committee.
+7. DATA MANAGEMENT AND OPEN SCIENCE – If project involves data collection: FAIR principles (Findable, Accessible, Interoperable, Reusable). For each data deliverable: specify access type (Open Access / Embargo / Restricted with justification). If no data collection: state explicitly.
+
+CRITICAL RULE: ALL detailed descriptions of roles, processes, and mechanisms go EXCLUSIVELY in the description field. Do NOT put long text in the structure fields.
+
+A2. ORGANIGRAM STRUCTURE (projectManagement.structure fields)
+These fields are displayed as SHORT LABELS inside the visual organigram chart.
+They MUST contain ONLY brief role titles (maximum 5–8 words each):
+- coordinator: Short role title, e.g., "Project Coordinator (PK)" or "Koordinator projekta (PK)"
+- steeringCommittee: Short role title, e.g., "Steering Committee (UO)" or "Usmerjevalni odbor (UO)"
+- advisoryBoard: Short role title, e.g., "Advisory Board (SO)" or "Svetovalni odbor (SO)"
+- wpLeaders: Short role title, e.g., "WP Leaders (VDS)" or "Vodje DS (VDS)"
+
+FORBIDDEN in structure fields: descriptions, explanations, responsibilities, meeting frequencies, or any text longer than 8 words. The organigram is a VISUAL CHART — it shows roles only, not descriptions.
 
 ─── 5B. WORK PACKAGES ───
 
