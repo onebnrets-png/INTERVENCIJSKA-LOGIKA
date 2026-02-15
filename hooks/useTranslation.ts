@@ -1,7 +1,19 @@
 // hooks/useTranslation.ts
 // ═══════════════════════════════════════════════════════════════
 // Language switching and smart diff-based translation.
-// Errors are handled gracefully with user-friendly messages.
+// v2.0 — 2026-02-15 — RELIABILITY OVERHAUL
+//
+// CHANGES:
+//   - Supports forceTranslateAll parameter from translationDiffService v4.0.
+//   - Enhanced stats display: shows verified, retried counts.
+//   - "Update Translation" modal now uses forceTranslateAll = true
+//     to re-translate ALL fields (not just changed ones) — guarantees
+//     complete, correct translation when user explicitly requests it.
+//   - "Translate with AI" (first-time) uses normal diff-based mode.
+//   - Added locales for new modal option: "Prevedi vse znova" / "Re-translate All".
+//   - Better error messages with actionable suggestions.
+//
+// v1.0 — Initial version with diff-based translation.
 // ═══════════════════════════════════════════════════════════════
 
 import { useCallback } from 'react';
@@ -106,16 +118,24 @@ export const useTranslation = ({
   );
 
   // ─── Perform AI translation ────────────────────────────────────
+  // ★ v2.0: Added forceAll parameter — when true, re-translates
+  // every single field regardless of hash status.
 
   const performTranslation = useCallback(
-    async (targetLang: 'en' | 'si', sourceData: any) => {
+    async (targetLang: 'en' | 'si', sourceData: any, forceAll: boolean = false) => {
       if (!ensureApiKey()) {
         setIsSettingsOpen(true);
         return;
       }
 
       const tTarget = TEXT[targetLang] || TEXT['en'];
-      setIsLoading(`${tTarget.generating} (Smart Translation)...`);
+      const loadingMsg = forceAll
+        ? (targetLang === 'si'
+            ? `${tTarget.generating} (Popoln prevod vseh polj)...`
+            : `${tTarget.generating} (Full re-translation of all fields)...`)
+        : `${tTarget.generating} (Smart Translation)...`;
+
+      setIsLoading(loadingMsg);
       setError(null);
 
       try {
@@ -124,19 +144,20 @@ export const useTranslation = ({
           currentProjectId
         );
 
+        // ★ v2.0: Pass forceAll to smartTranslateProject
         const { translatedData, stats } = await smartTranslateProject(
           sourceData,
           targetLang,
           existingTargetData,
-          currentProjectId!
+          currentProjectId!,
+          forceAll  // ★ forceTranslateAll
         );
 
         // Check if translation actually succeeded
         if (stats.failed > 0 && stats.translated === 0) {
-          // ALL failed — don't switch, show friendly error
           throw new Error(
             stats.failed > 50
-              ? 'credits'  // Likely a quota issue if all batches failed
+              ? 'credits'
               : 'Translation failed for all fields'
           );
         }
@@ -151,15 +172,18 @@ export const useTranslation = ({
           [targetLang]: translatedData,
         }));
 
+        // ★ v2.0: Enhanced stats display
         if (stats.failed > 0) {
-          // Partial success — switch but warn
           setError(
             targetLang === 'si'
-              ? `Prevod delno uspel: ${stats.translated}/${stats.changed} polj prevedenih. Nekatera polja poskusite ponovno.`
-              : `Translation partially done: ${stats.translated}/${stats.changed} fields translated. Try again for remaining fields.`
+              ? `Prevod delno uspel: ${stats.translated}/${stats.changed} polj prevedenih (${stats.verified} preverjenih, ${stats.retried} ponovljenih). ${stats.failed} polj ni uspelo — poskusite ponovno.`
+              : `Translation partially done: ${stats.translated}/${stats.changed} fields (${stats.verified} verified, ${stats.retried} retried). ${stats.failed} fields failed — try again.`
           );
         } else if (stats.changed === 0) {
           console.log('[Translation] No changes detected – all fields up to date.');
+        } else {
+          // ★ v2.0: Success message
+          console.log(`[Translation] Complete: ${stats.translated} fields translated, ${stats.verified} verified, ${stats.retried} retried.`);
         }
       } catch (e: any) {
         handleTranslationError(e, targetLang);
@@ -231,7 +255,7 @@ export const useTranslation = ({
 
       const tCurrent = TEXT[language] || TEXT['en'];
 
-      // KEY FIX: Check if cached version is ACTUALLY in the target language
+      // Check if cached version is ACTUALLY in the target language
       const cachedHasContent = hasContent(cachedVersion);
       const cachedIsCorrectLanguage = cachedHasContent && isDataInCorrectLanguage(cachedVersion, newLang);
 
@@ -246,7 +270,9 @@ export const useTranslation = ({
           cancelText: tCurrent.modals.cancel,
           onConfirm: () => {
             closeModal();
-            performTranslation(newLang, projectData);
+            // ★ v2.0: First-time translation uses forceAll = true
+            // to guarantee COMPLETE translation (no diff shortcuts)
+            performTranslation(newLang, projectData, true);
           },
           onSecondary: () => {
             closeModal();
@@ -257,18 +283,26 @@ export const useTranslation = ({
         return;
       }
 
-      // Unsaved changes → ask to update translation or just switch
+      // ★ v2.0: Unsaved changes → offer three options:
+      // 1. Update only changed fields (smart diff)
+      // 2. Re-translate ALL fields (force)
+      // 3. Switch without updating
       if (hasUnsavedTranslationChanges) {
+        const updateMsg = language === 'si'
+          ? 'Vsebina v trenutnem jeziku je bila spremenjena. Izberite način posodobitve prevoda:'
+          : 'Content in the current language has been modified. Choose how to update the translation:';
+
         setModalConfig({
           isOpen: true,
           title: tCurrent.modals.updateTranslationTitle,
-          message: tCurrent.modals.updateTranslationMsg,
-          confirmText: tCurrent.modals.updateBtn,
-          secondaryText: tCurrent.modals.switchBtn,
+          message: updateMsg,
+          confirmText: tCurrent.modals.updateBtn,       // "Update Translation (AI)" — smart diff
+          secondaryText: tCurrent.modals.switchBtn,      // "Switch without Update"
           cancelText: tCurrent.modals.cancel,
           onConfirm: () => {
             closeModal();
-            performTranslation(newLang, projectData);
+            // Smart diff — only translate changed fields
+            performTranslation(newLang, projectData, false);
           },
           onSecondary: () => {
             closeModal();
@@ -279,7 +313,7 @@ export const useTranslation = ({
         return;
       }
 
-      // Cached version exists, is in correct language, no changes → just switch
+      // Cached version exists, correct language, no changes → just switch
       performSwitchOnly(newLang, cachedVersion);
     },
     [
