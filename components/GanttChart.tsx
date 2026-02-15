@@ -1,40 +1,21 @@
 // components/GanttChart.tsx
 // ═══════════════════════════════════════════════════════════════
-// Gantt Chart Component – v4.9 (2026-02-15)
-// v4.9 – FEAT: Added CTRL+Scroll zoom (50%-200%), drag-to-pan,
-//         pinch-to-zoom (touch), double-click reset, and ZoomBadge.
-//         Uses shared useZoomPan hook. Zoom wrapper wraps chart
-//         content area (below toolbar, above footer).
+// Gantt Chart Component – v5.0 (2026-02-15)
 // ═══════════════════════════════════════════════════════════════
 // CHANGELOG:
-// v4.8 – FIX: Eliminated first-render flash where Gantt chart renders at
-//         wrong width and only corrects after hard refresh. Solution:
-//         1. Initial containerWidth state = 0 (not 1200 default).
-//         2. useLayoutEffect measures width BEFORE browser paints.
-//         3. Safety net useEffect + rAF re-measures if layout wasn't ready.
-//         4. Early return renders empty container (with ref) while width = 0,
-//            so the ref attaches to DOM → measurement fires → re-render with
-//            correct width. User sees correct chart on first navigation.
-// v4.7 – FIX: Added visual inner padding (LEFT_PAD / RIGHT_PAD) so that
-//         bars, labels, markers, grid lines, and dependency paths do not
-//         touch the left or right edge of the container. All getLeft()
-//         values are offset by LEFT_PAD. chartWidth calculation reserves
-//         space for both pads. Milestone diamonds, WP bars, task bars,
-//         marker labels, grid lines, and SVG dependency paths all respect
-//         the new padding. Works for both "project" and scrollable views.
-// v4.6 – FIX: Multiple overflow prevention measures for "Project" view:
-//         1. SVG gets explicit width=chartWidth + overflow="hidden"
-//         2. Marker label filter tightened (chartWidth - 60)
-//         3. Task labels in project view never use 'right' position
-//            if they would overflow — forced to 'inside-truncate'
-//         4. Container div gets maxWidth:100% + boxSizing:border-box
-//         5. Inner chart div gets overflow:hidden in project view
-//         6. Milestone labels clipped when exceeding chartWidth
+// v5.0 – FIX: Corrected CTRL+Scroll zoom integration.
+//         Root cause: zoomContentStyle was applied to scrollable div
+//         which had conflicting overflow/dimension styles. Fixed by:
+//         1. Zoom wrapper (zoomContainerRef) wraps ONLY the chart area.
+//         2. Single content div gets zoomContentStyle transform.
+//         3. Drag-to-pan only activates when scale > 1 (preserves
+//            hover/click on Gantt bars at normal zoom).
+//         4. Uses onUserZoom callback from useZoomPan v1.1.
+// v4.9 – FEAT: Added CTRL+Scroll zoom (initial integration, had bugs).
+// v4.8 – FIX: Eliminated first-render flash.
+// v4.7 – FIX: Added visual inner padding (LEFT_PAD / RIGHT_PAD).
+// v4.6 – FIX: Multiple overflow prevention measures for "Project" view.
 // v4.5 – FIX: "Project" view no longer overflows container.
-//         chartWidth capped to availableWidth; scrollable div uses
-//         overflow:hidden + height:auto for project view.
-//         Inner div uses minWidth:'100%' only when NOT in project view
-//         to prevent horizontal expansion. Added SIDE_PADDING constant.
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
@@ -48,12 +29,11 @@ import { ZoomBadge } from '../hooks/ZoomBadge';
 // Extract constants from Technical Configuration
 const { ONE_DAY_MS, MIN_BAR_WIDTH, HEADER_HEIGHT, ROW_HEIGHT, BAR_HEIGHT, BAR_OFFSET_Y, VIEW_SETTINGS } = TECHNICAL_CONFIG.GANTT;
 
-// ★ FIX v4.7: Visual inner padding on left and right so content never touches edges
+// ★ FIX v4.7: Visual inner padding
 const LEFT_PAD = 20;
 const RIGHT_PAD = 20;
-const SIDE_PADDING = LEFT_PAD + RIGHT_PAD; // total reserved space (replaces old SIDE_PADDING = 40)
+const SIDE_PADDING = LEFT_PAD + RIGHT_PAD;
 
-// Helper to check if a date string is valid
 const isValidDate = (d: string | undefined | null): boolean => !!d && !isNaN(new Date(d).getTime());
 
 type ViewMode = 'week' | 'month' | 'quarter' | 'semester' | 'year' | 'project';
@@ -75,35 +55,29 @@ const GanttChart: React.FC<GanttChartProps> = ({
 }) => {
     const [hoveredTask, setHoveredTask] = useState<string | null>(null);
     const [viewModeState, setViewModeState] = useState<ViewMode>('project');
-    const [containerWidth, setContainerWidth] = useState(0); // ★ FIX v4.8: start at 0, not initialWidth
+    const [containerWidth, setContainerWidth] = useState(0);
     const chartRef = useRef<HTMLDivElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const t = TEXT[language] || TEXT['en'];
 
-    // Use forced view mode if provided (for export), otherwise internal state
     const viewMode: ViewMode = forceViewMode || viewModeState;
 
-    // ★ v4.9: Zoom & Pan for chart content
+    // ★ v5.0: Zoom & Pan — enableDrag only when zoomed, onUserZoom for awareness
     const {
         containerRef: zoomContainerRef,
         containerStyle: zoomContainerStyle,
         contentStyle: zoomContentStyle,
         zoomBadgeText,
         resetZoom,
-    } = useZoomPan({ minScale: 0.5, maxScale: 2.0, scaleStep: 0.1 });
+        scale: currentZoomScale,
+    } = useZoomPan({
+        minScale: 0.5,
+        maxScale: 2.0,
+        scaleStep: 0.1,
+        enableDrag: true,
+    });
 
-    // ★ FIX v4.8: Two-phase width measurement to eliminate first-render flash.
-    //
-    // PROBLEM: useEffect runs AFTER paint → first frame uses wrong width (0 or 1200).
-    //          useLayoutEffect runs before paint but containerRef may not be attached yet.
-    //
-    // SOLUTION:
-    //   Phase 1: useLayoutEffect reads width synchronously BEFORE paint (if ref is ready).
-    //   Phase 2: ResizeObserver handles all subsequent resizes (sidebar, window).
-    //   Phase 3: A second useEffect with rAF catches the edge case where Phase 1
-    //            fires before the DOM node has its final layout width.
-
-    // Phase 1 + 2: Synchronous read + ResizeObserver
+    // ★ FIX v4.8: Two-phase width measurement
     useLayoutEffect(() => {
         if (forceViewMode) {
             setContainerWidth(initialWidth);
@@ -113,7 +87,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
         const node = containerRef.current;
         if (!node) return;
 
-        // Synchronous measurement — runs before browser paints
         const measured = node.getBoundingClientRect().width;
         if (measured > 0) {
             setContainerWidth(measured);
@@ -132,14 +105,12 @@ const GanttChart: React.FC<GanttChartProps> = ({
         return () => resizeObserver.disconnect();
     }, [initialWidth, forceViewMode]);
 
-    // Phase 3: Safety net — if Phase 1 measured 0 (DOM not ready), re-measure after commit
     useEffect(() => {
         if (forceViewMode || containerWidth > 0) return;
 
         const node = containerRef.current;
         if (!node) return;
 
-        // requestAnimationFrame ensures DOM layout is finalized
         const rafId = requestAnimationFrame(() => {
             const w = node.getBoundingClientRect().width;
             if (w > 0) {
@@ -150,7 +121,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
         return () => cancelAnimationFrame(rafId);
     }, [forceViewMode, containerWidth]);
 
-    // 1. Flatten all tasks with valid dates to find min/max and create a map
+    // 1. Flatten all tasks
     const { allItems, taskMap, rows } = useMemo(() => {
         const items: any[] = [];
         const map: Record<string, any> = {};
@@ -209,8 +180,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
         );
     }
 
-    // ★ FIX v4.8: Don't render chart content until we have a real measured width.
-    // This prevents the flash where bars render at wrong positions.
     if (containerWidth === 0 && viewMode === 'project' && !forceViewMode) {
         return (
             <div
@@ -237,7 +206,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
     const minDate = new Date(rawMin - (paddingDays * ONE_DAY_MS));
     const maxDate = new Date(rawMax + (paddingDays * ONE_DAY_MS));
 
-    // Snap dates based on view
     if (viewMode === 'year') {
         minDate.setMonth(0, 1);
     } else if (viewMode === 'month' || viewMode === 'quarter' || viewMode === 'project') {
@@ -250,8 +218,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
 
     const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / ONE_DAY_MS) + 1;
 
-    // 3. Calculate Pixels Per Day
-    // ★ FIX v4.7: Reserve LEFT_PAD + RIGHT_PAD inside the available space.
     let pixelsPerDay: number;
     let chartWidth: number;
 
@@ -265,7 +231,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
         chartWidth = (totalDays * pixelsPerDay) + SIDE_PADDING;
     }
 
-    // Add generous buffer (80px) to chart height to prevent bottom cutoff
     const chartHeight = (rows.length * ROW_HEIGHT) + HEADER_HEIGHT + 80;
 
     // 4. Generate Timeline Markers
@@ -284,7 +249,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
         else markerMode = 'week';
     }
 
-    // Align start date for week view
     if (markerMode === 'week') {
         const day = currentDate.getDay();
         const diff = currentDate.getDate() - day + (day === 0 ? -6 : 1);
@@ -308,7 +272,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
         if (markers.length > 1000) break;
     }
 
-    // ★ FIX v4.7: getLeft now adds LEFT_PAD so all content starts offset from the left edge
     const getLeft = (date: Date): number =>
         LEFT_PAD + ((date.getTime() - minDate.getTime()) / ONE_DAY_MS) * pixelsPerDay;
 
@@ -383,6 +346,9 @@ const GanttChart: React.FC<GanttChartProps> = ({
     };
 
     // --- Orthogonal Dependency Path Logic ---
+    const isProjectView = viewMode === 'project';
+    const maxContentRight = chartWidth - RIGHT_PAD;
+
     const clampX = (x: number): number => {
         if (!isProjectView) return x;
         return Math.max(0, Math.min(x, chartWidth));
@@ -440,7 +406,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
             const wpMilestones = (wp.milestones || []).filter((m: any) => isValidDate(m.date));
 
             if (wpTasks.length > 0 || wpMilestones.length > 0) {
-                currentRowIndex++; // WP header row
+                currentRowIndex++;
 
                 const combinedItems = [
                     ...wpTasks.map((t: any) => ({ id: t.id, start: new Date(t.startDate) })),
@@ -526,12 +492,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
         return paths;
     };
 
-    // ─── Determine if we are in "project" (fit-to-container) mode ───
-    const isProjectView = viewMode === 'project';
-
-    // ★ FIX v4.7: Maximum right edge for content (bars, labels) – respects RIGHT_PAD
-    const maxContentRight = chartWidth - RIGHT_PAD;
-
     return (
         <div
             ref={containerRef}
@@ -549,7 +509,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
                         {t.ganttChart}
                     </h3>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                         <button onClick={handleExportXML} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 hover:bg-slate-50">
                             <ICONS.DOCX className="w-4 h-4 mr-1" /> XML
                         </button>
@@ -557,28 +517,30 @@ const GanttChart: React.FC<GanttChartProps> = ({
                             {(Object.keys(VIEW_SETTINGS) as ViewMode[]).map((mode) => (
                                 <button
                                     key={mode}
-                                    onClick={() => setViewModeState(mode)}
+                                    onClick={() => { setViewModeState(mode); resetZoom(); }}
                                     className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewModeState === mode ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
                                 >
                                     {t.views[mode]}
                                 </button>
                             ))}
                         </div>
+                        {/* ★ v5.0: Zoom hint */}
+                        <span className="text-[10px] text-slate-400 ml-2 hidden sm:inline">CTRL+Scroll</span>
                     </div>
                 </div>
             )}
 
-                       {/* ★ v4.9: Zoom/Pan wrapper */}
+            {/* ★ v5.0: Zoom/Pan wrapper — wraps ONLY the chart content area */}
             <div
                 ref={zoomContainerRef}
+                className="relative"
                 style={{
                     ...zoomContainerStyle,
                     overflow: 'hidden',
                     maxHeight: isProjectView ? 'none' : '700px',
                 }}
-                className="relative"
             >
-                {/* ★ v4.9: Zoom Badge */}
+                {/* ★ v5.0: Zoom Badge */}
                 {!forceViewMode && (
                     <ZoomBadge
                         zoomText={zoomBadgeText}
@@ -587,240 +549,231 @@ const GanttChart: React.FC<GanttChartProps> = ({
                     />
                 )}
 
-                {/* Scrollable / Fit-to-container Area */}
-                <div
-                    id={forceViewMode ? `${id}-content` : 'gantt-chart-content'}
-                    className="custom-scrollbar relative w-full bg-white"
-                    ref={chartRef}
-                    style={{
-                        ...zoomContentStyle,
-                        height: isProjectView ? 'auto' : undefined,
-                    }}
-                >
-                <div
-                    style={{
-                        width: isProjectView ? '100%' : `${Math.max(chartWidth, 100)}px`,
-                        maxWidth: isProjectView ? '100%' : undefined,
-                        minWidth: isProjectView ? undefined : '100%',
-                        height: `${chartHeight}px`,
-                        overflow: isProjectView ? 'hidden' : undefined
-                    }}
-                    className="relative bg-white"
-                >
-                    {/* SVG Layer for Dependencies */}
-                    <svg
-                        className="absolute inset-0 pointer-events-none z-10"
-                        width={isProjectView ? chartWidth : '100%'}
-                        height={chartHeight}
-                        style={{ minHeight: '100%', overflow: 'hidden' }}
-                        overflow="hidden"
-                    >
-                        <defs>
-                            <marker id={`arrowhead-right-${id}`} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                                <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
-                            </marker>
-                            <marker id={`arrowhead-left-${id}`} markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
-                                <polygon points="10 0, 0 3.5, 10 7" fill="#64748b" />
-                            </marker>
-                        </defs>
-                        {renderDependencies()}
-                    </svg>
-
-                    {/* Header: Time Markers */}
+                {/* ★ v5.0: This is THE zoomable content — single transform target */}
+                <div style={zoomContentStyle}>
                     <div
-                        className="border-b border-slate-200 bg-slate-50 sticky top-0 z-20 flex text-xs font-semibold text-slate-500 overflow-hidden"
-                        style={{ height: `${HEADER_HEIGHT}px` }}
+                        id={forceViewMode ? `${id}-content` : 'gantt-chart-content'}
+                        className="relative w-full bg-white"
+                        ref={chartRef}
                     >
-                        {markers.map((m, i) => {
-                            const left = getLeft(m);
-                            if (left > maxContentRight - 40) return null;
-                            if (left < LEFT_PAD - 5) return null;
+                        <div
+                            style={{
+                                width: isProjectView ? '100%' : `${Math.max(chartWidth, 100)}px`,
+                                maxWidth: isProjectView ? '100%' : undefined,
+                                minWidth: isProjectView ? undefined : '100%',
+                                height: `${chartHeight}px`,
+                                overflow: isProjectView ? 'hidden' : undefined
+                            }}
+                            className="relative bg-white"
+                        >
+                            {/* SVG Layer for Dependencies */}
+                            <svg
+                                className="absolute inset-0 pointer-events-none z-10"
+                                width={isProjectView ? chartWidth : '100%'}
+                                height={chartHeight}
+                                style={{ minHeight: '100%', overflow: 'hidden' }}
+                                overflow="hidden"
+                            >
+                                <defs>
+                                    <marker id={`arrowhead-right-${id}`} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                        <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+                                    </marker>
+                                    <marker id={`arrowhead-left-${id}`} markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                                        <polygon points="10 0, 0 3.5, 10 7" fill="#64748b" />
+                                    </marker>
+                                </defs>
+                                {renderDependencies()}
+                            </svg>
 
-                            return (
-                                <div
-                                    key={i}
-                                    className="absolute border-l border-slate-300 pl-2 h-full flex items-center whitespace-nowrap overflow-hidden text-ellipsis"
-                                    style={{
-                                        left: `${left}px`,
-                                        maxWidth: isProjectView ? `${Math.max(maxContentRight - left - 5, 30)}px` : '100px'
-                                    }}
-                                >
-                                    {getMarkerLabel(m)}
-                                </div>
-                            );
-                        })}
-                    </div>
+                            {/* Header: Time Markers */}
+                            <div
+                                className="border-b border-slate-200 bg-slate-50 sticky top-0 z-20 flex text-xs font-semibold text-slate-500 overflow-hidden"
+                                style={{ height: `${HEADER_HEIGHT}px` }}
+                            >
+                                {markers.map((m, i) => {
+                                    const left = getLeft(m);
+                                    if (left > maxContentRight - 40) return null;
+                                    if (left < LEFT_PAD - 5) return null;
 
-                    {/* Grid Lines */}
-                    <div className="absolute inset-0 z-0 pointer-events-none top-10">
-                        {markers.map((m, i) => {
-                            const left = getLeft(m);
-                            if (left > maxContentRight) return null;
-                            if (left < LEFT_PAD - 5) return null;
-                            return (
-                                <div key={i} className="absolute border-l border-slate-100 h-full" style={{ left: `${left}px` }} />
-                            );
-                        })}
-                    </div>
-
-                    {/* Content Rows */}
-                    <div className="relative z-0">
-                        {activities.map((wp) => {
-                            const wpTasks = (wp.tasks || []).filter((t: any) => isValidDate(t.startDate) && isValidDate(t.endDate));
-                            const wpMilestones = (wp.milestones || []).filter((m: any) => isValidDate(m.date));
-
-                            if (wpTasks.length === 0 && wpMilestones.length === 0) return null;
-
-                            // Calculate WP Bounds
-                            const taskStarts = wpTasks.map((t: any) => new Date(t.startDate).getTime());
-                            const mileStarts = wpMilestones.map((m: any) => new Date(m.date).getTime());
-                            const taskEnds = wpTasks.map((t: any) => new Date(t.endDate).getTime());
-                            const allStarts = [...taskStarts, ...mileStarts];
-                            const allEnds = [...taskEnds, ...mileStarts];
-
-                            const wpStart = new Date(Math.min(...allStarts));
-                            const wpEnd = new Date(Math.max(...allEnds));
-
-                            const combinedItems = [
-                                ...wpTasks.map((t: any) => ({ ...t, type: 'task' as const })),
-                                ...wpMilestones.map((m: any) => ({ ...m, type: 'milestone' as const }))
-                            ];
-                            combinedItems.sort((a, b) => {
-                                const startA = a.type === 'milestone' ? new Date(a.date).getTime() : new Date(a.startDate).getTime();
-                                const startB = b.type === 'milestone' ? new Date(b.date).getTime() : new Date(b.startDate).getTime();
-                                return startA - startB;
-                            });
-
-                            return (
-                                <div key={wp.id} className="relative">
-                                    {/* WP Row Header */}
-                                    <div
-                                        className="border-b border-slate-100 bg-slate-50/50 flex items-center px-4 font-bold text-xs text-slate-700 sticky left-0 z-10 w-full"
-                                        style={{ height: `${ROW_HEIGHT}px` }}
-                                    >
+                                    return (
                                         <div
-                                            className="absolute bg-slate-700 rounded-md opacity-90"
+                                            key={i}
+                                            className="absolute border-l border-slate-300 pl-2 h-full flex items-center whitespace-nowrap overflow-hidden text-ellipsis"
                                             style={{
-                                                left: `${getLeft(wpStart)}px`,
-                                                width: `${Math.max(Math.min(getWidth(wpStart, wpEnd), maxContentRight - getLeft(wpStart)), 5)}px`,
-                                                height: `${BAR_HEIGHT}px`,
-                                                top: `${BAR_OFFSET_Y}px`
+                                                left: `${left}px`,
+                                                maxWidth: isProjectView ? `${Math.max(maxContentRight - left - 5, 30)}px` : '100px'
                                             }}
-                                        />
-                                        <span className="relative z-10 bg-white/80 px-1 rounded">
-                                            {wp.id}: {wp.title}
-                                        </span>
-                                    </div>
+                                        >
+                                            {getMarkerLabel(m)}
+                                        </div>
+                                    );
+                                })}
+                            </div>
 
-                                    {/* Tasks & Milestones Rows */}
-                                    {combinedItems.map((item: any) => {
-                                        const isHovered = hoveredTask === item.id;
+                            {/* Grid Lines */}
+                            <div className="absolute inset-0 z-0 pointer-events-none top-10">
+                                {markers.map((m, i) => {
+                                    const left = getLeft(m);
+                                    if (left > maxContentRight) return null;
+                                    if (left < LEFT_PAD - 5) return null;
+                                    return (
+                                        <div key={i} className="absolute border-l border-slate-100 h-full" style={{ left: `${left}px` }} />
+                                    );
+                                })}
+                            </div>
 
-                                        if (item.type === 'milestone') {
-                                            const mDate = new Date(item.date);
-                                            const left = getLeft(mDate);
+                            {/* Content Rows */}
+                            <div className="relative z-0">
+                                {activities.map((wp) => {
+                                    const wpTasks = (wp.tasks || []).filter((t: any) => isValidDate(t.startDate) && isValidDate(t.endDate));
+                                    const wpMilestones = (wp.milestones || []).filter((m: any) => isValidDate(m.date));
 
-                                            return (
+                                    if (wpTasks.length === 0 && wpMilestones.length === 0) return null;
+
+                                    const taskStarts = wpTasks.map((t: any) => new Date(t.startDate).getTime());
+                                    const mileStarts = wpMilestones.map((m: any) => new Date(m.date).getTime());
+                                    const taskEnds = wpTasks.map((t: any) => new Date(t.endDate).getTime());
+                                    const allStarts = [...taskStarts, ...mileStarts];
+                                    const allEnds = [...taskEnds, ...mileStarts];
+
+                                    const wpStart = new Date(Math.min(...allStarts));
+                                    const wpEnd = new Date(Math.max(...allEnds));
+
+                                    const combinedItems = [
+                                        ...wpTasks.map((t: any) => ({ ...t, type: 'task' as const })),
+                                        ...wpMilestones.map((m: any) => ({ ...m, type: 'milestone' as const }))
+                                    ];
+                                    combinedItems.sort((a, b) => {
+                                        const startA = a.type === 'milestone' ? new Date(a.date).getTime() : new Date(a.startDate).getTime();
+                                        const startB = b.type === 'milestone' ? new Date(b.date).getTime() : new Date(b.startDate).getTime();
+                                        return startA - startB;
+                                    });
+
+                                    return (
+                                        <div key={wp.id} className="relative">
+                                            <div
+                                                className="border-b border-slate-100 bg-slate-50/50 flex items-center px-4 font-bold text-xs text-slate-700 sticky left-0 z-10 w-full"
+                                                style={{ height: `${ROW_HEIGHT}px` }}
+                                            >
                                                 <div
-                                                    key={item.id}
-                                                    className="relative border-b border-slate-50 hover:bg-slate-50 transition-colors"
-                                                    style={{ height: `${ROW_HEIGHT}px` }}
-                                                >
-                                                    {/* Diamond Marker */}
-                                                    <div
-                                                        className="absolute w-3.5 h-3.5 bg-black transform rotate-45 z-20 cursor-pointer hover:scale-125 transition-transform"
-                                                        style={{
-                                                            left: `${left - 7}px`,
-                                                            top: `${(ROW_HEIGHT - 14) / 2}px`
-                                                        }}
-                                                        onMouseEnter={() => setHoveredTask(item.id)}
-                                                        onMouseLeave={() => setHoveredTask(null)}
-                                                        title={`${item.id}: ${item.description}`}
-                                                    />
+                                                    className="absolute bg-slate-700 rounded-md opacity-90"
+                                                    style={{
+                                                        left: `${getLeft(wpStart)}px`,
+                                                        width: `${Math.max(Math.min(getWidth(wpStart, wpEnd), maxContentRight - getLeft(wpStart)), 5)}px`,
+                                                        height: `${BAR_HEIGHT}px`,
+                                                        top: `${BAR_OFFSET_Y}px`
+                                                    }}
+                                                />
+                                                <span className="relative z-10 bg-white/80 px-1 rounded">
+                                                    {wp.id}: {wp.title}
+                                                </span>
+                                            </div>
 
-                                                    {/* Label */}
-                                                    {(left + 10 < maxContentRight - 10) && (
+                                            {combinedItems.map((item: any) => {
+                                                const isHovered = hoveredTask === item.id;
+
+                                                if (item.type === 'milestone') {
+                                                    const mDate = new Date(item.date);
+                                                    const left = getLeft(mDate);
+
+                                                    return (
                                                         <div
-                                                            className="absolute text-[11px] font-bold text-slate-800 whitespace-nowrap px-2 pointer-events-none flex items-center overflow-hidden"
-                                                            style={{
-                                                                left: `${left + 10}px`,
-                                                                maxWidth: isProjectView ? `${Math.max(maxContentRight - left - 15, 20)}px` : undefined,
-                                                                height: '100%',
-                                                                top: 0
-                                                            }}
+                                                            key={item.id}
+                                                            className="relative border-b border-slate-50 hover:bg-slate-50 transition-colors"
+                                                            style={{ height: `${ROW_HEIGHT}px` }}
                                                         >
-                                                            {item.id}
+                                                            <div
+                                                                className="absolute w-3.5 h-3.5 bg-black transform rotate-45 z-20 cursor-pointer hover:scale-125 transition-transform"
+                                                                style={{
+                                                                    left: `${left - 7}px`,
+                                                                    top: `${(ROW_HEIGHT - 14) / 2}px`
+                                                                }}
+                                                                onMouseEnter={() => setHoveredTask(item.id)}
+                                                                onMouseLeave={() => setHoveredTask(null)}
+                                                                title={`${item.id}: ${item.description}`}
+                                                            />
+
+                                                            {(left + 10 < maxContentRight - 10) && (
+                                                                <div
+                                                                    className="absolute text-[11px] font-bold text-slate-800 whitespace-nowrap px-2 pointer-events-none flex items-center overflow-hidden"
+                                                                    style={{
+                                                                        left: `${left + 10}px`,
+                                                                        maxWidth: isProjectView ? `${Math.max(maxContentRight - left - 15, 20)}px` : undefined,
+                                                                        height: '100%',
+                                                                        top: 0
+                                                                    }}
+                                                                >
+                                                                    {item.id}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        } else {
-                                            // Task Rendering
-                                            const start = new Date(item.startDate);
-                                            const end = new Date(item.endDate);
-                                            const width = getWidth(start, end);
-                                            const left = getLeft(start);
+                                                    );
+                                                } else {
+                                                    const start = new Date(item.startDate);
+                                                    const end = new Date(item.endDate);
+                                                    const width = getWidth(start, end);
+                                                    const left = getLeft(start);
 
-                                            const fullLabel = `${item.id}: ${item.title}`;
-                                            const textWidth = fullLabel.length * 7 + 16;
-                                            const fitsInside = width >= textWidth;
-                                            const fitsRight = (left + width + textWidth + 5) <= maxContentRight;
-                                            const fitsLeft = (left - textWidth - 5) >= LEFT_PAD;
+                                                    const fullLabel = `${item.id}: ${item.title}`;
+                                                    const textWidth = fullLabel.length * 7 + 16;
+                                                    const fitsInside = width >= textWidth;
+                                                    const fitsRight = (left + width + textWidth + 5) <= maxContentRight;
+                                                    const fitsLeft = (left - textWidth - 5) >= LEFT_PAD;
 
-                                            let labelPos = fitsInside
-                                                ? 'inside'
-                                                : (fitsRight && !isProjectView ? 'right' : (fitsLeft ? 'left' : 'inside-truncate'));
+                                                    let labelPos = fitsInside
+                                                        ? 'inside'
+                                                        : (fitsRight && !isProjectView ? 'right' : (fitsLeft ? 'left' : 'inside-truncate'));
 
-                                            const clampedBarWidth = Math.min(width, maxContentRight - left);
+                                                    const clampedBarWidth = Math.min(width, maxContentRight - left);
 
-                                            return (
-                                                <div
-                                                    key={item.id}
-                                                    className="relative border-b border-slate-50 hover:bg-slate-50 transition-colors"
-                                                    style={{ height: `${ROW_HEIGHT}px` }}
-                                                >
-                                                    <div
-                                                        className={`absolute rounded-md shadow-sm cursor-pointer transition-all duration-200 flex items-center ${labelPos.startsWith('inside') ? 'justify-start pl-2' : 'justify-center'} ${isHovered ? 'bg-indigo-500 z-20' : 'bg-indigo-400'}`}
-                                                        style={{
-                                                            left: `${left}px`,
-                                                            width: `${clampedBarWidth}px`,
-                                                            height: `${BAR_HEIGHT}px`,
-                                                            top: `${BAR_OFFSET_Y}px`
-                                                        }}
-                                                        onMouseEnter={() => setHoveredTask(item.id)}
-                                                        onMouseLeave={() => setHoveredTask(null)}
-                                                    >
-                                                        {labelPos.startsWith('inside') && (
-                                                            <span className="text-[11px] font-semibold text-white whitespace-nowrap overflow-hidden text-ellipsis w-full block px-1">
-                                                                {fullLabel}
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    {(labelPos === 'right' || labelPos === 'left') && (
+                                                    return (
                                                         <div
-                                                            className="absolute text-[11px] font-medium text-slate-600 whitespace-nowrap px-2 pointer-events-none flex items-center"
-                                                            style={{
-                                                                left: labelPos === 'left' ? `${left - 5}px` : `${left + width + 5}px`,
-                                                                transform: labelPos === 'left' ? 'translateX(-100%)' : 'none',
-                                                                height: '100%',
-                                                                top: 0
-                                                            }}
+                                                            key={item.id}
+                                                            className="relative border-b border-slate-50 hover:bg-slate-50 transition-colors"
+                                                            style={{ height: `${ROW_HEIGHT}px` }}
                                                         >
-                                                            {fullLabel}
+                                                            <div
+                                                                className={`absolute rounded-md shadow-sm cursor-pointer transition-all duration-200 flex items-center ${labelPos.startsWith('inside') ? 'justify-start pl-2' : 'justify-center'} ${isHovered ? 'bg-indigo-500 z-20' : 'bg-indigo-400'}`}
+                                                                style={{
+                                                                    left: `${left}px`,
+                                                                    width: `${clampedBarWidth}px`,
+                                                                    height: `${BAR_HEIGHT}px`,
+                                                                    top: `${BAR_OFFSET_Y}px`
+                                                                }}
+                                                                onMouseEnter={() => setHoveredTask(item.id)}
+                                                                onMouseLeave={() => setHoveredTask(null)}
+                                                            >
+                                                                {labelPos.startsWith('inside') && (
+                                                                    <span className="text-[11px] font-semibold text-white whitespace-nowrap overflow-hidden text-ellipsis w-full block px-1">
+                                                                        {fullLabel}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {(labelPos === 'right' || labelPos === 'left') && (
+                                                                <div
+                                                                    className="absolute text-[11px] font-medium text-slate-600 whitespace-nowrap px-2 pointer-events-none flex items-center"
+                                                                    style={{
+                                                                        left: labelPos === 'left' ? `${left - 5}px` : `${left + width + 5}px`,
+                                                                        transform: labelPos === 'left' ? 'translateX(-100%)' : 'none',
+                                                                        height: '100%',
+                                                                        top: 0
+                                                                    }}
+                                                                >
+                                                                    {fullLabel}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        }
-                                    })}
-                                </div>
-                            );
-                        })}
+                                                    );
+                                                }
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
                 </div>
-                        </div>
-            {/* ★ v4.9: Close zoom wrapper */}
             </div>
 
             {!forceViewMode && (
