@@ -13,6 +13,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { storageService } from './storageService.ts';
+import { OPENROUTER_SYSTEM_PROMPT } from './Instructions.ts';
 
 // ─── TYPES ───────────────────────────────────────────────────────
 
@@ -252,16 +253,10 @@ async function generateWithOpenRouter(config: AIProviderConfig, options: AIGener
     { role: 'user', content: options.prompt }
   ];
 
-  if (options.jsonSchema || options.jsonMode) {
+    if (options.jsonSchema || options.jsonMode) {
     messages.unshift({
       role: 'system',
-// Staro:
-content: 'You are a professional EU project assistant. You MUST respond with valid JSON only. No markdown, no code fences, no explanations – just the raw JSON object or array.'
-
-// Novo:
-import { OPENROUTER_SYSTEM_PROMPT } from './Instructions.ts';
-// ... in nato v kodi:
-content: OPENROUTER_SYSTEM_PROMPT
+      content: OPENROUTER_SYSTEM_PROMPT
     });
   }
 
