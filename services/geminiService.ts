@@ -719,10 +719,9 @@ const buildTaskInstruction = (
       }
       break;
     }
-    case 'activities': {
+        case 'activities': {
       const today = new Date().toISOString().split('T')[0];
       placeholders.projectStart = projectData.projectIdea?.startDate || today;
-      // ★ v4.5: Calculate and pass project end date
       const startDate = new Date(placeholders.projectStart);
       const months = projectData.projectIdea?.durationMonths || 24;
       const endDate = new Date(startDate);
@@ -730,8 +729,18 @@ const buildTaskInstruction = (
       endDate.setDate(endDate.getDate() - 1);
       placeholders.projectEnd = endDate.toISOString().split('T')[0];
       placeholders.projectDurationMonths = String(months);
+      
+      // ★ v4.5: Inject TEMPORAL_INTEGRITY_RULE into task instruction
+      // This is prepended as the FIRST thing the AI sees for activities
+      const temporalRule = (TEMPORAL_INTEGRITY_RULE[language] || TEMPORAL_INTEGRITY_RULE.en)
+        .replace(/\{\{projectStart\}\}/g, placeholders.projectStart)
+        .replace(/\{\{projectEnd\}\}/g, placeholders.projectEnd)
+        .replace(/\{\{projectDurationMonths\}\}/g, placeholders.projectDurationMonths);
+      // Store it so getPromptAndSchemaForSection can prepend it
+      placeholders._temporalRule = temporalRule;
       break;
     }
+
   }
 
   return getSectionTaskInstruction(sectionKey, language, placeholders);
