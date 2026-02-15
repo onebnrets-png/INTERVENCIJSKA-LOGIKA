@@ -533,7 +533,7 @@ export const TEXT = {
       organigram: "Organizacijska struktura",
       qualityEfficiency: "Kakovost in učinkovitost",
       workplan: "Načrt dela (WP)",
-      ganttChart: "Ganttov diagram",
+      ganttChart: "Gantt diagram",
       pertChart: "PERT diagram",
       riskMitigation: "Obvladovanje tveganj",
       outputs: "Kazalniki učinka (Outputs)",
