@@ -255,7 +255,13 @@ async function generateWithOpenRouter(config: AIProviderConfig, options: AIGener
   if (options.jsonSchema || options.jsonMode) {
     messages.unshift({
       role: 'system',
-      content: 'You are a professional EU project assistant. You MUST respond with valid JSON only. No markdown, no code fences, no explanations – just the raw JSON object or array.'
+// Staro:
+content: 'You are a professional EU project assistant. You MUST respond with valid JSON only. No markdown, no code fences, no explanations – just the raw JSON object or array.'
+
+// Novo:
+import { OPENROUTER_SYSTEM_PROMPT } from './Instructions.ts';
+// ... in nato v kodi:
+content: OPENROUTER_SYSTEM_PROMPT
     });
   }
 
