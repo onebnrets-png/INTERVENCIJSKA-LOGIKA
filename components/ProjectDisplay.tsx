@@ -299,15 +299,49 @@ const renderProjectIdea = (props) => {
                     <TextArea label={t.acronym} path={[...path, 'projectAcronym']} value={projectAcronym} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.projectAcronymPlaceholder} generateTitle={`${t.generateField} ${t.acronym}`} missingApiKey={missingApiKey} />
                 </div>
                 
-                <div className="mt-2">
-                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.projectStartDate}</label>
-                     <input 
-                         type="date"
-                         value={startDate || ''}
-                         onChange={(e) => onUpdateData([...path, 'startDate'], e.target.value)}
-                         className="w-full md:w-1/3 p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 shadow-sm text-base"
-                     />
+                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                    {/* Start Date */}
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.projectStartDate}</label>
+                        <input 
+                            type="date"
+                            value={startDate || ''}
+                            onChange={(e) => onUpdateData([...path, 'startDate'], e.target.value)}
+                            className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 shadow-sm text-base"
+                        />
+                    </div>
+
+                    {/* Duration */}
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.projectDuration}</label>
+                        <select
+                            className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 shadow-sm text-base bg-white"
+                            value={projectData.projectIdea?.durationMonths || 24}
+                            onChange={(e) => onUpdateData(['projectIdea', 'durationMonths'], parseInt(e.target.value))}
+                        >
+                            {[6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 42, 48, 54, 60].map(m => (
+                                <option key={m} value={m}>{m} {t.months}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* End Date (calculated) */}
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.projectEndDate}</label>
+                        <div className="p-2.5 border border-slate-200 rounded-lg bg-slate-50 text-base font-bold text-sky-700 shadow-sm">
+                            {projectData.projectIdea?.startDate ? (() => {
+                                const start = new Date(projectData.projectIdea.startDate);
+                                const months = projectData.projectIdea?.durationMonths || 24;
+                                const end = new Date(start);
+                                end.setMonth(end.getMonth() + months);
+                                end.setDate(end.getDate() - 1);
+                                return end.toISOString().split('T')[0];
+                            })() : '—'}
+                        </div>
+                    </div>
                 </div>
+
+                <p className="text-xs text-slate-400 mt-2">{t.projectDurationDesc}</p>
             </div>
             <div id="main-aim">
                  <FieldHeader title={t.mainAim} description={t.mainAimDesc}/>
