@@ -602,37 +602,58 @@ export const useGeneration = ({
           setHasUnsavedTranslationChanges(true);
         }
 
-                if (lastError && successCount < sections.length) {
+              if (lastError && successCount < sections.length) {
           const failedCount = sections.length - successCount;
           const msg = lastError.message || '';
-          const isRateLimit = msg.includes('429') || msg.includes('Quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('afford') || msg.includes('credits');
+          const isRateLimit = msg.includes('429') || msg.includes('Quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED');
+          const isCredits = msg.includes('afford') || msg.includes('credits') || msg.includes('402');
+          const isJSON = msg.includes('JSON') || msg.includes('Unexpected token') || msg.includes('parse');
+          const isNetwork = msg.includes('fetch') || msg.includes('network') || msg.includes('Failed to fetch') || msg.includes('ERR_');
+
+          let modalTitle: string;
+          let modalMessage: string;
 
           if (isRateLimit) {
-            // Friendly modal instead of red error
-            setModalConfig({
-              isOpen: true,
-              title: language === 'si' ? 'Omejitev API klicev' : 'API Rate Limit Reached',
-              message: language === 'si'
-                ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je bil dosežen limit brezplačnega AI ponudnika (15 zahtev/minuto).\n\nPočakajte 1–2 minuti in poskusite ponovno, ali preklopite na OpenRouter v Nastavitvah.`
-                : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated because the free AI provider rate limit was reached (15 requests/minute).\n\nWait 1–2 minutes and try again, or switch to OpenRouter in Settings.`,
-              confirmText: language === 'si' ? 'V redu' : 'OK',
-              secondaryText: language === 'si' ? 'Odpri nastavitve' : 'Open Settings',
-              cancelText: '',
-              onConfirm: () => closeModal(),
-              onSecondary: () => { closeModal(); setIsSettingsOpen(true); },
-              onCancel: () => closeModal(),
-            });
+            modalTitle = language === 'si' ? 'Omejitev API klicev' : 'API Rate Limit Reached';
+            modalMessage = language === 'si'
+              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je bil dosežen limit AI ponudnika.\n\nPočakajte 1–2 minuti in poskusite ponovno, ali preklopite na drug model v Nastavitvah.`
+              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated due to AI provider rate limits.\n\nWait 1–2 minutes and try again, or switch models in Settings.`;
+          } else if (isCredits) {
+            modalTitle = language === 'si' ? 'Nezadostna sredstva AI' : 'Insufficient AI Credits';
+            modalMessage = language === 'si'
+              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker vaš AI ponudnik nima dovolj sredstev.\n\nDopolnite kredit pri vašem ponudniku ali preklopite na drug model v Nastavitvah.`
+              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated due to insufficient AI credits.\n\nTop up your credits or switch models in Settings.`;
+          } else if (isJSON) {
+            modalTitle = language === 'si' ? 'Napaka formata' : 'Format Error';
+            modalMessage = language === 'si'
+              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je AI vrnil nepravilen format.\n\nPoskusite ponovno — AI modeli občasno vrnejo nepopoln odgovor.`
+              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated because the AI returned an invalid format.\n\nPlease try again — AI models occasionally return incomplete responses.`;
+          } else if (isNetwork) {
+            modalTitle = language === 'si' ? 'Omrežna napaka' : 'Network Error';
+            modalMessage = language === 'si'
+              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati zaradi omrežne napake.\n\nPreverite internetno povezavo in poskusite ponovno.`
+              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated due to a network error.\n\nCheck your internet connection and try again.`;
           } else {
-            setError(
-              language === 'si'
-                ? `${successCount}/${sections.length} razdelkov uspešno generiranih. ${failedCount} ni uspelo — poskusite ponovno.`
-                : `${successCount}/${sections.length} sections generated successfully. ${failedCount} failed — please try again.`
-            );
+            modalTitle = language === 'si' ? 'Delna generacija' : 'Partial Generation';
+            modalMessage = language === 'si'
+              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati.\n\nPoskusite ponovno ali preklopite na drug AI model v Nastavitvah.`
+              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated.\n\nPlease try again or switch to a different AI model in Settings.`;
           }
+
+          setModalConfig({
+            isOpen: true,
+            title: modalTitle,
+            message: modalMessage,
+            confirmText: language === 'si' ? 'V redu' : 'OK',
+            secondaryText: language === 'si' ? 'Odpri nastavitve' : 'Open Settings',
+            cancelText: '',
+            onConfirm: () => closeModal(),
+            onSecondary: () => { closeModal(); setIsSettingsOpen(true); },
+            onCancel: () => closeModal(),
+          });
         }
 
         setIsLoading(false);
-      };
 
       if (otherLangData && !hasContentInSections) {
         // LEVEL 1: Other language has results, current is empty
