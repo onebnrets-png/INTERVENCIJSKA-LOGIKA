@@ -2,6 +2,15 @@
 // ═══════════════════════════════════════════════════════════════
 // AI content generation — sections, fields, summaries.
 //
+// v3.7 — 2026-02-15 — CHANGES:
+//   - FIX: runComposite in FILL mode now detects which sections
+//     actually need filling and generates ONLY those sections.
+//   - FIX: Loading messages adapted to show actual work being done:
+//     "Dopolnjujem Outputs (1/2)..." instead of always showing all 4.
+//   - NEW: sectionNeedsGeneration() helper detects empty items in arrays
+//     and empty fields in objects.
+//   - All previous v3.6 changes preserved (retry, backoff, friendly modals).
+//
 // v3.6 — 2026-02-15 — CHANGES:
 //   - FIX: runComposite — try/catch moved INSIDE the for loop so that
 //     a single failed section (e.g. kers hitting 429 rate limit) does
@@ -39,6 +48,7 @@ import {
   generateSectionContent,
   generateFieldContent,
   generateProjectSummary,
+  generateTargetedFill,
 } from '../services/geminiService.ts';
 import { generateSummaryDocx } from '../services/docxGenerator.ts';
 import { recalculateProjectSchedule, downloadBlob } from '../utils.ts';
@@ -112,6 +122,76 @@ export const useGeneration = ({
       const section = projectData[sectionKey];
       if (!section) return false;
       return hasDeepContent(section);
+    },
+    [projectData, hasDeepContent]
+  );
+
+  // ─── v3.7: Check if a section needs generation (has empty items) ──
+
+  const sectionNeedsGeneration = useCallback(
+    (sectionKey: string): { needsFill: boolean; needsFullGeneration: boolean; emptyIndices: number[] } => {
+      const section = projectData[sectionKey];
+
+      // No data at all → needs full generation
+      if (!section) {
+        return { needsFill: false, needsFullGeneration: true, emptyIndices: [] };
+      }
+
+      // Array sections (outputs, outcomes, impacts, kers)
+      if (Array.isArray(section)) {
+        if (section.length === 0) {
+          return { needsFill: false, needsFullGeneration: true, emptyIndices: [] };
+        }
+
+        const emptyIndices: number[] = [];
+        let hasAnyContent = false;
+
+        section.forEach((item: any, index: number) => {
+          if (!item || !hasDeepContent(item)) {
+            // Completely empty item
+            emptyIndices.push(index);
+          } else {
+            // Check if item has empty required fields
+            const hasEmptyFields = Object.entries(item).some(([key, val]) => {
+              if (key === 'id') return false; // id is auto-generated
+              return typeof val === 'string' && val.trim().length === 0;
+            });
+            if (hasEmptyFields) {
+              emptyIndices.push(index);
+            }
+            hasAnyContent = true;
+          }
+        });
+
+        if (!hasAnyContent) {
+          return { needsFill: false, needsFullGeneration: true, emptyIndices: [] };
+        }
+
+        if (emptyIndices.length > 0) {
+          return { needsFill: true, needsFullGeneration: false, emptyIndices };
+        }
+
+        // All items have content — no generation needed
+        return { needsFill: false, needsFullGeneration: false, emptyIndices: [] };
+      }
+
+      // Object sections
+      if (typeof section === 'object') {
+        const hasContent = hasDeepContent(section);
+        if (!hasContent) {
+          return { needsFill: false, needsFullGeneration: true, emptyIndices: [] };
+        }
+        // Check for empty fields
+        const hasEmptyFields = Object.entries(section).some(([_key, val]) => {
+          return typeof val === 'string' && val.trim().length === 0;
+        });
+        if (hasEmptyFields) {
+          return { needsFill: true, needsFullGeneration: false, emptyIndices: [] };
+        }
+        return { needsFill: false, needsFullGeneration: false, emptyIndices: [] };
+      }
+
+      return { needsFill: false, needsFullGeneration: false, emptyIndices: [] };
     },
     [projectData, hasDeepContent]
   );
@@ -359,7 +439,7 @@ export const useGeneration = ({
           // Auto-generate risks after activities + projectManagement
           setIsLoading(`${t.generating} ${t.subSteps.riskMitigation}...`);
           try {
-              const risksContent = await generateSectionContent(
+            const risksContent = await generateSectionContent(
               'risks',
               newData,
               language,
@@ -373,7 +453,6 @@ export const useGeneration = ({
             } else {
               console.warn('[executeGeneration] risks: unexpected format, keeping original');
             }
-
           } catch (e) {
             console.error(e);
           }
@@ -539,8 +618,10 @@ export const useGeneration = ({
     ]
   );
 
-    // ─── Composite generation (outputs + outcomes + impacts + KERs) ─
-  // ★ v3.6 FIX: try/catch INSIDE for loop + retry with backoff + friendly modals
+  // ─── Composite generation (outputs + outcomes + impacts + KERs) ─
+  // ★ v3.7 SMART FILL: Only generates sections that actually need it.
+  //   In fill mode, uses targeted fill for sections with empty items.
+  // ★ v3.6: try/catch INSIDE for loop + retry with backoff + friendly modals
 
   const handleGenerateCompositeSection = useCallback(
     async (_sectionKey: string) => {
@@ -549,16 +630,16 @@ export const useGeneration = ({
         return;
       }
 
-      const sections = ['outputs', 'outcomes', 'impacts', 'kers'];
+      const allSections = ['outputs', 'outcomes', 'impacts', 'kers'];
 
-      const hasContentInSections = sections.some((s) =>
+      const hasContentInSections = allSections.some((s) =>
         robustCheckSectionHasContent(s)
       );
 
       const otherLang = language === 'en' ? 'SI' : 'EN';
 
       let otherLangData: any = null;
-      for (const s of sections) {
+      for (const s of allSections) {
         otherLangData = await checkOtherLanguageHasContent(s);
         if (otherLangData) break;
       }
@@ -569,18 +650,92 @@ export const useGeneration = ({
         setError(null);
 
         let successCount = 0;
+        let skippedCount = 0;
         let lastError: any = null;
 
-        const modeLabel = mode === 'fill'
-          ? (language === 'si' ? 'Dopolnjujem' : 'Filling missing in')
-          : mode === 'enhance'
-            ? (language === 'si' ? 'Izboljšujem' : 'Enhancing')
-            : (language === 'si' ? 'Generiram' : 'Generating');
+        // ★ v3.7: Determine which sections actually need generation
+        let sectionsToProcess: { key: string; action: 'fill' | 'generate' | 'enhance' | 'regenerate'; emptyIndices: number[] }[] = [];
+
+        if (mode === 'fill') {
+          // SMART FILL: Only process sections that have empty items
+          for (const s of allSections) {
+            const status = sectionNeedsGeneration(s);
+            if (status.needsFullGeneration) {
+              sectionsToProcess.push({ key: s, action: 'generate', emptyIndices: [] });
+            } else if (status.needsFill) {
+              sectionsToProcess.push({ key: s, action: 'fill', emptyIndices: status.emptyIndices });
+            }
+            // else: section is complete → skip
+          }
+
+          if (sectionsToProcess.length === 0) {
+            // Everything is already filled!
+            setModalConfig({
+              isOpen: true,
+              title: language === 'si' ? 'Vse je izpolnjeno' : 'Everything is filled',
+              message: language === 'si'
+                ? 'Vsi razdelki pričakovanih rezultatov so že izpolnjeni. Če želite izboljšati vsebino, uporabite možnost "Izboljšaj obstoječe".'
+                : 'All expected results sections are already filled. To improve content, use the "Enhance existing" option.',
+              confirmText: language === 'si' ? 'V redu' : 'OK',
+              secondaryText: '',
+              cancelText: '',
+              onConfirm: () => closeModal(),
+              onSecondary: null,
+              onCancel: () => closeModal(),
+            });
+            setIsLoading(false);
+            return;
+          }
+        } else if (mode === 'enhance') {
+          // ENHANCE: Only process sections that have content (skip empty ones)
+          for (const s of allSections) {
+            const status = sectionNeedsGeneration(s);
+            if (!status.needsFullGeneration) {
+              // Has some content → enhance it
+              sectionsToProcess.push({ key: s, action: 'enhance', emptyIndices: [] });
+            }
+            // Empty sections are skipped in enhance mode
+          }
+          if (sectionsToProcess.length === 0) {
+            setModalConfig({
+              isOpen: true,
+              title: language === 'si' ? 'Ni vsebine za izboljšanje' : 'No content to enhance',
+              message: language === 'si'
+                ? 'Nobeden razdelek nima vsebine za izboljšanje. Uporabite možnost "Generiraj vse na novo".'
+                : 'No sections have content to enhance. Use the "Regenerate all" option.',
+              confirmText: language === 'si' ? 'V redu' : 'OK',
+              secondaryText: '',
+              cancelText: '',
+              onConfirm: () => closeModal(),
+              onSecondary: null,
+              onCancel: () => closeModal(),
+            });
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // REGENERATE: Process all sections
+          sectionsToProcess = allSections.map(s => ({ key: s, action: 'regenerate' as const, emptyIndices: [] }));
+        }
+
+        const totalToProcess = sectionsToProcess.length;
+        skippedCount = allSections.length - totalToProcess;
+
+        const modeLabels: Record<string, { si: string; en: string }> = {
+          fill: { si: 'Dopolnjujem', en: 'Filling' },
+          generate: { si: 'Generiram', en: 'Generating' },
+          enhance: { si: 'Izboljšujem', en: 'Enhancing' },
+          regenerate: { si: 'Generiram na novo', en: 'Regenerating' },
+        };
 
         const waitLabel = language === 'si' ? 'Čakam na API kvoto' : 'Waiting for API quota';
 
-        for (const s of sections) {
-          setIsLoading(`${modeLabel} ${s}...`);
+        for (let idx = 0; idx < sectionsToProcess.length; idx++) {
+          const { key: s, action, emptyIndices } = sectionsToProcess[idx];
+          const label = modeLabels[action]?.[language] || modeLabels['generate'][language];
+          const sectionLabel = s.charAt(0).toUpperCase() + s.slice(1);
+
+          setIsLoading(`${label} ${sectionLabel} (${idx + 1}/${totalToProcess})...`);
 
           let success = false;
           let retries = 0;
@@ -588,12 +743,27 @@ export const useGeneration = ({
 
           while (!success && retries <= maxRetries) {
             try {
-              const generatedData = await generateSectionContent(
-                s,
-                projectData,
-                language,
-                mode
-              );
+              let generatedData: any;
+
+              if (action === 'fill' && emptyIndices.length > 0) {
+                // ★ v3.7: TARGETED FILL — only generate empty items
+                generatedData = await generateTargetedFill(
+                  s,
+                  projectData,
+                  language,
+                  emptyIndices
+                );
+              } else {
+                // Standard generation (generate, enhance, regenerate)
+                const genMode = action === 'generate' ? 'regenerate' : action;
+                generatedData = await generateSectionContent(
+                  s,
+                  projectData,
+                  language,
+                  genMode
+                );
+              }
+
               setProjectData((prev: any) => {
                 const next = { ...prev };
                 next[s] = generatedData;
@@ -610,7 +780,7 @@ export const useGeneration = ({
                 const waitSeconds = retries * 20;
                 console.warn(`[runComposite] Rate limit on ${s}, retry ${retries}/${maxRetries} in ${waitSeconds}s...`);
                 for (let countdown = waitSeconds; countdown > 0; countdown--) {
-                  setIsLoading(`${waitLabel}... ${countdown}s → ${s}`);
+                  setIsLoading(`${waitLabel}... ${countdown}s → ${sectionLabel}`);
                   await new Promise((r) => setTimeout(r, 1000));
                 }
               } else {
@@ -630,8 +800,31 @@ export const useGeneration = ({
           setHasUnsavedTranslationChanges(true);
         }
 
-        if (lastError && successCount < sections.length) {
-          const failedCount = sections.length - successCount;
+        // ★ v3.7: Show success modal with skip info
+        if (!lastError && successCount === totalToProcess) {
+          // Complete success
+          if (skippedCount > 0) {
+            const skippedNames = allSections
+              .filter(s => !sectionsToProcess.find(sp => sp.key === s))
+              .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+              .join(', ');
+
+            setModalConfig({
+              isOpen: true,
+              title: language === 'si' ? 'Dopolnjevanje končano' : 'Fill complete',
+              message: language === 'si'
+                ? `Uspešno dopolnjeno: ${successCount} razdelkov.\n\nPreskočeni razdelki (že izpolnjeni): ${skippedNames}.`
+                : `Successfully filled: ${successCount} sections.\n\nSkipped sections (already complete): ${skippedNames}.`,
+              confirmText: language === 'si' ? 'V redu' : 'OK',
+              secondaryText: '',
+              cancelText: '',
+              onConfirm: () => closeModal(),
+              onSecondary: null,
+              onCancel: () => closeModal(),
+            });
+          }
+        } else if (lastError && successCount < totalToProcess) {
+          const failedCount = totalToProcess - successCount;
           const emsg = lastError.message || '';
           const isRateLimit = emsg.includes('429') || emsg.includes('Quota') || emsg.includes('rate limit') || emsg.includes('RESOURCE_EXHAUSTED');
           const isCredits = emsg.includes('afford') || emsg.includes('credits') || emsg.includes('402');
@@ -644,28 +837,28 @@ export const useGeneration = ({
           if (isRateLimit) {
             modalTitle = language === 'si' ? 'Omejitev API klicev' : 'API Rate Limit Reached';
             modalMessage = language === 'si'
-              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je bil dosežen limit AI ponudnika.\n\nPočakajte 1–2 minuti in poskusite ponovno, ali preklopite na drug model v Nastavitvah.`
-              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated due to AI provider rate limits.\n\nWait 1–2 minutes and try again, or switch models in Settings.`;
+              ? `Uspešno generirano: ${successCount} od ${totalToProcess} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je bil dosežen limit AI ponudnika (15 zahtevkov/minuto).\n\nPočakajte 1–2 minuti in poskusite ponovno, ali preklopite na drug model v Nastavitvah.`
+              : `Successfully generated: ${successCount} of ${totalToProcess} sections.\n\n${failedCount} sections could not be generated due to AI provider rate limits (15 requests/minute).\n\nWait 1–2 minutes and try again, or switch models in Settings.`;
           } else if (isCredits) {
             modalTitle = language === 'si' ? 'Nezadostna sredstva AI' : 'Insufficient AI Credits';
             modalMessage = language === 'si'
-              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker vaš AI ponudnik nima dovolj sredstev.\n\nDopolnite kredit pri vašem ponudniku ali preklopite na drug model v Nastavitvah.`
-              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated due to insufficient AI credits.\n\nTop up your credits or switch models in Settings.`;
+              ? `Uspešno generirano: ${successCount} od ${totalToProcess} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker vaš AI ponudnik nima dovolj sredstev.\n\nDopolnite kredit pri vašem ponudniku ali preklopite na drug model v Nastavitvah.`
+              : `Successfully generated: ${successCount} of ${totalToProcess} sections.\n\n${failedCount} sections could not be generated due to insufficient AI credits.\n\nTop up your credits or switch models in Settings.`;
           } else if (isJSON) {
             modalTitle = language === 'si' ? 'Napaka formata' : 'Format Error';
             modalMessage = language === 'si'
-              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je AI vrnil nepravilen format.\n\nPoskusite ponovno — AI modeli občasno vrnejo nepopoln odgovor.`
-              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated because the AI returned an invalid format.\n\nPlease try again — AI models occasionally return incomplete responses.`;
+              ? `Uspešno generirano: ${successCount} od ${totalToProcess} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je AI vrnil nepravilen format.\n\nPoskusite ponovno — AI modeli občasno vrnejo nepopoln odgovor.`
+              : `Successfully generated: ${successCount} of ${totalToProcess} sections.\n\n${failedCount} sections could not be generated because the AI returned an invalid format.\n\nPlease try again — AI models occasionally return incomplete responses.`;
           } else if (isNetwork) {
             modalTitle = language === 'si' ? 'Omrežna napaka' : 'Network Error';
             modalMessage = language === 'si'
-              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati zaradi omrežne napake.\n\nPreverite internetno povezavo in poskusite ponovno.`
-              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated due to a network error.\n\nCheck your internet connection and try again.`;
+              ? `Uspešno generirano: ${successCount} od ${totalToProcess} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati zaradi omrežne napake.\n\nPreverite internetno povezavo in poskusite ponovno.`
+              : `Successfully generated: ${successCount} of ${totalToProcess} sections.\n\n${failedCount} sections could not be generated due to a network error.\n\nCheck your internet connection and try again.`;
           } else {
             modalTitle = language === 'si' ? 'Delna generacija' : 'Partial Generation';
             modalMessage = language === 'si'
-              ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati.\n\nPoskusite ponovno ali preklopite na drug AI model v Nastavitvah.`
-              : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated.\n\nPlease try again or switch to a different AI model in Settings.`;
+              ? `Uspešno generirano: ${successCount} od ${totalToProcess} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati.\n\nPoskusite ponovno ali preklopite na drug AI model v Nastavitvah.`
+              : `Successfully generated: ${successCount} of ${totalToProcess} sections.\n\n${failedCount} sections could not be generated.\n\nPlease try again or switch to a different AI model in Settings.`;
           }
 
           setModalConfig({
@@ -744,6 +937,7 @@ export const useGeneration = ({
     [
       ensureApiKey,
       robustCheckSectionHasContent,
+      sectionNeedsGeneration,
       checkOtherLanguageHasContent,
       projectData,
       language,
