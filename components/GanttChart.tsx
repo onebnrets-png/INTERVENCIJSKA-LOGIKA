@@ -1,6 +1,10 @@
 // components/GanttChart.tsx
 // ═══════════════════════════════════════════════════════════════
-// Gantt Chart Component – v4.8 (2026-02-15)
+// Gantt Chart Component – v4.9 (2026-02-15)
+// v4.9 – FEAT: Added CTRL+Scroll zoom (50%-200%), drag-to-pan,
+//         pinch-to-zoom (touch), double-click reset, and ZoomBadge.
+//         Uses shared useZoomPan hook. Zoom wrapper wraps chart
+//         content area (below toolbar, above footer).
 // ═══════════════════════════════════════════════════════════════
 // CHANGELOG:
 // v4.8 – FIX: Eliminated first-render flash where Gantt chart renders at
