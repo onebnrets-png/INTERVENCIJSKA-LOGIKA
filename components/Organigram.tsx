@@ -1,7 +1,27 @@
+// components/Organigram.tsx v1.1
+// ═══════════════════════════════════════════════════════════════
+// CHANGELOG:
+// v1.1 – FEAT: Added CTRL+Scroll zoom (50%-200%), drag-to-pan,
+//         pinch-to-zoom (touch), double-click reset, and ZoomBadge.
+//         Uses shared useZoomPan hook for consistent behavior across
+//         all chart components.
+// v1.0 – Initial implementation with hierarchical org chart layout.
+// ═══════════════════════════════════════════════════════════════
 
 import React from 'react';
+import { useZoomPan } from '../hooks/useZoomPan';
+import { ZoomBadge } from '../hooks/ZoomBadge';
 
 const Organigram = ({ structure, activities, language = 'en', id }) => {
+    // ★ v1.1: Zoom & Pan
+    const {
+        containerRef: zoomContainerRef,
+        containerStyle: zoomContainerStyle,
+        contentStyle: zoomContentStyle,
+        zoomBadgeText,
+        resetZoom,
+    } = useZoomPan({ minScale: 0.5, maxScale: 2.0, scaleStep: 0.1 });
+
     // Default roles if missing
     const coordinator = structure?.coordinator || "Project Coordinator";
     const steering = structure?.steeringCommittee || "Steering Committee";
@@ -48,109 +68,127 @@ const Organigram = ({ structure, activities, language = 'en', id }) => {
         </svg>
     );
 
-    const WPIcon = ({ id }) => (
+    const WPIcon = ({ id: wpId }) => (
         <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg flex items-center justify-center shadow-sm border border-slate-300 text-slate-600 font-bold text-sm">
-            {id}
+            {wpId}
         </div>
     );
 
     return (
-        <div id={id} className="w-full overflow-x-auto p-8 bg-slate-50 relative rounded-xl border border-slate-200">
-            {/* Technical Grid Background */}
-            <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+        <div
+            id={id}
+            ref={zoomContainerRef}
+            className="w-full p-8 bg-slate-50 relative rounded-xl border border-slate-200"
+            style={{
+                ...zoomContainerStyle,
+                // Keep original overflow behavior as fallback when not zoomed
+                overflow: 'hidden',
+            }}
+        >
+            {/* ★ v1.1: Zoom Badge */}
+            <ZoomBadge
+                zoomText={zoomBadgeText}
+                onReset={resetZoom}
+                language={language === 'si' ? 'sl' : 'en'}
+            />
 
-            <div className="flex flex-col items-center min-w-[800px] relative z-10">
-                
-                {/* Connector Lines SVG Layer */}
-                <svg className="absolute w-full h-full pointer-events-none top-0 left-0" style={{ zIndex: 0 }}>
-                    <defs>
-                        <marker id="arrowhead-down" markerWidth="10" markerHeight="7" refX="5" refY="3.5" orient="auto">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#cbd5e1" />
-                        </marker>
-                    </defs>
-                    {/* Drawn dynamically via absolute divs for simplicity in React, but complex paths can go here */}
-                </svg>
+            {/* ★ v1.1: Zoomable/pannable content wrapper */}
+            <div style={zoomContentStyle}>
+                {/* Technical Grid Background */}
+                <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
-                {/* Level 1: Strategic Layer */}
-                <div className="flex justify-center gap-20 items-start mb-16 relative w-full">
-                    {/* Steering Committee */}
-                    <div className="flex flex-col items-center relative mt-8 group">
-                        <Card 
-                            title={steering} 
-                            role={language === 'si' ? "Odločanje" : "Decision Making"}
-                            colorClass="border-t-amber-500"
-                            icon={<GroupIcon color="text-amber-600"/>}
-                        />
-                        {/* Connector to Center */}
-                        <div className="absolute top-1/2 left-full w-20 h-0.5 bg-slate-300 -z-10 group-hover:bg-amber-300 transition-colors"></div>
+                <div className="flex flex-col items-center min-w-[800px] relative z-10">
+                    
+                    {/* Connector Lines SVG Layer */}
+                    <svg className="absolute w-full h-full pointer-events-none top-0 left-0" style={{ zIndex: 0 }}>
+                        <defs>
+                            <marker id="arrowhead-down" markerWidth="10" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#cbd5e1" />
+                            </marker>
+                        </defs>
+                    </svg>
+
+                    {/* Level 1: Strategic Layer */}
+                    <div className="flex justify-center gap-20 items-start mb-16 relative w-full">
+                        {/* Steering Committee */}
+                        <div className="flex flex-col items-center relative mt-8 group">
+                            <Card 
+                                title={steering} 
+                                role={language === 'si' ? "Odločanje" : "Decision Making"}
+                                colorClass="border-t-amber-500"
+                                icon={<GroupIcon color="text-amber-600"/>}
+                            />
+                            {/* Connector to Center */}
+                            <div className="absolute top-1/2 left-full w-20 h-0.5 bg-slate-300 -z-10 group-hover:bg-amber-300 transition-colors"></div>
+                        </div>
+
+                        {/* Coordinator (Center) */}
+                        <div className="flex flex-col items-center z-10 relative">
+                            <div className="absolute -top-12 text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2">Project Management</div>
+                            <Card 
+                                title={coordinator} 
+                                role={language === 'si' ? "Vodenje & Koordinacija" : "Management & Coordination"}
+                                colorClass="border-t-sky-600"
+                                icon={<UserIcon color="text-sky-700"/>}
+                                isCenter={true}
+                            />
+                            {/* Vertical Line Down */}
+                            <div className="h-16 w-0.5 bg-slate-300 mx-auto"></div>
+                        </div>
+
+                        {/* Advisory Board */}
+                        <div className="flex flex-col items-center relative mt-8 group">
+                            {/* Connector to Center */}
+                            <div className="absolute top-1/2 right-full w-20 h-0.5 bg-slate-300 dashed -z-10 border-b-2 border-dashed border-slate-300 h-0 group-hover:border-purple-300 transition-colors"></div>
+                            <Card 
+                                title={advisory} 
+                                role={language === 'si' ? "Strokovno Svetovanje" : "Expert Consulting"}
+                                colorClass="border-t-purple-500"
+                                icon={<GroupIcon color="text-purple-600"/>}
+                            />
+                        </div>
                     </div>
 
-                    {/* Coordinator (Center) */}
-                    <div className="flex flex-col items-center z-10 relative">
-                        <div className="absolute -top-12 text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2">Project Management</div>
+                    {/* Level 2: Operational Management */}
+                    <div className="flex flex-col items-center mb-12 relative w-full">
                         <Card 
-                            title={coordinator} 
-                            role={language === 'si' ? "Vodenje & Koordinacija" : "Management & Coordination"}
-                            colorClass="border-t-sky-600"
-                            icon={<UserIcon color="text-sky-700"/>}
-                            isCenter={true}
+                            title={technical} 
+                            role={language === 'si' ? "Operativa & Kakovost" : "Ops & Quality Assurance"}
+                            colorClass="border-t-emerald-500"
+                            icon={<TechIcon color="text-emerald-600"/>}
                         />
                         {/* Vertical Line Down */}
-                        <div className="h-16 w-0.5 bg-slate-300 mx-auto"></div>
+                        <div className="h-12 w-0.5 bg-slate-300 mx-auto"></div>
                     </div>
 
-                    {/* Advisory Board */}
-                    <div className="flex flex-col items-center relative mt-8 group">
-                        {/* Connector to Center */}
-                        <div className="absolute top-1/2 right-full w-20 h-0.5 bg-slate-300 dashed -z-10 border-b-2 border-dashed border-slate-300 h-0 group-hover:border-purple-300 transition-colors"></div>
-                        <Card 
-                            title={advisory} 
-                            role={language === 'si' ? "Strokovno Svetovanje" : "Expert Consulting"}
-                            colorClass="border-t-purple-500"
-                            icon={<GroupIcon color="text-purple-600"/>}
-                        />
-                    </div>
-                </div>
-
-                {/* Level 2: Operational Management */}
-                <div className="flex flex-col items-center mb-12 relative w-full">
-                    <Card 
-                        title={technical} 
-                        role={language === 'si' ? "Operativa & Kakovost" : "Ops & Quality Assurance"}
-                        colorClass="border-t-emerald-500"
-                        icon={<TechIcon color="text-emerald-600"/>}
-                    />
-                    {/* Vertical Line Down */}
-                    <div className="h-12 w-0.5 bg-slate-300 mx-auto"></div>
-                </div>
-
-                {/* Level 3: Work Packages */}
-                <div className="relative w-full">
-                    {/* Horizontal Distribution Line */}
-                    <div className="absolute top-0 left-[10%] right-[10%] h-4 border-t-2 border-slate-300 -z-10 rounded-t-xl"></div>
-                    
-                    <div className="flex justify-center w-full px-4 gap-6 flex-wrap pt-4">
-                        {activities && activities.map((wp, i) => (
-                            <div key={i} className="flex-1 min-w-[140px] max-w-[180px] flex flex-col items-center relative">
-                                {/* Connector from horizontal line */}
-                                <div className="absolute -top-4 w-0.5 h-4 bg-slate-300"></div>
-                                
-                                <div className="bg-white border-b-4 border-slate-300 p-4 rounded-xl shadow-md text-center hover:shadow-lg transition-all hover:-translate-y-1 h-full flex flex-col justify-start items-center w-full group hover:border-sky-400">
-                                    <div className="mb-2 transform group-hover:scale-110 transition-transform">
-                                        <WPIcon id={wp.id} />
-                                    </div>
-                                    <p className="text-xs font-bold text-slate-700 leading-tight mb-2 line-clamp-3" title={wp.title}>
-                                        {wp.title || "Untitled WP"}
-                                    </p>
-                                    <div className="mt-auto pt-2 border-t border-slate-100 w-full">
-                                        <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">{wpLeaders}</p>
+                    {/* Level 3: Work Packages */}
+                    <div className="relative w-full">
+                        {/* Horizontal Distribution Line */}
+                        <div className="absolute top-0 left-[10%] right-[10%] h-4 border-t-2 border-slate-300 -z-10 rounded-t-xl"></div>
+                        
+                        <div className="flex justify-center w-full px-4 gap-6 flex-wrap pt-4">
+                            {activities && activities.map((wp, i) => (
+                                <div key={i} className="flex-1 min-w-[140px] max-w-[180px] flex flex-col items-center relative">
+                                    {/* Connector from horizontal line */}
+                                    <div className="absolute -top-4 w-0.5 h-4 bg-slate-300"></div>
+                                    
+                                    <div className="bg-white border-b-4 border-slate-300 p-4 rounded-xl shadow-md text-center hover:shadow-lg transition-all hover:-translate-y-1 h-full flex flex-col justify-start items-center w-full group hover:border-sky-400">
+                                        <div className="mb-2 transform group-hover:scale-110 transition-transform">
+                                            <WPIcon id={wp.id} />
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-700 leading-tight mb-2 line-clamp-3" title={wp.title}>
+                                            {wp.title || "Untitled WP"}
+                                        </p>
+                                        <div className="mt-auto pt-2 border-t border-slate-100 w-full">
+                                            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">{wpLeaders}</p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
 
+                </div>
             </div>
         </div>
     );
