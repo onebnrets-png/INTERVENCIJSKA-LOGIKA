@@ -713,14 +713,12 @@ export const useGeneration = ({
           onCancel: closeModal,
         });
       } else if (hasContentInSections) {
-        // LEVEL 3: Only current language has content → 3-option modal
         show3OptionModal(
           () => runComposite('enhance'),
           () => runComposite('fill'),
           () => runComposite('regenerate')
         );
       } else {
-        // LEVEL 4: Nothing exists → just generate
         runComposite('regenerate');
       }
     },
