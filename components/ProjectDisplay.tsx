@@ -884,10 +884,21 @@ const renderActivities = (props) => {
 const renderExpectedResults = (props) => {
     return (
         <>
-            {renderGenericResults(props, 'outputs')}
-            {renderGenericResults(props, 'outcomes')}
-            {renderGenericResults(props, 'impacts')}
-            {renderKERs(props)}
+    <div className="flex justify-between items-end mb-3 pt-2 border-b border-slate-200 pb-2">
+    <h3 className="text-lg font-bold text-slate-700">{t.subSteps.expectedResults || t.steps?.expectedResults || 'Expected Results'}</h3>
+    <GenerateButton 
+        onClick={() => onGenerateCompositeSection('expectedResults')} 
+        isLoading={isLoading} 
+        title={t.generateSection} 
+        text={t.generateAI} 
+        missingApiKey={missingApiKey} 
+    />
+</div>
+{renderGenericResults(sharedProps, 'outputs')}
+{renderGenericResults(sharedProps, 'outcomes')}
+{renderGenericResults(sharedProps, 'impacts')}
+{renderKERs(sharedProps)}
+
         </>
     );
 };
