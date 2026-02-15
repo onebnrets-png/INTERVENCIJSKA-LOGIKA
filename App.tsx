@@ -474,6 +474,7 @@ const App = () => {
                 <button onClick={handleLogout} className="w-full text-left px-4 py-2 rounded-md text-sm text-slate-500 hover:bg-red-50 hover:text-red-600">
                   {t.auth.logout}
                 </button>
+                <p className="text-[10px] text-slate-300 text-center mt-2">{t.copyright}</p>
               </div>
             </aside>
 
