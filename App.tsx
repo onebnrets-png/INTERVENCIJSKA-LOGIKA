@@ -1,5 +1,7 @@
-// App.tsx
+// // App.tsx
 // ═══════════════════════════════════════════════════════════════
+// Main application shell — orchestration only.
+// v1.1 — 2026-02-15 — Added copyright footer in sidebar.
 // Main application shell — orchestration only.
 // All business logic lives in hooks:
 //   - useAuth           → authentication, session, API key check, MFA
