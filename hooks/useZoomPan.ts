@@ -1,11 +1,14 @@
-// hooks/useZoomPan.ts v1.1
+// hooks/useZoomPan.ts v1.3
 // ═══════════════════════════════════════════════════════════════
 // Universal zoom & pan hook for chart components
 // CTRL+Scroll zoom (50%-200%), drag-to-pan, pinch-to-zoom, double-click reset
 // ═══════════════════════════════════════════════════════════════
 // CHANGELOG:
+// v1.3 – FIX: Drag-to-pan now works at ANY zoom level (both < 100%
+//         and > 100%). Previously only worked above 100%.
+//         Changed all scale > 1.01 checks to |scale - 1| > 0.001.
 // v1.1 – Added setScale() for programmatic zoom (Fit button),
-//         onZoomChange callback so components can react to user zoom,
+//         onUserZoom callback so components can react to user zoom,
 //         and improved drag behavior (only drag when scale !== 1 or
 //         when explicitly enabled).
 // v1.0 – Initial implementation.
@@ -73,6 +76,9 @@ export function useZoomPan(options?: UseZoomPanOptions): UseZoomPanReturn {
   // --- Pinch-to-zoom state ---
   const lastPinchDist = useRef<number | null>(null);
 
+  // ★ v1.3: Helper — is scale different from 100%?
+  const isZoomed = (scale: number): boolean => Math.abs(scale - 1) > 0.001;
+
   // --- Reset to 100% ---
   const resetZoom = useCallback(() => {
     setState({ scale: 1, translateX: 0, translateY: 0 });
@@ -117,7 +123,6 @@ export function useZoomPan(options?: UseZoomPanOptions): UseZoomPanReturn {
 
         // Notify component about user-initiated zoom
         if (newScale !== prev.scale && onUserZoomRef.current) {
-          // Use setTimeout to avoid setState-in-setState
           setTimeout(() => onUserZoomRef.current?.(newScale), 0);
         }
 
@@ -163,8 +168,8 @@ export function useZoomPan(options?: UseZoomPanOptions): UseZoomPanReturn {
 
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
-      // Only allow drag when zoomed (scale != 1) to avoid interfering with chart interactions
-      if (state.scale <= 1.01) return;
+      // ★ v1.3: Allow drag at ANY zoom level except exactly 100%
+      if (!isZoomed(state.scale)) return;
 
       isDragging.current = true;
       dragStart.current = { x: e.clientX, y: e.clientY };
@@ -191,7 +196,8 @@ export function useZoomPan(options?: UseZoomPanOptions): UseZoomPanReturn {
       if (isDragging.current) {
         isDragging.current = false;
         if (containerRef.current) {
-          containerRef.current.style.cursor = state.scale > 1.01 ? 'grab' : 'default';
+          // ★ v1.3: Show grab cursor at any zoom level except 100%
+          containerRef.current.style.cursor = isZoomed(state.scale) ? 'grab' : 'default';
         }
       }
     };
@@ -224,7 +230,8 @@ export function useZoomPan(options?: UseZoomPanOptions): UseZoomPanReturn {
       if (e.touches.length === 2) {
         lastPinchDist.current = getPinchDist(e.touches);
         e.preventDefault();
-      } else if (e.touches.length === 1 && enableDrag && state.scale > 1.01) {
+      // ★ v1.3: Allow touch drag at any zoom level except 100%
+      } else if (e.touches.length === 1 && enableDrag && isZoomed(state.scale)) {
         isDragging.current = true;
         dragStart.current = {
           x: e.touches[0].clientX,
@@ -306,7 +313,8 @@ export function useZoomPan(options?: UseZoomPanOptions): UseZoomPanReturn {
   // ============================================================
   const containerStyle: React.CSSProperties = {
     overflow: 'hidden',
-    cursor: state.scale > 1.01 ? 'grab' : 'default',
+    // ★ v1.3: Show grab cursor at any zoom level except 100%
+    cursor: isZoomed(state.scale) ? 'grab' : 'default',
     position: 'relative',
     touchAction: 'none',
   };
