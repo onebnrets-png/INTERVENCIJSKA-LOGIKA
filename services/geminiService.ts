@@ -196,7 +196,23 @@ const getContext = (projectData: any): string => {
 
   const pi = projectData.projectIdea;
   if (pi?.mainAim || pi?.stateOfTheArt || pi?.proposedSolution || pi?.projectTitle) {
-    sections.push(`Project Idea:\n${JSON.stringify(pi, null, 2)}`);
+    // ★ v4.5: Calculate and inject projectEndDate into context
+    let endDateStr = '';
+    if (pi?.startDate && pi?.durationMonths) {
+      const start = new Date(pi.startDate);
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + pi.durationMonths);
+      end.setDate(end.getDate() - 1);
+      endDateStr = end.toISOString().split('T')[0];
+    }
+    const piWithDates = {
+      ...pi,
+      _calculatedEndDate: endDateStr,
+      _projectTimeframe: pi?.startDate && endDateStr
+        ? `Project runs from ${pi.startDate} to ${endDateStr} (${pi.durationMonths} months). ALL tasks, milestones, and deliverables MUST fall within this timeframe. NO exceptions.`
+        : ''
+    };
+    sections.push(`Project Idea:\n${JSON.stringify(piWithDates, null, 2)}`);
   }
 
   if (projectData.generalObjectives?.length > 0)
