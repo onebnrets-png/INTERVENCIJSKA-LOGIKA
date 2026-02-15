@@ -786,7 +786,27 @@ const getPromptAndSchemaForSection = (
   const taskInstruction = buildTaskInstruction(sectionKey, projectData, language);
   const qualityGate = getQualityGate(sectionKey, language);
 
+    // ★ v4.5: For activities, inject TEMPORAL_INTEGRITY_RULE as the VERY FIRST block
+  // AI models pay most attention to the beginning and end of the prompt.
+  let temporalRuleBlock = '';
+  if (sectionKey === 'activities') {
+    const today = new Date().toISOString().split('T')[0];
+    const pStart = projectData.projectIdea?.startDate || today;
+    const pMonths = projectData.projectIdea?.durationMonths || 24;
+    const pStartDate = new Date(pStart);
+    const pEndDate = new Date(pStartDate);
+    pEndDate.setMonth(pEndDate.getMonth() + pMonths);
+    pEndDate.setDate(pEndDate.getDate() - 1);
+    const pEnd = pEndDate.toISOString().split('T')[0];
+    
+    temporalRuleBlock = (TEMPORAL_INTEGRITY_RULE[language] || TEMPORAL_INTEGRITY_RULE.en)
+      .replace(/\{\{projectStart\}\}/g, pStart)
+      .replace(/\{\{projectEnd\}\}/g, pEnd)
+      .replace(/\{\{projectDurationMonths\}\}/g, String(pMonths));
+  }
+
   const prompt = [
+    temporalRuleBlock,   // ★ FIRST for activities — highest priority position
     langDirective,
     langMismatchNotice,
     taskInstruction,
@@ -799,7 +819,9 @@ const getPromptAndSchemaForSection = (
     humanRules,
     `${globalRulesHeader}:\n${globalRules}`,
     sectionRules,
+    temporalRuleBlock ? temporalRuleBlock : '',  // ★ ALSO LAST — AI also attends to end
   ].filter(Boolean).join('\n\n');
+
 
   return { prompt, schema };
 };
