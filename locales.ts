@@ -5,6 +5,7 @@
 //   - RENAMED appTitle: "EU Project Idea Draft" (EN) /
 //     "Idejni osnutek projekta EU" (SI)
 //   - copyright: "© 2026 INFINITA d.o.o. All rights reserved.",
+//   - copyright: "© 2026 INFINITA d.o.o. Vse pravice pridržane.",
 //   - All previous v4.5 changes preserved.
 // ═══════════════════════════════════════════════════════════════
 
