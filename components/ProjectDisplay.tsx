@@ -309,7 +309,37 @@ const renderProjectIdea = (props) => {
                      />
                 </div>
             </div>
-            
+           {/* ★ v4.5: Project Duration selector */}
+<div className="mt-4">
+  <FieldHeader label={t.projectDuration} />
+  <p className="text-sm text-slate-500 mb-2">{t.projectDurationDesc}</p>
+  <div className="flex items-center gap-4">
+    <select
+      className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+      value={projectData.projectIdea?.durationMonths || 24}
+      onChange={(e) => onUpdateData(['projectIdea', 'durationMonths'], parseInt(e.target.value))}
+    >
+      {[6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 42, 48, 54, 60].map(m => (
+        <option key={m} value={m}>{m} {t.months}</option>
+      ))}
+    </select>
+    {projectData.projectIdea?.startDate && (
+      <div className="text-sm text-slate-600">
+        <span className="font-medium">{t.projectEndDate}:</span>{' '}
+        <span className="font-bold text-sky-700">
+          {(() => {
+            const start = new Date(projectData.projectIdea.startDate);
+            const months = projectData.projectIdea?.durationMonths || 24;
+            const end = new Date(start);
+            end.setMonth(end.getMonth() + months);
+            end.setDate(end.getDate() - 1);
+            return end.toISOString().split('T')[0];
+          })()}
+        </span>
+      </div>
+    )}
+  </div>
+</div>
             <div id="main-aim">
                  <FieldHeader title={t.mainAim} description={t.mainAimDesc}/>
                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
