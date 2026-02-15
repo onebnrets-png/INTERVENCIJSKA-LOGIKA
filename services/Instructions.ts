@@ -1203,113 +1203,87 @@ export async function resetAppInstructions(): Promise<any> {
 // ───────────────────────────────────────────────────────────────
 // ★ v4.5 NEW: TEMPORAL INTEGRITY RULE
 // ───────────────────────────────────────────────────────────────
-// This is the SUPREME time-boundary rule. It takes precedence over
-// all other scheduling instructions. AI MUST apply this as a
-// non-negotiable post-generation validation pass.
+// SUPREME time-boundary rule. Injected into activities prompt
+// as the FIRST block. Also enforced programmatically in
+// geminiService.ts via enforceTemporalIntegrity() post-processor.
 
 export const TEMPORAL_INTEGRITY_RULE: Record<string, string> = {
-  en: `═══ TEMPORAL INTEGRITY RULE (SUPREME — OVERRIDES ALL OTHER SCHEDULING RULES) ═══
+  en: `═══ TEMPORAL INTEGRITY RULE (SUPREME — OVERRIDES ALL OTHER SCHEDULING) ═══
 
-This rule defines the ABSOLUTE time boundaries of the project. It is NON-NEGOTIABLE.
-Any violation constitutes a FATAL ERROR that invalidates the entire work plan.
+★★★ THIS IS THE #1 MOST IMPORTANT RULE IN THE ENTIRE PROMPT. ★★★
+ANY DATE VIOLATION MAKES THE ENTIRE OUTPUT INVALID AND UNUSABLE.
 
-THE IRON RULE:
-The "Project Management and Coordination" Work Package (the LAST WP) defines the
-MAXIMUM TEMPORAL ENVELOPE of the entire project. Its first task starts on the project
-start date ({{projectStart}}) and its last task ends on the project end date ({{projectEnd}}).
-NO other work package, task, milestone, or deliverable may have ANY date that falls
-OUTSIDE this envelope.
+THE IRON LAW:
+The Project Management WP (LAST WP) = the MAXIMUM TEMPORAL ENVELOPE.
+NOTHING in the entire project may have a date outside this envelope.
+
+PROJECT BOUNDARIES (ABSOLUTE, NON-NEGOTIABLE):
+  Start: {{projectStart}}
+  End:   {{projectEnd}}
+  Duration: {{projectDurationMonths}} months exactly
 
 FORMAL CONSTRAINTS:
-1. PROJECT MANAGEMENT WP = TEMPORAL REFERENCE FRAME
-   - The PM WP (last WP) MUST start exactly on {{projectStart}}.
-   - The PM WP (last WP) MUST end exactly on {{projectEnd}}.
-   - This WP defines the outer boundary. Everything else fits INSIDE it.
+1. PM WP (last WP): starts EXACTLY {{projectStart}}, ends EXACTLY {{projectEnd}}.
+2. Dissemination WP (second-to-last): starts EXACTLY {{projectStart}}, ends EXACTLY {{projectEnd}}.
+   - Dissemination WP MUST NOT extend even 1 day beyond PM WP.
+   - Both WPs end on the SAME date: {{projectEnd}}.
+3. ALL tasks across ALL WPs: startDate ≥ {{projectStart}} AND endDate ≤ {{projectEnd}}.
+4. ALL milestones: date ≥ {{projectStart}} AND date ≤ {{projectEnd}}.
+5. Content/technical WPs: each covers only a PHASE, NONE spans the full duration.
 
-2. DISSEMINATION WP = FULL SPAN (but within PM envelope)
-   - The Dissemination WP (second-to-last) also spans {{projectStart}} to {{projectEnd}}.
-   - Its tasks MUST NOT extend beyond {{projectEnd}}.
+COMMON AI MISTAKES — YOU MUST AVOID THESE:
+✗ Dissemination WP ending 1–3 months AFTER PM WP → WRONG. They end SAME day.
+✗ "Final report" task scheduled after {{projectEnd}} → WRONG. Must be ON or BEFORE.
+✗ Exploitation tasks extending beyond project → WRONG. All within envelope.
+✗ 28-month schedule for 24-month project → WRONG. Count precisely.
+✗ Last task of Dissemination ending later than last task of PM → WRONG. NEVER.
 
-3. ALL OTHER WPs, TASKS, MILESTONES — STRICTLY INSIDE THE ENVELOPE
-   - For EVERY task in the project: startDate ≥ {{projectStart}} AND endDate ≤ {{projectEnd}}.
-   - For EVERY milestone: date ≥ {{projectStart}} AND date ≤ {{projectEnd}}.
-   - For EVERY deliverable due date: ≤ {{projectEnd}}.
-   - NO EXCEPTIONS. Not even by one day.
+SELF-CHECK (MANDATORY before returning JSON):
+For EVERY task: is endDate ≤ {{projectEnd}}? If NO → set it to {{projectEnd}} or earlier.
+For EVERY milestone: is date ≤ {{projectEnd}}? If NO → set it to {{projectEnd}} or earlier.
+Does PM WP last task end exactly on {{projectEnd}}? Must be YES.
+Does Dissemination last task end ≤ {{projectEnd}}? Must be YES.
 
-4. CONTENT/TECHNICAL WPs — SHORTER THAN PM WP
-   - Each content WP covers only a PHASE of the project (e.g., M1–M10, M6–M18).
-   - No content WP may span the full project duration.
-   - Content WPs are sequential with partial overlaps.
-
-5. MANDATORY SELF-VERIFICATION
-   Before returning the JSON, you MUST perform this check on EVERY date in the output:
-   a) Extract {{projectEnd}} as a Date object.
-   b) For each task: verify task.endDate ≤ {{projectEnd}}. If not → FIX IT to {{projectEnd}} or earlier.
-   c) For each task: verify task.startDate ≥ {{projectStart}}. If not → FIX IT to {{projectStart}} or later.
-   d) For each milestone: verify milestone.date ≤ {{projectEnd}}. If not → FIX IT.
-   e) Verify PM WP last task endDate = {{projectEnd}} exactly.
-   f) Verify Dissemination WP last task endDate ≤ {{projectEnd}}.
-
-6. COMMON AI MISTAKES TO AVOID
-   - DO NOT schedule "Final report" or "Project closure" tasks AFTER {{projectEnd}}.
-   - DO NOT schedule exploitation/sustainability tasks beyond the project end.
-   - DO NOT let Dissemination WP extend 1–3 months beyond PM WP — they end on the SAME date.
-   - DO NOT generate a 28-month schedule for a 24-month project. Count months precisely.
-   - The project has EXACTLY {{projectDurationMonths}} months. Use them all, but do not exceed them.
-
-VIOLATION = FATAL ERROR. If any date exceeds {{projectEnd}}, the entire work plan is INVALID.
+VIOLATION OF ANY OF THE ABOVE = ENTIRE JSON IS REJECTED.
 ═══════════════════════════════════════════════════════════════════`,
 
-  si: `═══ PRAVILO ČASOVNE CELOVITOSTI (VRHOVNI ZAKON — PREGLASI VSA DRUGA PRAVILA NAČRTOVANJA) ═══
+  si: `═══ PRAVILO ČASOVNE CELOVITOSTI (VRHOVNI ZAKON — PREGLASI VSE DRUGO) ═══
 
-To pravilo določa ABSOLUTNE časovne meje projekta. Je NEPRELOMNO.
-Vsaka kršitev pomeni USODNO NAPAKO, ki razveljavi celoten delovni načrt.
+★★★ TO JE NAJPOMEMBNEJŠE PRAVILO V CELOTNEM NAVODILU. ★★★
+VSAKA KRŠITEV DATUMA NAREDI CELOTEN IZHOD NEVELJAVEN IN NEUPORABEN.
 
-ŽELEZNO PRAVILO:
-Delovni sklop "Upravljanje in koordinacija projekta" (ZADNJI DS) določa
-NAJVEČJI ČASOVNI OKVIR celotnega projekta. Njegova prva naloga se začne na datum
-začetka projekta ({{projectStart}}), njegova zadnja naloga pa se zaključi na datum
-konca projekta ({{projectEnd}}). NOBEN drug delovni sklop, naloga, mejnik ali
-dosežek NE SME imeti NOBENEGA datuma, ki pade IZVEN tega okvira.
+ŽELEZNI ZAKON:
+DS Upravljanja projekta (ZADNJI DS) = NAJVEČJI ČASOVNI OKVIR.
+NIČ v celotnem projektu ne sme imeti datuma izven tega okvira.
+
+MEJE PROJEKTA (ABSOLUTNE, NEPRELOMNE):
+  Začetek: {{projectStart}}
+  Konec:   {{projectEnd}}
+  Trajanje: natančno {{projectDurationMonths}} mesecev
 
 FORMALNE OMEJITVE:
-1. DS UPRAVLJANJA PROJEKTA = ČASOVNI REFERENČNI OKVIR
-   - DS za upravljanje (zadnji DS) se MORA začeti natančno na {{projectStart}}.
-   - DS za upravljanje (zadnji DS) se MORA zaključiti natančno na {{projectEnd}}.
-   - Ta DS določa zunanjo mejo. Vse ostalo se umesti ZNOTRAJ njega.
+1. DS upravljanja (zadnji DS): začne se NATANČNO {{projectStart}}, konča NATANČNO {{projectEnd}}.
+2. DS diseminacije (predzadnji): začne se NATANČNO {{projectStart}}, konča NATANČNO {{projectEnd}}.
+   - DS diseminacije NE SME trajati niti 1 dan dlje od DS upravljanja.
+   - Oba DS se končata na ISTI datum: {{projectEnd}}.
+3. VSE naloge v VSEH DS: startDate ≥ {{projectStart}} IN endDate ≤ {{projectEnd}}.
+4. VSI mejniki: date ≥ {{projectStart}} IN date ≤ {{projectEnd}}.
+5. Vsebinski/tehnični DS: vsak pokriva le FAZO, NOBEN ne traja celotno trajanje.
 
-2. DS DISEMINACIJE = CELOTNO TRAJANJE (ampak znotraj okvira upravljanja)
-   - DS za diseminacijo (predzadnji) prav tako traja od {{projectStart}} do {{projectEnd}}.
-   - Njegove naloge NE SMEJO presegati {{projectEnd}}.
+POGOSTE NAPAKE AI — TEM SE MORAŠ IZOGNITI:
+✗ DS diseminacije se konča 1–3 mesece PO DS upravljanja → NAPAČNO. Končata se ISTI dan.
+✗ Naloga "Zaključno poročilo" načrtovana po {{projectEnd}} → NAPAČNO. Mora biti NA ali PRED.
+✗ Naloge eksploatacije presegajo projekt → NAPAČNO. Vse znotraj okvira.
+✗ 28-mesečni urnik za 24-mesečni projekt → NAPAČNO. Natančno preštej.
+✗ Zadnja naloga diseminacije se konča pozneje kot zadnja naloga upravljanja → NAPAČNO. NIKOLI.
 
-3. VSI DRUGI DS, NALOGE, MEJNIKI — STROGO ZNOTRAJ OKVIRA
-   - Za VSAKO nalogo v projektu: startDate ≥ {{projectStart}} IN endDate ≤ {{projectEnd}}.
-   - Za VSAK mejnik: date ≥ {{projectStart}} IN date ≤ {{projectEnd}}.
-   - Za VSAK rok dosežka: ≤ {{projectEnd}}.
-   - BREZ IZJEM. Niti za en dan.
+SAMOPREVERJANJE (OBVEZNO pred vrnitvijo JSON):
+Za VSAKO nalogo: ali je endDate ≤ {{projectEnd}}? Če NE → nastavi na {{projectEnd}} ali prej.
+Za VSAK mejnik: ali je date ≤ {{projectEnd}}? Če NE → nastavi na {{projectEnd}} ali prej.
+Ali se zadnja naloga DS upravljanja konča natančno na {{projectEnd}}? Mora biti DA.
+Ali se zadnja naloga DS diseminacije konča ≤ {{projectEnd}}? Mora biti DA.
 
-4. VSEBINSKI/TEHNIČNI DS — KRAJŠI OD DS UPRAVLJANJA
-   - Vsak vsebinski DS pokriva le FAZO projekta (npr. M1–M10, M6–M18).
-   - Noben vsebinski DS ne sme trajati celotno trajanje projekta.
-   - Vsebinski DS so zaporedni z delnim prekrivanjem.
-
-5. OBVEZNA SAMOPREVERJANJE
-   Pred vrnitvijo JSON-a MORAŠ izvesti to preverjanje za VSAK datum v izhodu:
-   a) Razčleni {{projectEnd}} kot datumski objekt.
-   b) Za vsako nalogo: preveri task.endDate ≤ {{projectEnd}}. Če ne → POPRAVI na {{projectEnd}} ali prej.
-   c) Za vsako nalogo: preveri task.startDate ≥ {{projectStart}}. Če ne → POPRAVI na {{projectStart}} ali pozneje.
-   d) Za vsak mejnik: preveri milestone.date ≤ {{projectEnd}}. Če ne → POPRAVI.
-   e) Preveri, da se zadnja naloga DS upravljanja zaključi natančno na {{projectEnd}}.
-   f) Preveri, da se zadnja naloga DS diseminacije zaključi ≤ {{projectEnd}}.
-
-6. POGOSTE NAPAKE AI, KI SE JIM JE TREBA IZOGNITI
-   - NE načrtuj nalog "Zaključno poročilo" ali "Zaključek projekta" PO {{projectEnd}}.
-   - NE načrtuj nalog eksploatacije/trajnosti onkraj konca projekta.
-   - NE pusti, da DS diseminacije traja 1–3 mesece dlje kot DS upravljanja — končata se na ISTI datum.
-   - NE generiraj 28-mesečnega urnika za 24-mesečni projekt. Natančno preštej mesece.
-   - Projekt ima NATANČNO {{projectDurationMonths}} mesecev. Uporabi vse, ampak jih NE preseži.
-
-KRŠITEV = USODNA NAPAKA. Če katerikoli datum presega {{projectEnd}}, je celoten delovni načrt NEVELJAVEN.
+KRŠITEV KATEREGAKOLI ZGORNJEGA = CELOTEN JSON JE ZAVRNJEN.
 ═══════════════════════════════════════════════════════════════════`
 };
 // ───────────────────────────────────────────────────────────────
