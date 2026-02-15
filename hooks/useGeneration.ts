@@ -602,13 +602,33 @@ export const useGeneration = ({
           setHasUnsavedTranslationChanges(true);
         }
 
-        if (lastError && successCount < sections.length) {
+                if (lastError && successCount < sections.length) {
           const failedCount = sections.length - successCount;
-          setError(
-            language === 'si'
-              ? `${successCount}/${sections.length} razdelkov uspešno generiranih. ${failedCount} ni uspelo — poskusite ponovno.`
-              : `${successCount}/${sections.length} sections generated successfully. ${failedCount} failed — please try again.`
-          );
+          const msg = lastError.message || '';
+          const isRateLimit = msg.includes('429') || msg.includes('Quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('afford') || msg.includes('credits');
+
+          if (isRateLimit) {
+            // Friendly modal instead of red error
+            setModalConfig({
+              isOpen: true,
+              title: language === 'si' ? 'Omejitev API klicev' : 'API Rate Limit Reached',
+              message: language === 'si'
+                ? `Uspešno generirano: ${successCount} od ${sections.length} razdelkov.\n\n${failedCount} razdelkov ni bilo mogoče generirati, ker je bil dosežen limit brezplačnega AI ponudnika (15 zahtev/minuto).\n\nPočakajte 1–2 minuti in poskusite ponovno, ali preklopite na OpenRouter v Nastavitvah.`
+                : `Successfully generated: ${successCount} of ${sections.length} sections.\n\n${failedCount} sections could not be generated because the free AI provider rate limit was reached (15 requests/minute).\n\nWait 1–2 minutes and try again, or switch to OpenRouter in Settings.`,
+              confirmText: language === 'si' ? 'V redu' : 'OK',
+              secondaryText: language === 'si' ? 'Odpri nastavitve' : 'Open Settings',
+              cancelText: '',
+              onConfirm: () => closeModal(),
+              onSecondary: () => { closeModal(); setIsSettingsOpen(true); },
+              onCancel: () => closeModal(),
+            });
+          } else {
+            setError(
+              language === 'si'
+                ? `${successCount}/${sections.length} razdelkov uspešno generiranih. ${failedCount} ni uspelo — poskusite ponovno.`
+                : `${successCount}/${sections.length} sections generated successfully. ${failedCount} failed — please try again.`
+            );
+          }
         }
 
         setIsLoading(false);
