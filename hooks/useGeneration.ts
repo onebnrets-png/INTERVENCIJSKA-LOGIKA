@@ -555,33 +555,53 @@ export const useGeneration = ({
       }
 
       const runComposite = async (mode: string) => {
-        closeModal();
-        setIsLoading(true);
-        setError(null);
+    closeModal();
+    setIsLoading(true);
+    setError(null);
 
+    let successCount = 0;
+    let lastError: any = null;
+
+    for (const s of sections) {
+        setIsLoading(`${t.generating} ${s}...`);
         try {
-          for (const s of sections) {
-            setIsLoading(`${t.generating} ${s}...`);
             const generatedData = await generateSectionContent(
-              s,
-              projectData,
-              language,
-              mode
+                s,
+                projectData,
+                language,
+                mode
             );
             setProjectData((prev: any) => {
-              const next = { ...prev };
-              next[s] = generatedData;
-              return next;
+                const next = { ...prev };
+                next[s] = generatedData;
+                return next;
             });
-            await new Promise((r) => setTimeout(r, 100));
-          }
-          setHasUnsavedTranslationChanges(true);
+            successCount++;
         } catch (e: any) {
-          handleAIError(e, 'generateComposite');
-        } finally {
-          setIsLoading(false);
+            console.error(`[runComposite] Failed to generate ${s}:`, e);
+            lastError = e;
+            // Continue with next section — don't break the loop
         }
-      };
+        // Delay between calls to avoid rate limits (especially Gemini free tier)
+        await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    if (successCount > 0) {
+        setHasUnsavedTranslationChanges(true);
+    }
+
+    if (lastError && successCount < sections.length) {
+        const failedCount = sections.length - successCount;
+        setError(
+            language === 'si'
+                ? `${successCount}/${sections.length} razdelkov uspešno generiranih. ${failedCount} ni uspelo — poskusite ponovno.`
+                : `${successCount}/${sections.length} sections generated successfully. ${failedCount} failed — please try again.`
+        );
+    }
+
+    setIsLoading(false);
+};
+
 
       if (otherLangData && !hasContentInSections) {
         // LEVEL 1: Other language has results, current is empty
