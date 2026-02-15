@@ -469,7 +469,7 @@ const SECTION_TO_CHAPTER: Record<string, string> = {
   outcomes: 'chapter6_results',
   impacts: 'chapter6_results',
   kers: 'chapter6_results',
-  expectedResults: 'chapter6_results',  // ★ FIX v4.5: composite section mapping
+  expectedResults: 'chapter6_results',  // ★ FIX v4.5: safety net for composite calls
 };
 
 const SECTION_TO_SCHEMA: Record<string, string> = {
@@ -478,7 +478,7 @@ const SECTION_TO_SCHEMA: Record<string, string> = {
   projectManagement: 'projectManagement', activities: 'activities',
   outputs: 'results', outcomes: 'results', impacts: 'results',
   risks: 'risks', kers: 'kers',
-  expectedResults: 'results',  // ★ FIX v4.5: maps to 'results' schema
+  expectedResults: 'results',  // ★ FIX v4.5: safety net for composite calls
 };
 
 // ─── HELPERS ─────────────────────────────────────────────────────
