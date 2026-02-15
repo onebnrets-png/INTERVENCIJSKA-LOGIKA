@@ -607,10 +607,17 @@ const buildTaskInstruction = (
       }
       break;
     }
-
     case 'activities': {
       const today = new Date().toISOString().split('T')[0];
       placeholders.projectStart = projectData.projectIdea?.startDate || today;
+      // ★ v4.5: Calculate and pass project end date
+      const startDate = new Date(placeholders.projectStart);
+      const months = projectData.projectIdea?.durationMonths || 24;
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + months);
+      endDate.setDate(endDate.getDate() - 1);
+      placeholders.projectEnd = endDate.toISOString().split('T')[0];
+      placeholders.projectDurationMonths = String(months);
       break;
     }
   }
