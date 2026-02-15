@@ -10,6 +10,16 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
+// v4.6 — 2026-02-15 — TEMPORAL INTEGRITY ENFORCER
+//   - NEW: enforceTemporalIntegrity() post-processor — programmatically
+//     forces ALL task/milestone dates within the project envelope
+//     [projectStart, projectEnd] after AI generation. AI models cannot
+//     reliably calculate dates, so this is the safety net.
+//   - NEW: TEMPORAL_INTEGRITY_RULE imported from Instructions.ts and
+//     injected at BEGINNING and END of activities prompt for maximum
+//     AI attention to date constraints.
+//   - All previous changes preserved.
+//
 // v4.5 — 2026-02-14 — DYNAMIC MAX_TOKENS
 //   - FIXED: All generateContent() calls now pass sectionKey so that
 //     aiProvider.ts can set appropriate max_tokens per section for
@@ -197,7 +207,6 @@ const getContext = (projectData: any): string => {
 
   const pi = projectData.projectIdea;
   if (pi?.mainAim || pi?.stateOfTheArt || pi?.proposedSolution || pi?.projectTitle) {
-    // ★ v4.5: Calculate and inject projectEndDate into context
     let endDateStr = '';
     if (pi?.startDate && pi?.durationMonths) {
       const start = new Date(pi.startDate);
@@ -358,10 +367,6 @@ const schemas: Record<string, any> = {
     },
     required: ['description', 'structure']
   },
-
-  // ═══════════════════════════════════════════════════════════════
-  // v4.4 FIX: Added "title" to deliverables schema
-  // ═══════════════════════════════════════════════════════════════
   activities: {
     type: Type.ARRAY,
     items: {
@@ -423,7 +428,6 @@ const schemas: Record<string, any> = {
       required: ['id', 'title', 'tasks', 'milestones', 'deliverables']
     }
   },
-
   results: {
     type: Type.ARRAY,
     items: {
@@ -436,10 +440,6 @@ const schemas: Record<string, any> = {
       required: ['title', 'description', 'indicator']
     }
   },
-
-  // ═══════════════════════════════════════════════════════════════
-  // v4.3 FIX: Risk schema — lowercase enums + added 'environmental'
-  // ═══════════════════════════════════════════════════════════════
   risks: {
     type: Type.ARRAY,
     items: {
@@ -456,7 +456,6 @@ const schemas: Record<string, any> = {
       required: ['id', 'category', 'title', 'description', 'likelihood', 'impact', 'mitigation']
     }
   },
-
   kers: {
     type: Type.ARRAY,
     items: {
@@ -472,7 +471,7 @@ const schemas: Record<string, any> = {
   }
 };
 
-// ─── MAPPINGS (v4.1 — FIXED to match Instructions.ts CHAPTERS keys) ─
+// ─── MAPPINGS ────────────────────────────────────────────────────
 
 const SECTION_TO_CHAPTER: Record<string, string> = {
   problemAnalysis: 'chapter1_problemAnalysis',
@@ -486,7 +485,7 @@ const SECTION_TO_CHAPTER: Record<string, string> = {
   outcomes: 'chapter6_results',
   impacts: 'chapter6_results',
   kers: 'chapter6_results',
-  expectedResults: 'chapter6_results',  // ★ FIX v4.5: safety net for composite calls
+  expectedResults: 'chapter6_results',
 };
 
 const SECTION_TO_SCHEMA: Record<string, string> = {
@@ -495,7 +494,7 @@ const SECTION_TO_SCHEMA: Record<string, string> = {
   projectManagement: 'projectManagement', activities: 'activities',
   outputs: 'results', outcomes: 'results', impacts: 'results',
   risks: 'risks', kers: 'kers',
-  expectedResults: 'results',  // ★ FIX v4.5: safety net for composite calls
+  expectedResults: 'results',
 };
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -511,8 +510,28 @@ const sanitizeActivities = (activities: any[]): any[] => {
           taskMap.set(task.id, { startDate: new Date(task.startDate), endDate: new Date(task.endDate) });
         }
       });
-      // ═══════════════════════════════════════════════════════════════
-// ★ v4.5: TEMPORAL INTEGRITY ENFORCER (post-processing)
+    }
+  });
+  activities.forEach(wp => {
+    if (wp.tasks) {
+      wp.tasks.forEach((task: any) => {
+        if (task.dependencies && Array.isArray(task.dependencies)) {
+          task.dependencies.forEach((dep: any) => {
+            const pred = taskMap.get(dep.predecessorId);
+            const curr = taskMap.get(task.id);
+            if (pred && curr && isValidDate(pred.startDate) && isValidDate(pred.endDate) && isValidDate(curr.startDate)) {
+              if (dep.type === 'FS' && curr.startDate <= pred.endDate) dep.type = 'SS';
+            }
+          });
+        }
+      });
+    }
+  });
+  return activities;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// ★ v4.6: TEMPORAL INTEGRITY ENFORCER (post-processing)
 // ═══════════════════════════════════════════════════════════════
 // AI models cannot reliably calculate dates. This function
 // programmatically FORCES all dates within the project envelope
@@ -522,22 +541,22 @@ const sanitizeActivities = (activities: any[]): any[] => {
 const enforceTemporalIntegrity = (activities: any[], projectData: any): any[] => {
   const startStr = projectData.projectIdea?.startDate;
   const months = projectData.projectIdea?.durationMonths || 24;
-  
-  if (!startStr) return activities; // No start date → can't enforce
-  
+
+  if (!startStr) return activities;
+
   const projectStart = new Date(startStr);
   const projectEnd = new Date(projectStart);
   projectEnd.setMonth(projectEnd.getMonth() + months);
   projectEnd.setDate(projectEnd.getDate() - 1);
-  
+
   const startISO = projectStart.toISOString().split('T')[0];
   const endISO = projectEnd.toISOString().split('T')[0];
-  
+
   console.log(`[TemporalIntegrity] Enforcing project envelope: ${startISO} → ${endISO} (${months} months)`);
-  
+
   let fixCount = 0;
-  
-  activities.forEach((wp, wpIdx) => {
+
+  activities.forEach((wp) => {
     // Fix tasks
     if (wp.tasks && Array.isArray(wp.tasks)) {
       wp.tasks.forEach((task: any) => {
@@ -565,7 +584,7 @@ const enforceTemporalIntegrity = (activities: any[], projectData: any): any[] =>
         }
       });
     }
-    
+
     // Fix milestones
     if (wp.milestones && Array.isArray(wp.milestones)) {
       wp.milestones.forEach((ms: any) => {
@@ -585,16 +604,16 @@ const enforceTemporalIntegrity = (activities: any[], projectData: any): any[] =>
       });
     }
   });
-  
+
   // Ensure PM WP (last) and Dissemination WP (second-to-last) span full project
   if (activities.length >= 2) {
     const pmWP = activities[activities.length - 1];
     const dissWP = activities[activities.length - 2];
-    
+
     [pmWP, dissWP].forEach((wp) => {
       if (wp.tasks && wp.tasks.length > 0) {
         // Sort tasks by startDate
-        const sorted = [...wp.tasks].sort((a: any, b: any) => 
+        const sorted = [...wp.tasks].sort((a: any, b: any) =>
           new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
         );
         // First task should start at projectStart
@@ -613,34 +632,17 @@ const enforceTemporalIntegrity = (activities: any[], projectData: any): any[] =>
       }
     });
   }
-  
+
   if (fixCount > 0) {
     console.log(`[TemporalIntegrity] Applied ${fixCount} date corrections.`);
   } else {
     console.log(`[TemporalIntegrity] All dates within envelope. No corrections needed.`);
   }
-  
+
   return activities;
 };
-  }
-  });
-  activities.forEach(wp => {
-    if (wp.tasks) {
-      wp.tasks.forEach((task: any) => {
-        if (task.dependencies && Array.isArray(task.dependencies)) {
-          task.dependencies.forEach((dep: any) => {
-            const pred = taskMap.get(dep.predecessorId);
-            const curr = taskMap.get(task.id);
-            if (pred && curr && isValidDate(pred.startDate) && isValidDate(pred.endDate) && isValidDate(curr.startDate)) {
-              if (dep.type === 'FS' && curr.startDate <= pred.endDate) dep.type = 'SS';
-            }
-          });
-        }
-      });
-    }
-  });
-  return activities;
-};
+
+// ─── SMART MERGE ─────────────────────────────────────────────────
 
 const smartMerge = (original: any, generated: any): any => {
   if (original === undefined || original === null) return generated;
@@ -666,7 +668,7 @@ const smartMerge = (original: any, generated: any): any => {
   return original !== null && original !== undefined ? original : generated;
 };
 
-// ─── RULES ASSEMBLER (v4.1 — reads chapter TEXT, not .RULES array) ─
+// ─── RULES ASSEMBLER ─────────────────────────────────────────────
 
 const getRulesForSection = (sectionKey: string, language: 'en' | 'si'): string => {
   const instructions = getAppInstructions(language);
@@ -685,7 +687,7 @@ const getRulesForSection = (sectionKey: string, language: 'en' | 'si'): string =
   return '';
 };
 
-// ─── TASK INSTRUCTION BUILDER (uses Instructions.ts templates) ───
+// ─── TASK INSTRUCTION BUILDER ────────────────────────────────────
 
 const buildTaskInstruction = (
   sectionKey: string,
@@ -719,7 +721,8 @@ const buildTaskInstruction = (
       }
       break;
     }
-        case 'activities': {
+
+    case 'activities': {
       const today = new Date().toISOString().split('T')[0];
       placeholders.projectStart = projectData.projectIdea?.startDate || today;
       const startDate = new Date(placeholders.projectStart);
@@ -729,26 +732,14 @@ const buildTaskInstruction = (
       endDate.setDate(endDate.getDate() - 1);
       placeholders.projectEnd = endDate.toISOString().split('T')[0];
       placeholders.projectDurationMonths = String(months);
-      
-      // ★ v4.5: Inject TEMPORAL_INTEGRITY_RULE into task instruction
-      // This is prepended as the FIRST thing the AI sees for activities
-      const temporalRule = (TEMPORAL_INTEGRITY_RULE[language] || TEMPORAL_INTEGRITY_RULE.en)
-        .replace(/\{\{projectStart\}\}/g, placeholders.projectStart)
-        .replace(/\{\{projectEnd\}\}/g, placeholders.projectEnd)
-        .replace(/\{\{projectDurationMonths\}\}/g, placeholders.projectDurationMonths);
-      // Store it so getPromptAndSchemaForSection can prepend it
-      placeholders._temporalRule = temporalRule;
       break;
     }
-
   }
 
   return getSectionTaskInstruction(sectionKey, language, placeholders);
 };
 
-// ═══════════════════════════════════════════════════════════════
-// PROMPT BUILDER (v4.3 — REORDERED: task instruction FIRST)
-// ═══════════════════════════════════════════════════════════════
+// ─── PROMPT BUILDER ──────────────────────────────────────────────
 
 const getPromptAndSchemaForSection = (
   sectionKey: string,
@@ -786,8 +777,7 @@ const getPromptAndSchemaForSection = (
   const taskInstruction = buildTaskInstruction(sectionKey, projectData, language);
   const qualityGate = getQualityGate(sectionKey, language);
 
-    // ★ v4.5: For activities, inject TEMPORAL_INTEGRITY_RULE as the VERY FIRST block
-  // AI models pay most attention to the beginning and end of the prompt.
+  // ★ v4.6: For activities, inject TEMPORAL_INTEGRITY_RULE at BEGINNING and END
   let temporalRuleBlock = '';
   if (sectionKey === 'activities') {
     const today = new Date().toISOString().split('T')[0];
@@ -798,7 +788,7 @@ const getPromptAndSchemaForSection = (
     pEndDate.setMonth(pEndDate.getMonth() + pMonths);
     pEndDate.setDate(pEndDate.getDate() - 1);
     const pEnd = pEndDate.toISOString().split('T')[0];
-    
+
     temporalRuleBlock = (TEMPORAL_INTEGRITY_RULE[language] || TEMPORAL_INTEGRITY_RULE.en)
       .replace(/\{\{projectStart\}\}/g, pStart)
       .replace(/\{\{projectEnd\}\}/g, pEnd)
@@ -806,7 +796,7 @@ const getPromptAndSchemaForSection = (
   }
 
   const prompt = [
-    temporalRuleBlock,   // ★ FIRST for activities — highest priority position
+    temporalRuleBlock,                          // ★ FIRST for activities — highest priority
     langDirective,
     langMismatchNotice,
     taskInstruction,
@@ -819,9 +809,8 @@ const getPromptAndSchemaForSection = (
     humanRules,
     `${globalRulesHeader}:\n${globalRules}`,
     sectionRules,
-    temporalRuleBlock ? temporalRuleBlock : '',  // ★ ALSO LAST — AI also attends to end
+    temporalRuleBlock ? temporalRuleBlock : '', // ★ ALSO LAST — AI attends to end too
   ].filter(Boolean).join('\n\n');
-
 
   return { prompt, schema };
 };
@@ -834,9 +823,7 @@ export const generateSectionContent = async (
   language: 'en' | 'si' = 'en',
   mode: string = 'regenerate'
 ) => {
-  // ★ FIX v4.5: Handle 'expectedResults' as a composite section
-  // It generates outputs, outcomes, and impacts in one call using the 'results' schema,
-  // then returns an object with all three arrays.
+  // ★ Handle 'expectedResults' as a composite section
   if (sectionKey === 'expectedResults') {
     const subSections = ['outputs', 'outcomes', 'impacts'];
     const compositeResult: Record<string, any> = {};
@@ -869,7 +856,6 @@ export const generateSectionContent = async (
         compositeResult[subKey] = parsedData;
       } catch (err) {
         console.warn(`[generateSectionContent] Failed to generate ${subKey}:`, err);
-        // Keep existing data if generation fails for a sub-section
         compositeResult[subKey] = projectData[subKey] || [];
       }
     }
@@ -900,9 +886,9 @@ export const generateSectionContent = async (
     throw new Error("API returned an array for projectIdea section, expected an object.");
   }
 
-    if (sectionKey === 'activities' && Array.isArray(parsedData)) {
+  if (sectionKey === 'activities' && Array.isArray(parsedData)) {
     parsedData = sanitizeActivities(parsedData);
-    // ★ v4.5: FORCE all dates within project envelope — AI cannot be trusted with dates
+    // ★ v4.6: FORCE all dates within project envelope — AI cannot be trusted with dates
     parsedData = enforceTemporalIntegrity(parsedData, projectData);
   }
 
@@ -932,7 +918,7 @@ export const generateSectionContent = async (
   return parsedData;
 };
 
-// ─── FIELD CONTENT GENERATION (v4.1) ─────────────────────────────
+// ─── FIELD CONTENT GENERATION ────────────────────────────────────
 
 export const generateFieldContent = async (
   path: (string | number)[],
@@ -1054,7 +1040,6 @@ export const generateFieldContent = async (
     taskLine
   ].filter(Boolean).join('\n\n');
 
-  // ★ FIX v4.5: Pass sectionKey 'field' for appropriate max_tokens
   const result = await generateContent({
     prompt,
     sectionKey: 'field',
@@ -1073,6 +1058,8 @@ export const generateFieldContent = async (
 
   return text;
 };
+
+// ─── SUMMARY GENERATION ──────────────────────────────────────────
 
 export const generateProjectSummary = async (
   projectData: any,
@@ -1094,13 +1081,14 @@ export const generateProjectSummary = async (
     `${summaryRulesHeader}:\n- ${formattedSummaryRules}`
   ].join('\n\n');
 
-  // ★ FIX v4.5: Pass sectionKey 'summary' for appropriate max_tokens
   const result = await generateContent({
     prompt,
     sectionKey: 'summary',
   });
   return result.text;
 };
+
+// ─── TRANSLATION ─────────────────────────────────────────────────
 
 export const translateProjectContent = async (
   projectData: any,
@@ -1118,7 +1106,6 @@ export const translateProjectContent = async (
     `\nJSON to Translate:\n${JSON.stringify(projectData)}`
   ].join('\n');
 
-  // ★ FIX v4.5: Pass sectionKey 'translation' for appropriate max_tokens
   const result = await generateContent({
     prompt,
     jsonMode: true,
@@ -1127,5 +1114,7 @@ export const translateProjectContent = async (
   const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
   return JSON.parse(jsonStr);
 };
+
+// ─── RE-EXPORTS ──────────────────────────────────────────────────
 
 export const detectProjectLanguage = detectLanguage;
