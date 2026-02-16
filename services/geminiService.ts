@@ -10,13 +10,14 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
-// v5.0 — 2026-02-16 — PER-WP GENERATION + DATE FIX + SUMMARY FIX
+// v5.0 — 2026-02-16 — PER-WP GENERATION + DATE FIX + SUMMARY FIX + ACRONYM
 //   - NEW: generateActivitiesPerWP() — 2-phase generation: first scaffold
 //     (WP ids, titles, date ranges), then each WP individually with full
 //     context of previously generated WPs for cross-WP dependencies.
 //   - NEW: calculateProjectEndDate() helper — avoids JavaScript Date
 //     month-overflow bugs (e.g., Jan 31 + 1 month → Mar 3). Replaces
 //     manual date calculation at ALL locations in the file.
+//   - NEW: projectAcronym added to schemas.projectIdea (properties + required)
 //   - FIXED: enforceTemporalIntegrity() guards against empty activities array.
 //   - FIXED: generateTargetedFill() now calls sanitizeActivities() and
 //     enforceTemporalIntegrity() when sectionKey is 'activities'.
@@ -299,6 +300,9 @@ const schemaToTextInstruction = (schema: any): string => {
 };
 
 // ─── JSON SCHEMAS ────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// v5.0 FIX [2A + 2B]: projectAcronym added to projectIdea schema
+// ═══════════════════════════════════════════════════════════════
 
 import { Type } from "@google/genai";
 
@@ -334,6 +338,7 @@ const schemas: Record<string, any> = {
     type: Type.OBJECT,
     properties: {
       projectTitle: { type: Type.STRING },
+      projectAcronym: { type: Type.STRING },
       mainAim: { type: Type.STRING },
       stateOfTheArt: { type: Type.STRING },
       proposedSolution: { type: Type.STRING },
@@ -356,7 +361,7 @@ const schemas: Record<string, any> = {
         required: ['TRL', 'SRL', 'ORL', 'LRL']
       }
     },
-    required: ['projectTitle', 'mainAim', 'stateOfTheArt', 'proposedSolution', 'policies', 'readinessLevels']
+    required: ['projectTitle', 'projectAcronym', 'mainAim', 'stateOfTheArt', 'proposedSolution', 'policies', 'readinessLevels']
   },
   objectives: {
     type: Type.ARRAY,
@@ -828,17 +833,14 @@ export const generateTargetedFill = async (
   const currentData = projectData[sectionKey];
 
   if (!Array.isArray(currentData) || emptyIndices.length === 0) {
-    // Nothing to fill — return current data
     return currentData || [];
   }
 
-  // Build a focused description of what exists and what's missing
   const existingItems: string[] = [];
   const missingItems: string[] = [];
 
   currentData.forEach((item: any, index: number) => {
     if (emptyIndices.includes(index)) {
-      // Collect any partial data the empty item might have (e.g., just an id)
       const partialInfo = item && typeof item === 'object'
         ? Object.entries(item)
             .filter(([_, v]) => typeof v === 'string' && (v as string).trim().length > 0)
@@ -936,7 +938,6 @@ export const generateTargetedFill = async (
   const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
   let generatedItems = JSON.parse(jsonStr);
 
-  // Ensure it's an array
   if (!Array.isArray(generatedItems)) {
     if (generatedItems && typeof generatedItems === 'object') {
       generatedItems = [generatedItems];
@@ -947,13 +948,11 @@ export const generateTargetedFill = async (
 
   generatedItems = stripMarkdown(generatedItems);
 
-  // ★ INSERT generated items at the correct positions
   const filledData = [...currentData];
 
   for (let i = 0; i < emptyIndices.length; i++) {
     const targetIndex = emptyIndices[i];
     if (i < generatedItems.length && targetIndex < filledData.length) {
-      // Merge: keep any existing partial data (like id), fill in the rest
       const existing = filledData[targetIndex] || {};
       const generated = generatedItems[i];
       filledData[targetIndex] = { ...generated, ...Object.fromEntries(
@@ -1302,11 +1301,9 @@ export const generateActivitiesPerWP = async (
   let scaffold: any[];
 
   if (existingScaffold && existingScaffold.length > 0) {
-    // Use provided scaffold (for fill mode — existing WPs as scaffold)
     scaffold = existingScaffold;
     console.log(`[PerWP] Phase 1: Using existing scaffold with ${scaffold.length} WPs`);
   } else {
-    // Generate scaffold from scratch
     console.log(`[PerWP] Phase 1: Generating scaffold...`);
     if (onProgress) onProgress(-1, 0, language === 'si' ? 'Generiranje strukture DS...' : 'Generating WP structure...');
 
@@ -1369,7 +1366,6 @@ NO tasks, milestones, or deliverables — ONLY scaffold.`,
   const fullActivities: any[] = [];
   const wpItemSchema = schemas.activities.items;
 
-    // Determine which WPs to generate (all, or only specific indices)
   const indicesToGenerate = onlyIndices || scaffold.map((_, idx) => idx);
 
   for (const i of indicesToGenerate) {
@@ -1384,7 +1380,6 @@ NO tasks, milestones, or deliverables — ONLY scaffold.`,
     console.log(`[PerWP] Phase 2: Generating ${wp.id} "${wp.title}" (${progressIdx + 1}/${indicesToGenerate.length})...`);
     if (onProgress) onProgress(progressIdx, indicesToGenerate.length, wp.title);
 
-    // Determine WP type for focused instructions
     let wpTypeInstruction: string;
       if (isLast) {
       wpTypeInstruction = language === 'si'
@@ -1450,7 +1445,6 @@ CRITICAL TASK DISTRIBUTION RULE:
         : `This is a content/thematic WP. It runs from ${wp.startDate} to ${wp.endDate}. It MUST NOT span the entire project duration. Tasks are sequential or staggered within this period.`;
     }
 
-    // Build cross-WP dependency context from already-generated WPs
     let prevWPsContext = '';
     if (fullActivities.length > 0) {
       const prevSummary = fullActivities.map(w => ({
@@ -1463,7 +1457,6 @@ CRITICAL TASK DISTRIBUTION RULE:
         : `\nALREADY GENERATED WPs (use for cross-WP dependencies — your tasks MUST reference predecessors from these WPs where logical):\n${JSON.stringify(prevSummary, null, 2)}`;
     }
 
-    // Build scaffold overview
     const scaffoldOverview = language === 'si'
       ? `\nCELOTEN SCAFFOLD PROJEKTA:\n${scaffold.map(s => `  ${s.id}: "${s.title}" (${s.startDate} → ${s.endDate})`).join('\n')}`
       : `\nFULL PROJECT SCAFFOLD:\n${scaffold.map(s => `  ${s.id}: "${s.title}" (${s.startDate} → ${s.endDate})`).join('\n')}`;
@@ -1520,23 +1513,19 @@ Return ONE JSON object (not array): { "id": "${wp.id}", "title": "${wp.title}", 
     const wpStr = wpResult.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
     let wpData = JSON.parse(wpStr);
 
-    // Handle AI returning an array instead of object
     if (Array.isArray(wpData)) {
       wpData = wpData[0] || {};
     }
 
-    // Ensure correct id and title from scaffold
     wpData.id = wp.id;
     wpData.title = wpData.title || wp.title;
 
-    // Strip markdown from all text fields
     wpData = stripMarkdown(wpData);
 
     fullActivities.push(wpData);
 
     console.log(`[PerWP] ${wp.id} generated: ${wpData.tasks?.length || 0} tasks, ${wpData.milestones?.length || 0} milestones, ${wpData.deliverables?.length || 0} deliverables`);
 
-    // Rate limit pause between WPs (except after last)
     if (progressIdx < indicesToGenerate.length - 1) {
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -1548,14 +1537,12 @@ Return ONE JSON object (not array): { "id": "${wp.id}", "title": "${wp.title}", 
 
   console.log(`[PerWP] Phase 3: Post-processing ${fullActivities.length} WPs...`);
 
-    // If we only generated specific WPs, merge them back into existing activities
   let mergedActivities: any[];
   if (onlyIndices && existingScaffold) {
     mergedActivities = [...(projectData.activities || [])];
     for (const wpData of fullActivities) {
       const idx = mergedActivities.findIndex((w: any) => w.id === wpData.id);
       if (idx >= 0) {
-        // Smart merge: keep existing non-empty parts, fill missing
         const existing = mergedActivities[idx];
         const hasTasks = existing.tasks && existing.tasks.length > 0
           && existing.tasks.some((t: any) => t.title && t.title.trim().length > 0);
@@ -1617,3 +1604,4 @@ export const translateProjectContent = async (
 // ─── RE-EXPORTS ──────────────────────────────────────────────────
 
 export const detectProjectLanguage = detectLanguage;
+
