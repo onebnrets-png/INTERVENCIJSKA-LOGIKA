@@ -419,7 +419,7 @@ export const useGeneration = ({
             }
           });
 
-          if (mode === 'regenerate' || existingWPs.length === 0) {
+            if (mode === 'regenerate' || existingWPs.length === 0 || missingMandatoryWPs) {
             // Full regeneration — generate all WPs from scratch
             generatedData = await generateActivitiesPerWP(
               projectData,
