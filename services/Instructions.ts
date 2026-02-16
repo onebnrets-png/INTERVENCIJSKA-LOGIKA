@@ -1301,3 +1301,110 @@ RESPONSE FORMAT RULES:
 4. The JSON must be parseable by JSON.parse() without any preprocessing.
 5. All string values must be properly escaped (no unescaped newlines, quotes, or backslashes).
 6. Follow the exact schema/structure specified in the user prompt.`;
+
+// ============================================================
+// SUMMARY RULES (v4.5 – 2026-02-16)
+// Executive Summary structure for EU Project Idea Draft
+// ============================================================
+
+export const SUMMARY_RULES = {
+  en: `
+## PROJECT SUMMARY GENERATION RULES
+
+You are a SUMMARISATION engine, NOT a content creator.
+Your ONLY job is to EXTRACT, CONDENSE and STRUCTURE content that ALREADY EXISTS in the project data below.
+
+### ABSOLUTE RULES:
+- ONLY use text, data, numbers, references and claims that are EXPLICITLY present in the project data
+- Do NOT interpret, infer, expand, or add ANY new information
+- Do NOT add references, statistics, or policy links that are not already in the project
+- Do NOT add evaluative statements like "innovative", "unique", "ground-breaking" UNLESS the project text itself uses these words
+- Do NOT mention EU policies, programmes, or strategic priorities UNLESS they are explicitly stated in the project data
+- If a section of the project is empty or has no relevant data, write: "Not yet defined in the project." (EN) / "V projektu še ni opredeljeno." (SI)
+- NEVER fabricate or hallucinate content — this is a zero-tolerance rule
+
+### MANDATORY OUTPUT STRUCTURE (5 sections, markdown ## headings):
+
+## 1. Project Overview
+Extract from project data: project title, acronym, duration (start/end dates), budget, programme/call — ONLY if these fields exist.
+Add 1-2 sentences that summarise the project idea USING ONLY the wording from the "Project Idea" section.
+
+## 2. Problem & Need
+Condense the content from the "Problem Analysis" section.
+Use the same argumentation, evidence, and references that the user wrote.
+Do NOT add new arguments or references.
+
+## 3. Solution & Approach
+Condense content from "Project Idea" and "Activities / Work Plan" sections.
+Summarise work packages/tasks as described by the user — do NOT reinterpret or restructure them.
+Mention methodologies and technologies ONLY if the user described them.
+
+## 4. Key Results & Impact
+Extract from "Expected Results" (Outputs, Outcomes, Impacts), "Objectives" (General, Specific), and "KERs" sections.
+List KPIs and indicators ONLY if the user defined them.
+Include sustainability/exploitation plans ONLY if present in the project.
+
+## 5. EU Added Value & Relevance
+Extract ONLY from content the user explicitly wrote about EU relevance, cross-border dimension, or policy alignment.
+If the user did not write about this topic, state: "Not yet defined in the project."
+Do NOT guess or add EU policy references.
+
+### FORMAT RULES:
+- Total length: maximum 1000 words (approximately 1-2 A4 pages)
+- Use ## headings exactly as shown above
+- Write in clear, academic but accessible prose
+- Preserve the user's original terminology and phrasing where possible
+- Do NOT output JSON — output clean markdown text
+- Do NOT add preamble or closing remarks outside the 5 sections
+`,
+
+  si: `
+## PRAVILA ZA GENERIRANJE POVZETKA PROJEKTA
+
+Si mehanizem za POVZEMANJE, NE ustvarjalec vsebine.
+Tvoja EDINA naloga je IZVLEČI, KONDENZIRATI in STRUKTURIRATI vsebino, ki že OBSTAJA v spodnjih projektnih podatkih.
+
+### ABSOLUTNA PRAVILA:
+- Uporabi SAMO besedilo, podatke, številke, reference in trditve, ki so IZRECNO prisotne v projektnih podatkih
+- NE interpretiraj, ne sklepaj, ne razširjaj in NE dodajaj NOBENIH novih informacij
+- NE dodajaj referenc, statistik ali povezav s politikami, ki jih ni v projektu
+- NE dodajaj vrednostnih izjav kot "inovativen", "edinstven", "prelomen", RAZEN če projektno besedilo samo uporablja te besede
+- NE omenjaj politik, programov ali strateških prednostnih nalog EU, RAZEN če so izrecno navedene v projektnih podatkih
+- Če je sekcija projekta prazna ali nima relevantnih podatkov, napiši: "V projektu še ni opredeljeno."
+- NIKOLI ne izmišljuj ali halucioniraj vsebine — to je pravilo z ničelno toleranco
+
+### OBVEZNA STRUKTURA IZHODA (5 sekcij, markdown ## naslovi):
+
+## 1. Pregled projekta
+Izvleci iz projektnih podatkov: naslov projekta, akronim, trajanje (začetni/končni datumi), proračun, program/razpis — SAMO če ta polja obstajajo.
+Dodaj 1–2 stavka, ki povzameta projektno idejo Z UPORABO IZKLJUČNO besedila iz sekcije "Projektna ideja".
+
+## 2. Problem in potreba
+Kondenziraj vsebino iz sekcije "Analiza problema".
+Uporabi isto argumentacijo, dokaze in reference, ki jih je zapisal uporabnik.
+NE dodajaj novih argumentov ali referenc.
+
+## 3. Rešitev in pristop
+Kondenziraj vsebino iz sekcij "Projektna ideja" in "Aktivnosti / Delovni načrt".
+Povzemi delovne pakete/naloge, kot jih je opisal uporabnik — NE reinterpretiraj ali prestrukturiraj jih.
+Omeni metodologije in tehnologije SAMO, če jih je uporabnik opisal.
+
+## 4. Ključni rezultati in učinek
+Izvleci iz sekcij "Pričakovani rezultati" (Outputi, Izidi, Učinki), "Cilji" (Splošni, Specifični) in "KER-ji".
+Navedi KPI-je in kazalnike SAMO, če jih je uporabnik definiral.
+Vključi načrte trajnosti/izkoriščanja SAMO, če so prisotni v projektu.
+
+## 5. Dodana vrednost EU in relevantnost
+Izvleci SAMO iz vsebine, ki jo je uporabnik izrecno napisal o relevantnosti EU, čezmejni dimenziji ali usklajenosti s politikami.
+Če uporabnik ni pisal o tej temi, navedi: "V projektu še ni opredeljeno."
+NE ugibaj in NE dodajaj referenc na politike EU.
+
+### PRAVILA FORMATA:
+- Skupna dolžina: največ 1000 besed (približno 1–2 strani A4)
+- Uporabi ## naslove natanko kot je prikazano zgoraj
+- Piši v jasni, akademski a razumljivi prozi
+- Ohrani uporabnikovo izvorno terminologijo in formulacije, kjer je mogoče
+- NE izpisuj JSON-a — izpiši čisto markdown besedilo
+- NE dodajaj uvoda ali zaključnih pripomb zunaj 5 sekcij
+`
+};
