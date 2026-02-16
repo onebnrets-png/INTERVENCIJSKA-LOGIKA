@@ -972,6 +972,168 @@ export const generateTargetedFill = async (
 
   return filledData;
 };
+// ═══════════════════════════════════════════════════════════════
+// ★ v5.1: OBJECT FILL — generates ONLY empty fields in object sections
+// For projectIdea, problemAnalysis, projectManagement etc.
+// ═══════════════════════════════════════════════════════════════
+
+export const generateObjectFill = async (
+  sectionKey: string,
+  projectData: any,
+  language: 'en' | 'si',
+  emptyFields: string[]
+): Promise<any> => {
+  const currentData = projectData[sectionKey];
+
+  if (!currentData || typeof currentData !== 'object' || emptyFields.length === 0) {
+    return currentData || {};
+  }
+
+  // Build context of what EXISTS (so AI can generate contextually relevant content)
+  const existingFields: string[] = [];
+  const missingFields: string[] = [];
+
+  for (const [key, val] of Object.entries(currentData)) {
+    if (emptyFields.includes(key)) {
+      missingFields.push(
+        language === 'si'
+          ? `  - "${key}" — PRAZNO (GENERIRAJ)`
+          : `  - "${key}" — EMPTY (GENERATE THIS)`
+      );
+    } else if (typeof val === 'string' && val.trim().length > 0) {
+      const preview = val.length > 150 ? val.substring(0, 150) + '...' : val;
+      existingFields.push(
+        language === 'si'
+          ? `  - "${key}": "${preview}" (OHRANI NESPREMENJENO)`
+          : `  - "${key}": "${preview}" (KEEP UNCHANGED)`
+      );
+    } else if (val && typeof val === 'object') {
+      existingFields.push(
+        language === 'si'
+          ? `  - "${key}": [objekt/array z vsebino] (OHRANI NESPREMENJENO)`
+          : `  - "${key}": [object/array with content] (KEEP UNCHANGED)`
+      );
+    }
+  }
+
+  const schemaKey = SECTION_TO_SCHEMA[sectionKey];
+  const fullSchema = schemas[schemaKey];
+
+  if (!fullSchema) {
+    throw new Error(`No schema found for section: ${sectionKey}`);
+  }
+
+  // Build a reduced schema containing ONLY the empty fields
+  const reducedProperties: any = {};
+  const reducedRequired: string[] = [];
+
+  for (const fieldName of emptyFields) {
+    if (fullSchema.properties && fullSchema.properties[fieldName]) {
+      reducedProperties[fieldName] = fullSchema.properties[fieldName];
+      reducedRequired.push(fieldName);
+    }
+  }
+
+  const reducedSchema = {
+    type: Type.OBJECT,
+    properties: reducedProperties,
+    required: reducedRequired,
+  };
+
+  const config = getProviderConfig();
+  const useNativeSchema = config.provider === 'gemini';
+  const needsTextSchema = !useNativeSchema;
+  const textSchema = needsTextSchema ? schemaToTextInstruction(reducedSchema) : '';
+
+  const context = getContext(projectData);
+  const langDirective = getLanguageDirective(language);
+  const academicRules = getAcademicRigorRules(language);
+  const humanRules = getHumanizationRules(language);
+  const sectionRules = getRulesForSection(sectionKey, language);
+  const titleRules = sectionKey === 'projectIdea' ? getProjectTitleRules(language) : '';
+  const qualityGate = getQualityGate(sectionKey, language);
+
+  // Build task instruction with placeholders
+  const taskInstruction = buildTaskInstruction(sectionKey, projectData, language);
+
+  const sectionLabel = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
+
+  const objectFillPrompt = language === 'si'
+    ? [
+        langDirective,
+        `NALOGA: Generiraj vsebino SAMO za manjkajoča polja v razdelku "${sectionLabel}".`,
+        `\nOBSTOJEČA POLJA (NE SPREMINJAJ — uporabi kot kontekst):`,
+        existingFields.join('\n'),
+        `\nMANJKAJOČA POLJA (GENERIRAJ SAMO TE):`,
+        missingFields.join('\n'),
+        `\nPRAVILA:`,
+        `- Vrni JSON objekt z NATANKO ${emptyFields.length} polji: ${emptyFields.map(f => `"${f}"`).join(', ')}.`,
+        `- NE vračaj obstoječih polj — SAMO manjkajoča.`,
+        `- Vsebina mora biti kontekstualno povezana z obstoječimi polji zgoraj.`,
+        textSchema,
+        taskInstruction,
+        titleRules,
+        context,
+        academicRules,
+        humanRules,
+        sectionRules,
+        qualityGate,
+      ].filter(Boolean).join('\n\n')
+    : [
+        langDirective,
+        `TASK: Generate content ONLY for the missing fields in the "${sectionLabel}" section.`,
+        `\nEXISTING FIELDS (DO NOT MODIFY — use as context):`,
+        existingFields.join('\n'),
+        `\nMISSING FIELDS (GENERATE ONLY THESE):`,
+        missingFields.join('\n'),
+        `\nRULES:`,
+        `- Return a JSON object with EXACTLY ${emptyFields.length} fields: ${emptyFields.map(f => `"${f}"`).join(', ')}.`,
+        `- Do NOT return existing fields — ONLY the missing ones.`,
+        `- Content must be contextually related to the existing fields above.`,
+        textSchema,
+        taskInstruction,
+        titleRules,
+        context,
+        academicRules,
+        humanRules,
+        sectionRules,
+        qualityGate,
+      ].filter(Boolean).join('\n\n');
+
+  const result = await generateContent({
+    prompt: objectFillPrompt,
+    jsonSchema: useNativeSchema ? reducedSchema : undefined,
+    jsonMode: !useNativeSchema,
+    sectionKey: sectionKey,
+  });
+
+  const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+  let generatedFields = JSON.parse(jsonStr);
+
+  generatedFields = stripMarkdown(generatedFields);
+
+  // Sanitize project title if present
+  if (sectionKey === 'projectIdea' && generatedFields.projectTitle) {
+    generatedFields.projectTitle = sanitizeProjectTitle(generatedFields.projectTitle);
+  }
+
+  // Merge: keep ALL existing data, overlay ONLY the newly generated fields
+  const merged = { ...currentData };
+  for (const fieldName of emptyFields) {
+    if (generatedFields[fieldName] !== undefined && generatedFields[fieldName] !== null) {
+      // Only fill if the field is actually still empty (safety check)
+      const existing = merged[fieldName];
+      const isEmpty = !existing || (typeof existing === 'string' && existing.trim().length === 0);
+      if (isEmpty) {
+        merged[fieldName] = generatedFields[fieldName];
+      }
+    }
+  }
+
+  console.log(`[ObjectFill] ${sectionKey}: Generated ${emptyFields.length} fields: [${emptyFields.join(', ')}]`);
+
+  return merged;
+};
 
 // ─── MAIN GENERATION FUNCTIONS ───────────────────────────────────
 
