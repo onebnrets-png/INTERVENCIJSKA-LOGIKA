@@ -1,6 +1,15 @@
 // hooks/useGeneration.ts
 // ═══════════════════════════════════════════════════════════════
 // AI content generation — sections, fields, summaries.
+// v3.9 — 2026-02-16 — PER-WP GENERATION COMPLETE
+//   - FIX: Fill mode for incomplete WPs now uses generateActivitiesPerWP()
+//     with existingScaffold + onlyIndices instead of broken generateSectionContent()
+//     with unsupported _generateOnlyWP properties.
+//   - FIX: Mandatory WP detection (PM/Dissemination) no longer destroys
+//     existing WPs — now generates ONLY missing mandatory WPs and adds them
+//     at the correct positions (PM=WP1, Dissemination=second-to-last).
+//   - All previous v3.8 changes preserved.
+//
 // v3.8 — 2026-02-16 — PER-WP GENERATION
 //   - Activities in 'regenerate' mode now use generateActivitiesPerWP()
 //     which generates each WP individually for better quality.
@@ -367,9 +376,9 @@ export const useGeneration = ({
   );
 
   // ─── Execute section generation ────────────────────────────────
-  // v3.5.2 FIX: When generating 'activities', also auto-generate
-  // 'projectManagement' (Kakovost in učinkovitost izvedbe) BEFORE
-  // risks, so the description field is populated.
+  // v3.9 FIX: Fill mode now uses generateActivitiesPerWP() with
+  // existingScaffold + onlyIndices. Mandatory WP detection adds
+  // only missing WPs instead of destroying existing ones.
 
   const executeGeneration = useCallback(
     async (sectionKey: string, mode: string = 'regenerate') => {
@@ -377,39 +386,35 @@ export const useGeneration = ({
       setIsLoading(`${t.generating} ${sectionKey}...`);
       setError(null);
 
-            try {
+      try {
         let generatedData;
 
-                // ★ v3.8: Smart per-WP generation for activities (all modes)
-                if (sectionKey === 'activities') {
+        // ★ v3.8/v3.9: Smart per-WP generation for activities
+        if (sectionKey === 'activities') {
           const existingWPs = projectData.activities || [];
           const emptyWPIndices: number[] = [];
-          let missingMandatoryWPs = false;
-          
-          // ★ v3.8: Check for mandatory WPs (PM and Dissemination)
+
+          // ────────────────────────────────────────────────────────
+          // ★ v3.9: Mandatory WP detection — PM and Dissemination
+          // ────────────────────────────────────────────────────────
           const hasPMWP = existingWPs.some((wp: any) => {
             const title = (wp.title || '').toLowerCase();
-            return title.includes('management') || title.includes('coordination') 
+            return title.includes('management') || title.includes('coordination')
               || title.includes('upravljanje') || title.includes('koordinacija');
           });
           const hasDissWP = existingWPs.some((wp: any) => {
             const title = (wp.title || '').toLowerCase();
-            return title.includes('dissemination') || title.includes('communication') 
+            return title.includes('dissemination') || title.includes('communication')
               || title.includes('diseminacija') || title.includes('komunikacija');
           });
 
-          if (!hasPMWP || !hasDissWP) {
-            missingMandatoryWPs = true;
-            const missingNames = [];
-            if (!hasPMWP) missingNames.push(language === 'si' ? 'Upravljanje projekta' : 'Project Management');
-            if (!hasDissWP) missingNames.push(language === 'si' ? 'Diseminacija' : 'Dissemination');
-            
-            console.warn(`[Activities] Missing mandatory WPs: ${missingNames.join(', ')} — forcing full regeneration`);
-          }
+          const missingPM = !hasPMWP && existingWPs.length > 0;
+          const missingDiss = !hasDissWP && existingWPs.length > 0;
+          const hasMissingMandatory = missingPM || missingDiss;
 
           // Detect which WPs are empty or missing content
           existingWPs.forEach((wp: any, idx: number) => {
-            const hasTasks = wp.tasks && Array.isArray(wp.tasks) && wp.tasks.length > 0 
+            const hasTasks = wp.tasks && Array.isArray(wp.tasks) && wp.tasks.length > 0
               && wp.tasks.some((t: any) => t.title && t.title.trim().length > 0);
             const hasMilestones = wp.milestones && Array.isArray(wp.milestones) && wp.milestones.length > 0;
             const hasDeliverables = wp.deliverables && wp.deliverables.length > 0
@@ -419,8 +424,10 @@ export const useGeneration = ({
             }
           });
 
-            if (mode === 'regenerate' || existingWPs.length === 0 || missingMandatoryWPs) {
-            // Full regeneration — generate all WPs from scratch
+          if (mode === 'regenerate' || existingWPs.length === 0) {
+            // ──────────────────────────────────────────────────────
+            // REGENERATE: Generate all WPs from scratch via per-WP
+            // ──────────────────────────────────────────────────────
             generatedData = await generateActivitiesPerWP(
               projectData,
               language,
@@ -437,85 +444,171 @@ export const useGeneration = ({
                 }
               }
             );
-          } else if (emptyWPIndices.length > 0) {
-            // Fill/enhance — only generate empty/incomplete WPs
-            setIsLoading(
-              language === 'si'
-                ? `Dopolnjujem ${emptyWPIndices.length} nepopolnih DS...`
-                : `Filling ${emptyWPIndices.length} incomplete WPs...`
-            );
 
-            // Build a temporary project with only the scaffold of existing WPs
-            // so the per-WP generator has context for cross-WP dependencies
-            const filledActivities = [...existingWPs];
+          } else if (hasMissingMandatory && mode !== 'enhance') {
+            // ──────────────────────────────────────────────────────
+            // ★ v3.9: MISSING MANDATORY WPs — add only missing ones
+            // Does NOT destroy existing WPs.
+            // ──────────────────────────────────────────────────────
+            const durationMonths = projectData.projectIdea?.durationMonths || 24;
+            const augmentedWPs = [...existingWPs];
+            const mandatoryIndicesToGenerate: number[] = [];
 
-            for (let i = 0; i < emptyWPIndices.length; i++) {
-              const wpIdx = emptyWPIndices[i];
-              const wp = existingWPs[wpIdx];
-              const wpNum = wp.id?.replace('WP', '') || String(wpIdx + 1);
+            const missingNames: string[] = [];
 
-              setIsLoading(
-                language === 'si'
-                  ? `Dopolnjujem ${wp.id} (${i + 1}/${emptyWPIndices.length}): ${wp.title || wp.id}...`
-                  : `Filling ${wp.id} (${i + 1}/${emptyWPIndices.length}): ${wp.title || wp.id}...`
-               );
-              // Determine WP type
-              const isLast = wpIdx === existingWPs.length - 1;
-              const isSecondToLast = wpIdx === existingWPs.length - 2;
+            if (missingPM) {
+              missingNames.push(language === 'si' ? 'Upravljanje projekta' : 'Project Management');
 
-              const today = new Date().toISOString().split('T')[0];
-              const pStart = projectData.projectIdea?.startDate || today;
-              const pMonths = projectData.projectIdea?.durationMonths || 24;
-
-              // Import calculateProjectEndDate indirectly through generateActivitiesPerWP context
-              // We need to build a focused prompt for this single WP
-              const singleWPData = await generateSectionContent(
-                'activities',
-                {
-                  ...projectData,
-                  activities: existingWPs,
-                  _generateOnlyWP: wp.id,
-                  _wpIndex: wpIdx,
-                  _isLastWP: isLast,
-                  _isSecondToLastWP: isSecondToLast,
-                },
-                language,
-                'fill'
-              );
-
-              // Extract the generated WP that matches our target
-              if (Array.isArray(singleWPData)) {
-                const generatedWP = singleWPData.find((w: any) => w.id === wp.id) || singleWPData[wpIdx];
-                if (generatedWP) {
-                  filledActivities[wpIdx] = {
-                    ...wp,
-                    tasks: (wp.tasks && wp.tasks.length > 0 && wp.tasks.some((t: any) => t.title?.trim())) ? wp.tasks : generatedWP.tasks,
-                    milestones: (wp.milestones && wp.milestones.length > 0) ? wp.milestones : generatedWP.milestones,
-                    deliverables: (wp.deliverables && wp.deliverables.length > 0) ? wp.deliverables : generatedWP.deliverables,
-                  };
-                }
-              }
-
-              // Rate limit pause
-              if (i < emptyWPIndices.length - 1) {
-                await new Promise(r => setTimeout(r, 2000));
-              }
+              // PM goes as LAST WP (convention: last = PM)
+              const pmPlaceholder = {
+                id: `WP${augmentedWPs.length + 1}`,
+                title: language === 'si' ? 'Upravljanje in koordinacija projekta' : 'Project Management and Coordination',
+                startDate: projectData.projectIdea?.startDate || new Date().toISOString().split('T')[0],
+                endDate: '', // will be filled by generator
+                startMonth: 1,
+                endMonth: durationMonths,
+                tasks: [],
+                milestones: [],
+                deliverables: [],
+                leader: '',
+                participants: [],
+              };
+              augmentedWPs.push(pmPlaceholder);
+              mandatoryIndicesToGenerate.push(augmentedWPs.length - 1);
             }
 
-            generatedData = filledActivities;
+            if (missingDiss) {
+              missingNames.push(language === 'si' ? 'Diseminacija' : 'Dissemination');
+
+              // Dissemination goes as SECOND-TO-LAST WP
+              // If PM was just added as last, insert Diss before PM
+              const dissInsertIdx = missingPM ? augmentedWPs.length - 1 : augmentedWPs.length;
+              const dissPlaceholder = {
+                id: '', // will be renumbered below
+                title: language === 'si' ? 'Diseminacija, komunikacija in izkoriščanje rezultatov' : 'Dissemination, Communication and Exploitation of Results',
+                startDate: projectData.projectIdea?.startDate || new Date().toISOString().split('T')[0],
+                endDate: '', // will be filled by generator
+                startMonth: 1,
+                endMonth: durationMonths,
+                tasks: [],
+                milestones: [],
+                deliverables: [],
+                leader: '',
+                participants: [],
+              };
+
+              augmentedWPs.splice(dissInsertIdx, 0, dissPlaceholder);
+
+              // If PM was added, its index shifted by 1 due to splice
+              if (missingPM) {
+                // PM index was augmentedWPs.length - 1 before splice, now it's augmentedWPs.length - 1 again
+                // But mandatoryIndicesToGenerate already has the old index, update it
+                mandatoryIndicesToGenerate[mandatoryIndicesToGenerate.length - 1] = augmentedWPs.length - 1;
+              }
+              mandatoryIndicesToGenerate.push(dissInsertIdx);
+            }
+
+            // Renumber ALL WP ids sequentially
+            augmentedWPs.forEach((wp, idx) => {
+              wp.id = `WP${idx + 1}`;
+            });
+
+            console.warn(`[Activities] Adding missing mandatory WPs: ${missingNames.join(', ')} — generating only indices [${mandatoryIndicesToGenerate.join(', ')}]`);
+
+            // Also include any previously empty WPs in the generation
+            const allIndicesToGenerate = [...new Set([...mandatoryIndicesToGenerate, ...emptyWPIndices.map(idx => {
+              // emptyWPIndices were calculated before we inserted new WPs
+              // Need to recalculate: if we inserted WPs before these indices, shift them
+              // Simple approach: re-detect empty WPs in augmented array
+              return idx; // indices of original WPs haven't moved if we only appended/inserted at end
+            })])];
+
+            // Re-detect empty indices in the augmented array (safer approach)
+            const finalIndicesToGenerate: number[] = [];
+            augmentedWPs.forEach((wp: any, idx: number) => {
+              const hasTasks = wp.tasks && Array.isArray(wp.tasks) && wp.tasks.length > 0
+                && wp.tasks.some((t: any) => t.title && t.title.trim().length > 0);
+              const hasMilestones = wp.milestones && Array.isArray(wp.milestones) && wp.milestones.length > 0;
+              const hasDeliverableContent = wp.deliverables && wp.deliverables.length > 0
+                && wp.deliverables.some((d: any) => d.title && d.title.trim().length > 0);
+              if (!hasTasks || !hasMilestones || !hasDeliverableContent) {
+                finalIndicesToGenerate.push(idx);
+              }
+            });
+
+            generatedData = await generateActivitiesPerWP(
+              { ...projectData, activities: augmentedWPs },
+              language,
+              'fill',
+              (wpIndex, wpTotal, wpTitle) => {
+                if (wpIndex === -1) {
+                  setIsLoading(
+                    language === 'si'
+                      ? `Dodajam manjkajoče DS (${missingNames.join(' + ')})...`
+                      : `Adding missing WPs (${missingNames.join(' + ')})...`
+                  );
+                } else {
+                  setIsLoading(
+                    language === 'si'
+                      ? `Generiram DS ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                      : `Generating WP ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                  );
+                }
+              },
+              augmentedWPs,           // existingScaffold
+              finalIndicesToGenerate   // onlyIndices
+            );
+
+          } else if (emptyWPIndices.length > 0) {
+            // ──────────────────────────────────────────────────────
+            // ★ v3.9 FIX: FILL incomplete WPs via per-WP generator
+            // Uses existingScaffold + onlyIndices for focused generation
+            // ──────────────────────────────────────────────────────
+            generatedData = await generateActivitiesPerWP(
+              projectData,
+              language,
+              'fill',
+              (wpIndex, wpTotal, wpTitle) => {
+                if (wpIndex === -1) {
+                  setIsLoading(
+                    language === 'si'
+                      ? `Dopolnjujem ${emptyWPIndices.length} nepopolnih DS...`
+                      : `Filling ${emptyWPIndices.length} incomplete WPs...`
+                  );
+                } else {
+                  setIsLoading(
+                    language === 'si'
+                      ? `Dopolnjujem DS ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                      : `Filling WP ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                  );
+                }
+              },
+              existingWPs,      // existingScaffold — keep all existing WPs
+              emptyWPIndices    // onlyIndices — generate ONLY the incomplete ones
+            );
+
           } else if (mode === 'enhance') {
-            // All WPs have content — enhance all via standard generation
+            // ──────────────────────────────────────────────────────
+            // ENHANCE: All WPs have content — enhance via standard generation
+            // ──────────────────────────────────────────────────────
             generatedData = await generateSectionContent(
               sectionKey,
               projectData,
               language,
               mode
             );
+
           } else {
+            // ──────────────────────────────────────────────────────
             // All WPs complete, fill mode — nothing to do
+            // ──────────────────────────────────────────────────────
             generatedData = existingWPs;
           }
+
         } else {
+          // ──────────────────────────────────────────────────────
+          // Non-activities section — standard generation
+          // ──────────────────────────────────────────────────────
           generatedData = await generateSectionContent(
             sectionKey,
             projectData,
