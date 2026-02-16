@@ -10,6 +10,20 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
+// v5.0 — 2026-02-16 — PER-WP GENERATION + DATE FIX + SUMMARY FIX
+//   - NEW: generateActivitiesPerWP() — 2-phase generation: first scaffold
+//     (WP ids, titles, date ranges), then each WP individually with full
+//     context of previously generated WPs for cross-WP dependencies.
+//   - NEW: calculateProjectEndDate() helper — avoids JavaScript Date
+//     month-overflow bugs (e.g., Jan 31 + 1 month → Mar 3). Replaces
+//     manual date calculation at ALL locations in the file.
+//   - FIXED: enforceTemporalIntegrity() guards against empty activities array.
+//   - FIXED: generateTargetedFill() now calls sanitizeActivities() and
+//     enforceTemporalIntegrity() when sectionKey is 'activities'.
+//   - FIXED: generateProjectSummary() uses condensation-only prompt
+//     without academicRules/humanRules. Summary rules injected directly.
+//   - All previous changes preserved.
+//
 // v4.7 — 2026-02-15 — TARGETED FILL
 //   - NEW: generateTargetedFill() — generates content ONLY for
 //     specific empty items in an array section. Sends a focused
@@ -28,34 +42,9 @@
 //   - All previous changes preserved.
 //
 // v4.5 — 2026-02-14 — DYNAMIC MAX_TOKENS
-//   - FIXED: All generateContent() calls now pass sectionKey so that
-//     aiProvider.ts can set appropriate max_tokens per section for
-//     OpenRouter. Prevents 402 "insufficient credits" errors.
-//     Affected functions: generateSectionContent, generateFieldContent,
-//     generateProjectSummary, translateProjectContent.
-//
 // v4.4 — 2026-02-14 — DELIVERABLE TITLE SCHEMA
-//   - FIXED: schemas.activities → deliverables now include "title"
-//     field (Type.STRING) alongside description and indicator.
-//     Required array updated to ['id','title','description','indicator'].
-//     This enables AI to generate separate title + description for each
-//     deliverable, matching Instructions.ts v4.4 DELIVERABLE FIELDS rules.
-//   - All other code unchanged from v4.3.
-//
 // v4.3 — 2026-02-14 — PROMPT ORDER + SCHEMA FIX
-//   - FIXED: Prompt assembly order — taskInstruction (section-specific
-//     rules with WP ordering, risk categories etc.) now comes BEFORE
-//     globalRules and sectionRules. AI pays most attention to the
-//     beginning and end of the prompt. Specific rules first = followed.
-//   - FIXED: schemas.risks — category enum lowercase + 'environmental';
-//     likelihood/impact enums lowercase. Matches types.ts + Instructions.ts.
-//   - All other code unchanged from v4.1.
-//
 // v4.1 — 2026-02-14 — SINGLE SOURCE OF TRUTH REFACTOR
-//   All rule functions removed. Every rule block is imported
-//   from Instructions.ts. Changing Instructions.ts = changing the law.
-//   Fixed SECTION_TO_CHAPTER mapping to match Instructions.ts keys.
-//   Fixed getRulesForSection to read chapter text as string (not .RULES array).
 // ═══════════════════════════════════════════════════════════════
 
 import { storageService } from './storageService.ts';
@@ -107,6 +96,34 @@ const formatRulesAsList = (rules: string | string[]): string => {
   if (typeof rules === 'string' && rules.trim().length > 0) return rules;
   return '';
 };
+// ─── SAFE PROJECT END DATE CALCULATOR ────────────────────────────
+// ★ v5.0: Avoids JavaScript Date month-overflow bugs
+// (e.g., Jan 31 + 1 month → setMonth produces Mar 3 instead of Feb 28)
+
+const calculateProjectEndDate = (startDateStr: string, durationMonths: number): string => {
+  const parts = startDateStr.split('-').map(Number);
+  const startYear = parts[0];
+  const startMonth = parts[1] - 1; // 0-indexed
+  const startDay = parts[2];
+
+  let targetMonth = startMonth + durationMonths;
+  const targetYear = startYear + Math.floor(targetMonth / 12);
+  targetMonth = targetMonth % 12;
+
+  // Days in the target month (day 0 of next month = last day of target month)
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const targetDay = Math.min(startDay, daysInTargetMonth);
+
+  // Create date and subtract 1 day (project ends day before anniversary)
+  const endDate = new Date(targetYear, targetMonth, targetDay);
+  endDate.setDate(endDate.getDate() - 1);
+
+  const y = endDate.getFullYear();
+  const m = String(endDate.getMonth() + 1).padStart(2, '0');
+  const d = String(endDate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 
 // ─── INPUT LANGUAGE DETECTION ────────────────────────────────────
 
