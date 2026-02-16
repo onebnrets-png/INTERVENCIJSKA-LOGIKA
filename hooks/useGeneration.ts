@@ -1145,7 +1145,7 @@ export const useGeneration = ({
                     ...(pmRetry?.structure || {}),
                   },
                 };
-              } catch (e2) {
+                            } catch (e2) {
                 console.error('[Auto-gen projectManagement] Retry also failed:', e2);
                 setError(
                   language === 'si'
