@@ -1,5 +1,17 @@
 // components/ProjectDisplay.tsx
 // ═══════════════════════════════════════════════════════════════
+// v4.8 — 2026-02-16 — SECTION GENERATE BUTTONS:
+//   - NEW: Added "Generate with AI" section-level buttons to ALL sub-sections:
+//     Causes, Consequences (→ problemAnalysis), EU Policies (→ projectIdea),
+//     General Objectives, Specific Objectives (→ own sectionKey),
+//     Risks, Outputs, Outcomes, Impacts, KERs (→ own sectionKey).
+//   - FIX: Added onGenerateSection to destructuring in renderRisks,
+//     renderGenericResults, renderKERs.
+//   - NOTE: Causes/Consequences/Policies call parent section generator
+//     (problemAnalysis/projectIdea) to ensure full context consistency.
+//     Risks/Outputs/Outcomes/Impacts/KERs call their own top-level generator.
+//     All go through handleGenerateSection() → 4-level smart logic.
+//
 // v4.7 — 2026-02-14 — FIXES:
 //   - FIX 1: renderProjectManagement — removed duplicate "Implementation"
 //     sub-heading. SectionHeader already shows the title.
@@ -239,8 +251,13 @@ const DependencySelector = ({ task, allTasks, onAddDependency, onRemoveDependenc
 };
 
 // --- Section Renderers ---
+// ═══════════════════════════════════════════════════════════════
+// ★ v4.8: Causes & Consequences now have GenerateButton calling
+//   onGenerateSection('problemAnalysis') — generates full chapter
+//   with complete project context to avoid hallucination.
+// ═══════════════════════════════════════════════════════════════
 const renderProblemAnalysis = (props) => {
-    const { projectData, onUpdateData, onGenerateField, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
+    const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { coreProblem, causes, consequences } = projectData.problemAnalysis;
     const path = ['problemAnalysis'];
     const t = TEXT[language] || TEXT['en'];
@@ -256,7 +273,15 @@ const renderProblemAnalysis = (props) => {
             </div>
 
             <div id="causes" className="mt-8">
-                <SectionHeader title={t.causes} onAdd={() => onAddItem([...path, 'causes'], { id: null, title: '', description: '' })} addText={t.add} />
+                <SectionHeader title={t.causes} onAdd={() => onAddItem([...path, 'causes'], { id: null, title: '', description: '' })} addText={t.add}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('problemAnalysis')} 
+                        isLoading={isLoading === `${t.generating} problemAnalysis...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </SectionHeader>
                 {(causes || []).map((cause, index) => (
                     <div key={index} className="p-5 border border-slate-200 rounded-xl mb-4 bg-white shadow-sm relative group transition-all hover:shadow-md">
                          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([...path, 'causes'], index)} text={t.remove} /></div>
@@ -267,7 +292,15 @@ const renderProblemAnalysis = (props) => {
             </div>
 
             <div id="consequences" className="mt-8">
-                <SectionHeader title={t.consequences} onAdd={() => onAddItem([...path, 'consequences'], { id: null, title: '', description: '' })} addText={t.add} />
+                <SectionHeader title={t.consequences} onAdd={() => onAddItem([...path, 'consequences'], { id: null, title: '', description: '' })} addText={t.add}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('problemAnalysis')} 
+                        isLoading={isLoading === `${t.generating} problemAnalysis...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </SectionHeader>
                 {(consequences || []).map((consequence, index) => (
                     <div key={index} className="p-5 border border-slate-200 rounded-xl mb-4 bg-white shadow-sm relative group transition-all hover:shadow-md">
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([...path, 'consequences'], index)} text={t.remove} /></div>
@@ -280,8 +313,13 @@ const renderProblemAnalysis = (props) => {
     );
 };
 
+// ═══════════════════════════════════════════════════════════════
+// ★ v4.8: EU Policies now has GenerateButton calling
+//   onGenerateSection('projectIdea') — generates full chapter
+//   with complete project context to avoid hallucination.
+// ═══════════════════════════════════════════════════════════════
 const renderProjectIdea = (props) => {
-    const { projectData, onUpdateData, onGenerateField, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
+    const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { mainAim, stateOfTheArt, proposedSolution, policies, readinessLevels, projectTitle, projectAcronym, startDate } = projectData.projectIdea;
     const path = ['projectIdea'];
     const t = TEXT[language] || TEXT['en'];
@@ -372,7 +410,15 @@ const renderProjectIdea = (props) => {
             />
 
             <div id="eu-policies" className="mt-8">
-                 <SectionHeader title={t.euPolicies} onAdd={() => onAddItem([...path, 'policies'], { id: null, name: '', description: '' })} addText={t.add} />
+                 <SectionHeader title={t.euPolicies} onAdd={() => onAddItem([...path, 'policies'], { id: null, name: '', description: '' })} addText={t.add}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('projectIdea')} 
+                        isLoading={isLoading === `${t.generating} projectIdea...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                 </SectionHeader>
                  {(policies || []).map((policy, index) => (
                     <div key={index} className="p-5 border border-slate-200 rounded-xl mb-4 bg-white shadow-sm relative group hover:shadow-md transition-all">
                          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([...path, 'policies'], index)} text={t.remove} /></div>
@@ -385,8 +431,12 @@ const renderProjectIdea = (props) => {
     );
 };
 
+// ═══════════════════════════════════════════════════════════════
+// ★ v4.8: Outputs/Outcomes/Impacts now have GenerateButton
+//   calling onGenerateSection(sectionKey) for each sub-section.
+// ═══════════════════════════════════════════════════════════════
 const renderGenericResults = (props, sectionKey) => {
-    const { projectData, onUpdateData, onGenerateField, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
+    const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const items = projectData[sectionKey];
     const t = TEXT[language] || TEXT['en'];
     const title = t[sectionKey];
@@ -403,7 +453,15 @@ const renderGenericResults = (props, sectionKey) => {
 
     return (
         <div id={sectionKey} className="mt-8">
-             <SectionHeader title={title} onAdd={() => onAddItem([sectionKey], { id: null, title: '', description: '', indicator: '' })} addText={t.add} />
+             <SectionHeader title={title} onAdd={() => onAddItem([sectionKey], { id: null, title: '', description: '', indicator: '' })} addText={t.add}>
+                <GenerateButton 
+                    onClick={() => onGenerateSection(sectionKey)} 
+                    isLoading={isLoading === `${t.generating} ${sectionKey}...`} 
+                    title={t.generateSection} 
+                    text={t.generateAI} 
+                    missingApiKey={missingApiKey} 
+                />
+             </SectionHeader>
              {(items || []).map((item, index) => (
                 <div key={index} className="p-5 border border-slate-200 rounded-xl mb-4 bg-white shadow-sm relative group hover:shadow-md transition-all">
                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([sectionKey], index)} text={t.remove} /></div>
@@ -416,8 +474,12 @@ const renderGenericResults = (props, sectionKey) => {
     );
 };
 
+// ═══════════════════════════════════════════════════════════════
+// ★ v4.8: Objectives now have GenerateButton calling
+//   onGenerateSection(sectionKey) for generalObjectives / specificObjectives.
+// ═══════════════════════════════════════════════════════════════
 const renderObjectives = (props, sectionKey) => {
-    const { projectData, onUpdateData, onGenerateField, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
+    const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const items = projectData[sectionKey];
     const t = TEXT[language] || TEXT['en'];
     const title = sectionKey === 'generalObjectives' ? t.generalObjectives : t.specificObjectives;
@@ -425,7 +487,15 @@ const renderObjectives = (props, sectionKey) => {
     
     return (
         <div className="mt-2">
-             <SectionHeader title={title} onAdd={() => onAddItem([sectionKey], { id: null, title: '', description: '', indicator: '' })} addText={t.add} />
+             <SectionHeader title={title} onAdd={() => onAddItem([sectionKey], { id: null, title: '', description: '', indicator: '' })} addText={t.add}>
+                <GenerateButton 
+                    onClick={() => onGenerateSection(sectionKey)} 
+                    isLoading={isLoading === `${t.generating} ${sectionKey}...`} 
+                    title={t.generateSection} 
+                    text={t.generateAI} 
+                    missingApiKey={missingApiKey} 
+                />
+             </SectionHeader>
              {(items || []).map((item, index) => (
                 <div key={index} className="p-5 border border-slate-200 rounded-xl mb-4 bg-white shadow-sm relative group hover:shadow-md transition-all">
                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([sectionKey], index)} text={t.remove} /></div>
@@ -437,7 +507,6 @@ const renderObjectives = (props, sectionKey) => {
         </div>
     );
 }
-
 // ═══════════════════════════════════════════════════════════════
 // ★ FIX 1: Removed duplicate sub-heading "Implementation"
 // ★ FIX 2: id="quality-efficiency" → id="implementation"
@@ -500,9 +569,10 @@ const renderProjectManagement = (props) => {
 // ★ FIX 4: All risk values lowercase
 // ★ FIX 5: Added environmental category option
 // ★ FIX 6: trafficColors keys lowercase + safe lookup
+// ★ v4.8: Risks now has GenerateButton calling onGenerateSection('risks')
 // ═══════════════════════════════════════════════════════════════
 const renderRisks = (props) => {
-    const { projectData, onUpdateData, onGenerateField, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
+    const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { risks } = projectData;
     const path = ['risks'];
     const t = TEXT[language] || TEXT['en'];
@@ -523,7 +593,16 @@ const renderRisks = (props) => {
     return (
         <div id="risk-mitigation" className="mt-12 border-t-2 border-slate-200 pt-8">
             {/* ★ FIX 4: lowercase defaults */}
-            <SectionHeader title={t.subSteps.riskMitigation} onAdd={() => onAddItem(path, { id: `RISK${risks.length + 1}`, category: 'technical', title: '', description: '', likelihood: 'low', impact: 'low', mitigation: '' })} addText={t.add} />
+            {/* ★ v4.8: Added GenerateButton for risks */}
+            <SectionHeader title={t.subSteps.riskMitigation} onAdd={() => onAddItem(path, { id: `RISK${risks.length + 1}`, category: 'technical', title: '', description: '', likelihood: 'low', impact: 'low', mitigation: '' })} addText={t.add}>
+                <GenerateButton 
+                    onClick={() => onGenerateSection('risks')} 
+                    isLoading={isLoading === `${t.generating} risks...`} 
+                    title={t.generateSection} 
+                    text={t.generateAI} 
+                    missingApiKey={missingApiKey} 
+                />
+            </SectionHeader>
             {(risks || []).map((risk, index) => {
                 const likelihoodLoading = isLoading === `${t.generating} likelihood...`;
                 const impactLoading = isLoading === `${t.generating} impact...`;
@@ -642,15 +721,26 @@ const renderRisks = (props) => {
 };
 
 // --- RENDER KERs (Sub-Component of Expected Results) ---
+// ═══════════════════════════════════════════════════════════════
+// ★ v4.8: KERs now has GenerateButton calling onGenerateSection('kers')
+// ═══════════════════════════════════════════════════════════════
 const renderKERs = (props) => {
-    const { projectData, onUpdateData, onGenerateField, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
+    const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { kers } = projectData;
     const path = ['kers'];
     const t = TEXT[language] || TEXT['en'];
 
     return (
         <div id="kers" className="mt-12 border-t-2 border-slate-200 pt-8">
-            <SectionHeader title={t.subSteps.kers} onAdd={() => onAddItem(path, { id: `KER${kers.length + 1}`, title: '', description: '', exploitationStrategy: '' })} addText={t.add} />
+            <SectionHeader title={t.subSteps.kers} onAdd={() => onAddItem(path, { id: `KER${kers.length + 1}`, title: '', description: '', exploitationStrategy: '' })} addText={t.add}>
+                <GenerateButton 
+                    onClick={() => onGenerateSection('kers')} 
+                    isLoading={isLoading === `${t.generating} kers...`} 
+                    title={t.generateSection} 
+                    text={t.generateAI} 
+                    missingApiKey={missingApiKey} 
+                />
+            </SectionHeader>
             {(kers || []).map((ker, index) => (
                  <div key={index} className="p-5 border border-slate-200 rounded-xl mb-4 bg-white shadow-sm relative group hover:shadow-md transition-all">
                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem(path, index)} text={t.remove} /></div>
