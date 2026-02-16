@@ -1261,7 +1261,9 @@ export const generateActivitiesPerWP = async (
   projectData: any,
   language: 'en' | 'si' = 'en',
   mode: string = 'regenerate',
-  onProgress?: (wpIndex: number, wpTotal: number, wpTitle: string) => void
+  onProgress?: (wpIndex: number, wpTotal: number, wpTitle: string) => void,
+  existingScaffold?: any[],
+  onlyIndices?: number[]
 ): Promise<any[]> => {
 
   const config = getProviderConfig();
@@ -1293,63 +1295,72 @@ export const generateActivitiesPerWP = async (
     projectDurationMonths: String(durationMonths),
   });
 
-  // ════════════════════════════════════════════════════════════
-  // PHASE 1: Generate WP scaffold (ids, titles, date ranges)
+    // ════════════════════════════════════════════════════════════
+  // PHASE 1: Generate WP scaffold OR use existing one
   // ════════════════════════════════════════════════════════════
 
-  console.log(`[PerWP] Phase 1: Generating scaffold...`);
-  if (onProgress) onProgress(-1, 0, language === 'si' ? 'Generiranje strukture DS...' : 'Generating WP structure...');
+  let scaffold: any[];
 
-  const scaffoldPrompt = [
-    temporalRule,
-    langDirective,
-    language === 'si'
-      ? `NALOGA: Generiraj SAMO strukturo delovnih sklopov (scaffold) — BREZ nalog, mejnikov ali dosežkov.
+  if (existingScaffold && existingScaffold.length > 0) {
+    // Use provided scaffold (for fill mode — existing WPs as scaffold)
+    scaffold = existingScaffold;
+    console.log(`[PerWP] Phase 1: Using existing scaffold with ${scaffold.length} WPs`);
+  } else {
+    // Generate scaffold from scratch
+    console.log(`[PerWP] Phase 1: Generating scaffold...`);
+    if (onProgress) onProgress(-1, 0, language === 'si' ? 'Generiranje strukture DS...' : 'Generating WP structure...');
+
+    const scaffoldPrompt = [
+      temporalRule,
+      langDirective,
+      language === 'si'
+        ? `NALOGA: Generiraj SAMO strukturo delovnih sklopov (scaffold) — BREZ nalog, mejnikov ali dosežkov.
 Za vsak DS vrni: id (WP1, WP2...), title (samostalniška zveza), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD).
 Projekt traja od ${projectStart} do ${projectEnd} (${durationMonths} mesecev).
 Med 6 in 10 DS. Upoštevaj pravila za vrstni red DS (prvi je temeljni/analitični, predzadnji diseminacija, zadnji upravljanje).
 Vrni JSON array: [{ "id": "WP1", "title": "...", "startDate": "...", "endDate": "..." }, ...]
 BREZ nalog, mejnikov ali dosežkov — SAMO scaffold.`
-      : `TASK: Generate ONLY the work package structure (scaffold) — WITHOUT tasks, milestones, or deliverables.
+        : `TASK: Generate ONLY the work package structure (scaffold) — WITHOUT tasks, milestones, or deliverables.
 For each WP return: id (WP1, WP2...), title (noun phrase), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD).
 Project runs from ${projectStart} to ${projectEnd} (${durationMonths} months).
 Between 6 and 10 WPs. Follow WP ordering rules (first is foundational/analytical, second-to-last is dissemination, last is project management).
 Return a JSON array: [{ "id": "WP1", "title": "...", "startDate": "...", "endDate": "..." }, ...]
 NO tasks, milestones, or deliverables — ONLY scaffold.`,
-    taskInstruction,
-    context,
-    temporalRule,
-  ].filter(Boolean).join('\n\n');
+      taskInstruction,
+      context,
+      temporalRule,
+    ].filter(Boolean).join('\n\n');
 
-  const scaffoldSchema = {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        id: { type: Type.STRING },
-        title: { type: Type.STRING },
-        startDate: { type: Type.STRING },
-        endDate: { type: Type.STRING },
-      },
-      required: ['id', 'title', 'startDate', 'endDate']
+    const scaffoldSchema = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          title: { type: Type.STRING },
+          startDate: { type: Type.STRING },
+          endDate: { type: Type.STRING },
+        },
+        required: ['id', 'title', 'startDate', 'endDate']
+      }
+    };
+
+    const scaffoldResult = await generateContent({
+      prompt: scaffoldPrompt,
+      jsonSchema: useNativeSchema ? scaffoldSchema : undefined,
+      jsonMode: !useNativeSchema,
+      sectionKey: 'activities',
+    });
+
+    const scaffoldStr = scaffoldResult.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+    scaffold = JSON.parse(scaffoldStr);
+
+    if (!Array.isArray(scaffold) || scaffold.length === 0) {
+      throw new Error('AI returned invalid scaffold for per-WP generation');
     }
-  };
-
-  const scaffoldResult = await generateContent({
-    prompt: scaffoldPrompt,
-    jsonSchema: useNativeSchema ? scaffoldSchema : undefined,
-    jsonMode: !useNativeSchema,
-    sectionKey: 'activities',
-  });
-
-  const scaffoldStr = scaffoldResult.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-  let scaffold: any[] = JSON.parse(scaffoldStr);
-
-  if (!Array.isArray(scaffold) || scaffold.length === 0) {
-    throw new Error('AI returned invalid scaffold for per-WP generation');
   }
 
-  console.log(`[PerWP] Phase 1 complete: ${scaffold.length} WPs scaffolded: ${scaffold.map(w => w.id).join(', ')}`);
+  console.log(`[PerWP] Phase 1 complete: ${scaffold.length} WPs: ${scaffold.map(w => w.id).join(', ')}`);
 
   // ════════════════════════════════════════════════════════════
   // PHASE 2: Generate each WP's content individually
@@ -1358,7 +1369,12 @@ NO tasks, milestones, or deliverables — ONLY scaffold.`,
   const fullActivities: any[] = [];
   const wpItemSchema = schemas.activities.items;
 
-  for (let i = 0; i < scaffold.length; i++) {
+    // Determine which WPs to generate (all, or only specific indices)
+  const indicesToGenerate = onlyIndices || scaffold.map((_, idx) => idx);
+
+  for (const i of indicesToGenerate) {
+    if (i < 0 || i >= scaffold.length) continue;
+
     const wp = scaffold[i];
     const isLast = i === scaffold.length - 1;
     const isSecondToLast = i === scaffold.length - 2;
