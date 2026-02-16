@@ -380,24 +380,119 @@ export const useGeneration = ({
             try {
         let generatedData;
 
-        // ★ v3.8: Per-WP generation for activities
-        if (sectionKey === 'activities' && mode === 'regenerate') {
-          generatedData = await generateActivitiesPerWP(
-            projectData,
-            language,
-            mode,
-            (wpIndex, wpTotal, wpTitle) => {
-              if (wpIndex === -1) {
-                setIsLoading(language === 'si' ? 'Generiranje strukture DS...' : 'Generating WP structure...');
-              } else {
-                setIsLoading(
-                  language === 'si'
-                    ? `Generiram DS ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
-                    : `Generating WP ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
-                );
+                // ★ v3.8: Smart per-WP generation for activities (all modes)
+        if (sectionKey === 'activities') {
+          const existingWPs = projectData.activities || [];
+          const emptyWPIndices: number[] = [];
+          
+          // Detect which WPs are empty or missing content
+          existingWPs.forEach((wp: any, idx: number) => {
+            const hasTasks = wp.tasks && Array.isArray(wp.tasks) && wp.tasks.length > 0 
+              && wp.tasks.some((t: any) => t.title && t.title.trim().length > 0);
+            const hasMilestones = wp.milestones && Array.isArray(wp.milestones) && wp.milestones.length > 0;
+            const hasDeliverables = wp.deliverables && Array.isArray(wp.deliverables) && wp.deliverables.length > 0;
+            if (!hasTasks || !hasMilestones || !hasDeliverables) {
+              emptyWPIndices.push(idx);
+            }
+          });
+
+          if (mode === 'regenerate' || existingWPs.length === 0) {
+            // Full regeneration — generate all WPs from scratch
+            generatedData = await generateActivitiesPerWP(
+              projectData,
+              language,
+              mode,
+              (wpIndex, wpTotal, wpTitle) => {
+                if (wpIndex === -1) {
+                  setIsLoading(language === 'si' ? 'Generiranje strukture DS...' : 'Generating WP structure...');
+                } else {
+                  setIsLoading(
+                    language === 'si'
+                      ? `Generiram DS ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                      : `Generating WP ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                  );
+                }
+              }
+            );
+          } else if (emptyWPIndices.length > 0) {
+            // Fill/enhance — only generate empty/incomplete WPs
+            setIsLoading(
+              language === 'si'
+                ? `Dopolnjujem ${emptyWPIndices.length} nepopolnih DS...`
+                : `Filling ${emptyWPIndices.length} incomplete WPs...`
+            );
+
+            // Build a temporary project with only the scaffold of existing WPs
+            // so the per-WP generator has context for cross-WP dependencies
+            const filledActivities = [...existingWPs];
+
+            for (let i = 0; i < emptyWPIndices.length; i++) {
+              const wpIdx = emptyWPIndices[i];
+              const wp = existingWPs[wpIdx];
+              const wpNum = wp.id?.replace('WP', '') || String(wpIdx + 1);
+
+              setIsLoading(
+                language === 'si'
+                  ? `Dopolnjujem DS ${i + 1}/${emptyWPIndices.length}: ${wp.title || wp.id}...`
+                  : `Filling WP ${i + 1}/${emptyWPIndices.length}: ${wp.title || wp.id}...`
+              );
+
+              // Determine WP type
+              const isLast = wpIdx === existingWPs.length - 1;
+              const isSecondToLast = wpIdx === existingWPs.length - 2;
+
+              const today = new Date().toISOString().split('T')[0];
+              const pStart = projectData.projectIdea?.startDate || today;
+              const pMonths = projectData.projectIdea?.durationMonths || 24;
+
+              // Import calculateProjectEndDate indirectly through generateActivitiesPerWP context
+              // We need to build a focused prompt for this single WP
+              const singleWPData = await generateSectionContent(
+                'activities',
+                {
+                  ...projectData,
+                  activities: existingWPs,
+                  _generateOnlyWP: wp.id,
+                  _wpIndex: wpIdx,
+                  _isLastWP: isLast,
+                  _isSecondToLastWP: isSecondToLast,
+                },
+                language,
+                'fill'
+              );
+
+              // Extract the generated WP that matches our target
+              if (Array.isArray(singleWPData)) {
+                const generatedWP = singleWPData.find((w: any) => w.id === wp.id) || singleWPData[wpIdx];
+                if (generatedWP) {
+                  filledActivities[wpIdx] = {
+                    ...wp,
+                    tasks: (wp.tasks && wp.tasks.length > 0 && wp.tasks.some((t: any) => t.title?.trim())) ? wp.tasks : generatedWP.tasks,
+                    milestones: (wp.milestones && wp.milestones.length > 0) ? wp.milestones : generatedWP.milestones,
+                    deliverables: (wp.deliverables && wp.deliverables.length > 0) ? wp.deliverables : generatedWP.deliverables,
+                  };
+                }
+              }
+
+              // Rate limit pause
+              if (i < emptyWPIndices.length - 1) {
+                await new Promise(r => setTimeout(r, 2000));
               }
             }
-          );
+
+            generatedData = filledActivities;
+          } else if (mode === 'enhance') {
+            // All WPs have content — enhance all via standard generation
+            generatedData = await generateSectionContent(
+              sectionKey,
+              projectData,
+              language,
+              mode
+            );
+          } else {
+            // All WPs complete, fill mode — nothing to do
+            generatedData = existingWPs;
+          }
         } else {
           generatedData = await generateSectionContent(
             sectionKey,
