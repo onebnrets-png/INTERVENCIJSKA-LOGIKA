@@ -1221,7 +1221,7 @@ export const generateFieldContent = async (
   return text;
 };
 
-// ─── SUMMARY GENERATION (v4.8 — extraction-only, structured) ────
+// ─── SUMMARY GENERATION (v5.0 — condensation-only, structured) ──
 
 export const generateProjectSummary = async (
   projectData: any,
