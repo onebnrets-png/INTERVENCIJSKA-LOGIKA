@@ -1,16 +1,18 @@
 // components/ProjectDisplay.tsx
 // ═══════════════════════════════════════════════════════════════
-// v4.8 — 2026-02-16 — SECTION GENERATE BUTTONS:
-//   - NEW: Added "Generate with AI" section-level buttons to ALL sub-sections:
-//     Causes, Consequences (→ problemAnalysis), EU Policies (→ projectIdea),
-//     General Objectives, Specific Objectives (→ own sectionKey),
-//     Risks, Outputs, Outcomes, Impacts, KERs (→ own sectionKey).
-//   - FIX: Added onGenerateSection to destructuring in renderRisks,
-//     renderGenericResults, renderKERs.
-//   - NOTE: Causes/Consequences/Policies call parent section generator
-//     (problemAnalysis/projectIdea) to ensure full context consistency.
-//     Risks/Outputs/Outcomes/Impacts/KERs call their own top-level generator.
-//     All go through handleGenerateSection() → 4-level smart logic.
+// v4.8 — 2026-02-16 — SECTION GENERATE BUTTONS FOR ALL SUB-SECTIONS:
+//   - NEW: Every sub-section now has its own "Generate with AI" button
+//     that generates ONLY that specific sub-section (not the full chapter).
+//   - Sub-section buttons call onGenerateSection() with sub-section keys:
+//     coreProblem, causes, consequences, projectTitleAcronym, mainAim,
+//     stateOfTheArt, proposedSolution, readinessLevels, policies,
+//     generalObjectives, specificObjectives, risks, outputs, outcomes,
+//     impacts, kers.
+//   - Header button (top-right) still generates the FULL chapter.
+//   - All sub-section generators receive full project context from AI
+//     to prevent hallucination.
+//   - All sub-section generators support 4-level smart logic
+//     (translate / enhance / fill / regenerate).
 //
 // v4.7 — 2026-02-14 — FIXES:
 //   - FIX 1: renderProjectManagement — removed duplicate "Implementation"
@@ -141,7 +143,8 @@ const TextArea = ({ label, path, value, onUpdate, onGenerate, isLoading, placeho
     );
 };
 
-const ReadinessLevelSelector = ({ readinessLevels, onUpdateData, onGenerateField, isLoading, language, missingApiKey }) => {
+// ★ v4.8: ReadinessLevelSelector now receives onGenerateSection
+const ReadinessLevelSelector = ({ readinessLevels, onUpdateData, onGenerateField, onGenerateSection, isLoading, language, missingApiKey }) => {
     const t = TEXT[language] || TEXT['en'];
     const definitions = getReadinessLevelsDefinitions(language);
 
@@ -151,8 +154,19 @@ const ReadinessLevelSelector = ({ readinessLevels, onUpdateData, onGenerateField
 
     return (
         <div id="readiness-levels" className="mt-8">
-            <h3 className="text-lg font-bold text-slate-700 border-b border-slate-200 pb-2 mb-4">{t.readinessLevels}</h3>
-            <p className="text-sm text-slate-500 mb-4">{t.readinessLevelsDesc}</p>
+            <div className="flex justify-between items-end mb-4 border-b border-slate-200 pb-2">
+                <div>
+                    <h3 className="text-lg font-bold text-slate-700">{t.readinessLevels}</h3>
+                    <p className="text-sm text-slate-500 mt-1">{t.readinessLevelsDesc}</p>
+                </div>
+                <GenerateButton 
+                    onClick={() => onGenerateSection('readinessLevels')} 
+                    isLoading={isLoading === `${t.generating} readinessLevels...`} 
+                    title={t.generateSection} 
+                    text={t.generateAI} 
+                    missingApiKey={missingApiKey} 
+                />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Object.entries(definitions).map(([key, def]) => {
                     const levelKey = key;
@@ -249,13 +263,7 @@ const DependencySelector = ({ task, allTasks, onAddDependency, onRemoveDependenc
         </div>
     );
 };
-
 // --- Section Renderers ---
-// ═══════════════════════════════════════════════════════════════
-// ★ v4.8: Causes & Consequences now have GenerateButton calling
-//   onGenerateSection('problemAnalysis') — generates full chapter
-//   with complete project context to avoid hallucination.
-// ═══════════════════════════════════════════════════════════════
 const renderProblemAnalysis = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { coreProblem, causes, consequences } = projectData.problemAnalysis;
@@ -265,7 +273,16 @@ const renderProblemAnalysis = (props) => {
     return (
         <>
             <div id="core-problem">
-                <FieldHeader title={t.coreProblem} description={t.coreProblemDesc} />
+                <SectionHeader title={t.coreProblem}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('coreProblem')} 
+                        isLoading={isLoading === `${t.generating} coreProblem...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </SectionHeader>
+                <p className="text-sm text-slate-500 mb-3 -mt-2">{t.coreProblemDesc}</p>
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea label={t.title} path={[...path, 'coreProblem', 'title']} value={coreProblem.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.coreProblemTitlePlaceholder} generateTitle={`${t.generateField} ${t.coreProblem}`} missingApiKey={missingApiKey} />
                     <TextArea label={t.description} path={[...path, 'coreProblem', 'description']} value={coreProblem.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.coreProblemDescPlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
@@ -275,8 +292,8 @@ const renderProblemAnalysis = (props) => {
             <div id="causes" className="mt-8">
                 <SectionHeader title={t.causes} onAdd={() => onAddItem([...path, 'causes'], { id: null, title: '', description: '' })} addText={t.add}>
                     <GenerateButton 
-                        onClick={() => onGenerateSection('problemAnalysis')} 
-                        isLoading={isLoading === `${t.generating} problemAnalysis...`} 
+                        onClick={() => onGenerateSection('causes')} 
+                        isLoading={isLoading === `${t.generating} causes...`} 
                         title={t.generateSection} 
                         text={t.generateAI} 
                         missingApiKey={missingApiKey} 
@@ -294,8 +311,8 @@ const renderProblemAnalysis = (props) => {
             <div id="consequences" className="mt-8">
                 <SectionHeader title={t.consequences} onAdd={() => onAddItem([...path, 'consequences'], { id: null, title: '', description: '' })} addText={t.add}>
                     <GenerateButton 
-                        onClick={() => onGenerateSection('problemAnalysis')} 
-                        isLoading={isLoading === `${t.generating} problemAnalysis...`} 
+                        onClick={() => onGenerateSection('consequences')} 
+                        isLoading={isLoading === `${t.generating} consequences...`} 
                         title={t.generateSection} 
                         text={t.generateAI} 
                         missingApiKey={missingApiKey} 
@@ -313,11 +330,6 @@ const renderProblemAnalysis = (props) => {
     );
 };
 
-// ═══════════════════════════════════════════════════════════════
-// ★ v4.8: EU Policies now has GenerateButton calling
-//   onGenerateSection('projectIdea') — generates full chapter
-//   with complete project context to avoid hallucination.
-// ═══════════════════════════════════════════════════════════════
 const renderProjectIdea = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { mainAim, stateOfTheArt, proposedSolution, policies, readinessLevels, projectTitle, projectAcronym, startDate } = projectData.projectIdea;
@@ -331,14 +343,22 @@ const renderProjectIdea = (props) => {
     return (
         <>
             <div className={`mb-8 p-6 border border-slate-200 rounded-xl bg-gradient-to-br from-white to-slate-50 shadow-sm transition-all duration-300 ${!canEditTitle ? 'filter blur-sm opacity-60 pointer-events-none' : ''}`}>
-                <h3 className="text-xl font-bold text-slate-800 mb-4">{t.projectTitle}</h3>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold text-slate-800">{t.projectTitle}</h3>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('projectTitleAcronym')} 
+                        isLoading={isLoading === `${t.generating} projectTitleAcronym...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <TextArea label={t.projectTitle} path={[...path, 'projectTitle']} value={projectTitle} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.projectTitlePlaceholder} generateTitle={`${t.generateField} ${t.projectTitle}`} missingApiKey={missingApiKey} />
                     <TextArea label={t.acronym} path={[...path, 'projectAcronym']} value={projectAcronym} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.projectAcronymPlaceholder} generateTitle={`${t.generateField} ${t.acronym}`} missingApiKey={missingApiKey} />
                 </div>
                 
-                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-                    {/* Start Date */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.projectStartDate}</label>
                         <input 
@@ -348,8 +368,6 @@ const renderProjectIdea = (props) => {
                             className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 shadow-sm text-base"
                         />
                     </div>
-
-                    {/* Duration */}
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.projectDuration}</label>
                         <select
@@ -362,8 +380,6 @@ const renderProjectIdea = (props) => {
                             ))}
                         </select>
                     </div>
-
-                    {/* End Date (calculated) */}
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.projectEndDate}</label>
                         <div className="p-2.5 border border-slate-200 rounded-lg bg-slate-50 text-base font-bold text-sky-700 shadow-sm">
@@ -378,23 +394,52 @@ const renderProjectIdea = (props) => {
                         </div>
                     </div>
                 </div>
-
                 <p className="text-xs text-slate-400 mt-2">{t.projectDurationDesc}</p>
             </div>
+
             <div id="main-aim">
-                 <FieldHeader title={t.mainAim} description={t.mainAimDesc}/>
-                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <SectionHeader title={t.mainAim}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('mainAim')} 
+                        isLoading={isLoading === `${t.generating} mainAim...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </SectionHeader>
+                <p className="text-sm text-slate-500 mb-3 -mt-2">{t.mainAimDesc}</p>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea label={t.mainAim} path={[...path, 'mainAim']} value={mainAim} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.mainAimPlaceholder} generateTitle={`${t.generateField} ${t.mainAim}`} missingApiKey={missingApiKey} />
-                 </div>
+                </div>
             </div>
+
             <div id="state-of-the-art" className="mt-6">
-                 <FieldHeader title={t.stateOfTheArt} description={t.stateOfTheArtDesc}/>
-                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <SectionHeader title={t.stateOfTheArt}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('stateOfTheArt')} 
+                        isLoading={isLoading === `${t.generating} stateOfTheArt...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </SectionHeader>
+                <p className="text-sm text-slate-500 mb-3 -mt-2">{t.stateOfTheArtDesc}</p>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea label={t.stateOfTheArt} path={[...path, 'stateOfTheArt']} value={stateOfTheArt} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.stateOfTheArtPlaceholder} generateTitle={`${t.generateField} ${t.stateOfTheArt}`} missingApiKey={missingApiKey} />
-                 </div>
+                </div>
             </div>
+
             <div id="proposed-solution" className="mt-6">
-                <FieldHeader title={t.proposedSolution} description={t.proposedSolutionDesc}/>
+                <SectionHeader title={t.proposedSolution}>
+                    <GenerateButton 
+                        onClick={() => onGenerateSection('proposedSolution')} 
+                        isLoading={isLoading === `${t.generating} proposedSolution...`} 
+                        title={t.generateSection} 
+                        text={t.generateAI} 
+                        missingApiKey={missingApiKey} 
+                    />
+                </SectionHeader>
+                <p className="text-sm text-slate-500 mb-3 -mt-2">{t.proposedSolutionDesc}</p>
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea label={t.proposedSolution} path={[...path, 'proposedSolution']} value={proposedSolution} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.proposedSolutionPlaceholder} generateTitle={`${t.generateField} ${t.proposedSolution}`} missingApiKey={missingApiKey} />
                 </div>
@@ -404,6 +449,7 @@ const renderProjectIdea = (props) => {
                 readinessLevels={readinessLevels} 
                 onUpdateData={onUpdateData} 
                 onGenerateField={onGenerateField}
+                onGenerateSection={onGenerateSection}
                 isLoading={isLoading}
                 language={language}
                 missingApiKey={missingApiKey}
@@ -412,8 +458,8 @@ const renderProjectIdea = (props) => {
             <div id="eu-policies" className="mt-8">
                  <SectionHeader title={t.euPolicies} onAdd={() => onAddItem([...path, 'policies'], { id: null, name: '', description: '' })} addText={t.add}>
                     <GenerateButton 
-                        onClick={() => onGenerateSection('projectIdea')} 
-                        isLoading={isLoading === `${t.generating} projectIdea...`} 
+                        onClick={() => onGenerateSection('policies')} 
+                        isLoading={isLoading === `${t.generating} policies...`} 
                         title={t.generateSection} 
                         text={t.generateAI} 
                         missingApiKey={missingApiKey} 
@@ -431,10 +477,6 @@ const renderProjectIdea = (props) => {
     );
 };
 
-// ═══════════════════════════════════════════════════════════════
-// ★ v4.8: Outputs/Outcomes/Impacts now have GenerateButton
-//   calling onGenerateSection(sectionKey) for each sub-section.
-// ═══════════════════════════════════════════════════════════════
 const renderGenericResults = (props, sectionKey) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const items = projectData[sectionKey];
@@ -474,10 +516,6 @@ const renderGenericResults = (props, sectionKey) => {
     );
 };
 
-// ═══════════════════════════════════════════════════════════════
-// ★ v4.8: Objectives now have GenerateButton calling
-//   onGenerateSection(sectionKey) for generalObjectives / specificObjectives.
-// ═══════════════════════════════════════════════════════════════
 const renderObjectives = (props, sectionKey) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const items = projectData[sectionKey];
@@ -507,11 +545,6 @@ const renderObjectives = (props, sectionKey) => {
         </div>
     );
 }
-// ═══════════════════════════════════════════════════════════════
-// ★ FIX 1: Removed duplicate sub-heading "Implementation"
-// ★ FIX 2: id="quality-efficiency" → id="implementation"
-// ★ FIX 3: Added id="organigram" wrapper
-// ═══════════════════════════════════════════════════════════════
 const renderProjectManagement = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, isLoading, language, missingApiKey } = props;
     const { projectManagement } = projectData;
@@ -532,7 +565,6 @@ const renderProjectManagement = (props) => {
             
             <p className="text-sm text-slate-500 mb-6 -mt-2">{t.management.desc}</p>
 
-            {/*  DESCRIPTION FIELD (no duplicate sub-heading)  */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-8">
                 <TextArea 
                     label={t.description} 
@@ -547,7 +579,6 @@ const renderProjectManagement = (props) => {
                 />
             </div>
 
-            {/*  ORGANIZATIONAL STRUCTURE (ORGANIGRAM) — now with id="organigram"  */}
             <div id="organigram">
                 <div className="mb-3 border-b border-slate-200 pb-2">
                     <h4 className="text-lg font-bold text-slate-700">{t.management.organigram}</h4>
@@ -565,26 +596,18 @@ const renderProjectManagement = (props) => {
     );
 };
 
-// ═══════════════════════════════════════════════════════════════
-// ★ FIX 4: All risk values lowercase
-// ★ FIX 5: Added environmental category option
-// ★ FIX 6: trafficColors keys lowercase + safe lookup
-// ★ v4.8: Risks now has GenerateButton calling onGenerateSection('risks')
-// ═══════════════════════════════════════════════════════════════
 const renderRisks = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { risks } = projectData;
     const path = ['risks'];
     const t = TEXT[language] || TEXT['en'];
 
-    // ★ FIX 6: lowercase keys
     const trafficColors = {
         low: 'bg-green-100 border-green-300 text-green-800',
         medium: 'bg-yellow-100 border-yellow-300 text-yellow-800',
         high: 'bg-red-100 border-red-300 text-red-800'
     };
 
-    // ★ FIX 6: safe lookup helper — handles both old uppercase and new lowercase data
     const getTrafficColor = (value) => {
         if (!value) return trafficColors.low;
         return trafficColors[value.toLowerCase()] || trafficColors.low;
@@ -592,8 +615,6 @@ const renderRisks = (props) => {
     
     return (
         <div id="risk-mitigation" className="mt-12 border-t-2 border-slate-200 pt-8">
-            {/* ★ FIX 4: lowercase defaults */}
-            {/* ★ v4.8: Added GenerateButton for risks */}
             <SectionHeader title={t.subSteps.riskMitigation} onAdd={() => onAddItem(path, { id: `RISK${risks.length + 1}`, category: 'technical', title: '', description: '', likelihood: 'low', impact: 'low', mitigation: '' })} addText={t.add}>
                 <GenerateButton 
                     onClick={() => onGenerateSection('risks')} 
@@ -614,21 +635,11 @@ const renderRisks = (props) => {
                     <div className="flex flex-wrap gap-4 mb-4">
                         <div className="w-28">
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.risks.riskId}</label>
-                            <input 
-                                type="text"
-                                value={risk.id || ''}
-                                onChange={(e) => onUpdateData([...path, index, 'id'], e.target.value)}
-                                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-bold bg-slate-50 text-base"
-                            />
+                            <input type="text" value={risk.id || ''} onChange={(e) => onUpdateData([...path, index, 'id'], e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-bold bg-slate-50 text-base" />
                         </div>
                         <div className="w-48">
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.risks.category}</label>
-                            {/* ★ FIX 4+5: lowercase values + environmental */}
-                            <select
-                                value={risk.category || 'technical'}
-                                onChange={(e) => onUpdateData([...path, index, 'category'], e.target.value)}
-                                className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-base"
-                            >
+                            <select value={risk.category || 'technical'} onChange={(e) => onUpdateData([...path, index, 'category'], e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-base">
                                 <option value="technical">{t.risks.categories.technical}</option>
                                 <option value="social">{t.risks.categories.social}</option>
                                 <option value="economic">{t.risks.categories.economic}</option>
@@ -636,44 +647,17 @@ const renderRisks = (props) => {
                             </select>
                         </div>
                         <div className="flex-1 min-w-[200px]">
-                             <TextArea 
-                                label={t.risks.riskTitle}
-                                path={[...path, index, 'title']} 
-                                value={risk.title} 
-                                onUpdate={onUpdateData} 
-                                onGenerate={onGenerateField} 
-                                isLoading={isLoading} 
-                                rows={1}
-                                placeholder={t.risks.titlePlaceholder} 
-                                generateTitle={`${t.generateField} ${t.title}`}
-                                missingApiKey={missingApiKey}
-                                className="w-full group"
-                            />
+                             <TextArea label={t.risks.riskTitle} path={[...path, index, 'title']} value={risk.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.risks.titlePlaceholder} generateTitle={`${t.generateField} ${t.title}`} missingApiKey={missingApiKey} className="w-full group" />
                         </div>
                     </div>
 
-                    <TextArea 
-                        label={t.risks.riskDescription} 
-                        path={[...path, index, 'description']} 
-                        value={risk.description} 
-                        onUpdate={onUpdateData} 
-                        onGenerate={onGenerateField} 
-                        isLoading={isLoading} 
-                        placeholder={t.risks.descPlaceholder} 
-                        generateTitle={`${t.generateField} ${t.description}`}
-                        missingApiKey={missingApiKey}
-                    />
+                    <TextArea label={t.risks.riskDescription} path={[...path, index, 'description']} value={risk.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.risks.descPlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.risks.likelihood}</label>
                             <div className="relative">
-                                {/* ★ FIX 4+6: lowercase values + safe color lookup */}
-                                <select
-                                    value={risk.likelihood}
-                                    onChange={(e) => onUpdateData([...path, index, 'likelihood'], e.target.value)}
-                                    className={`w-full p-2.5 border rounded-lg font-bold ${getTrafficColor(risk.likelihood)} pr-10 appearance-none transition-colors cursor-pointer text-base`}
-                                >
+                                <select value={risk.likelihood} onChange={(e) => onUpdateData([...path, index, 'likelihood'], e.target.value)} className={`w-full p-2.5 border rounded-lg font-bold ${getTrafficColor(risk.likelihood)} pr-10 appearance-none transition-colors cursor-pointer text-base`}>
                                     <option value="low" className="bg-white text-slate-800">{t.risks.levels.low}</option>
                                     <option value="medium" className="bg-white text-slate-800">{t.risks.levels.medium}</option>
                                     <option value="high" className="bg-white text-slate-800">{t.risks.levels.high}</option>
@@ -686,12 +670,7 @@ const renderRisks = (props) => {
                          <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.risks.impact}</label>
                              <div className="relative">
-                                {/* ★ FIX 4+6: lowercase values + safe color lookup */}
-                                <select
-                                    value={risk.impact}
-                                    onChange={(e) => onUpdateData([...path, index, 'impact'], e.target.value)}
-                                    className={`w-full p-2.5 border rounded-lg font-bold ${getTrafficColor(risk.impact)} pr-10 appearance-none transition-colors cursor-pointer text-base`}
-                                >
+                                <select value={risk.impact} onChange={(e) => onUpdateData([...path, index, 'impact'], e.target.value)} className={`w-full p-2.5 border rounded-lg font-bold ${getTrafficColor(risk.impact)} pr-10 appearance-none transition-colors cursor-pointer text-base`}>
                                     <option value="low" className="bg-white text-slate-800">{t.risks.levels.low}</option>
                                     <option value="medium" className="bg-white text-slate-800">{t.risks.levels.medium}</option>
                                     <option value="high" className="bg-white text-slate-800">{t.risks.levels.high}</option>
@@ -703,27 +682,13 @@ const renderRisks = (props) => {
                         </div>
                     </div>
 
-                    <TextArea 
-                        label={t.risks.mitigation} 
-                        path={[...path, index, 'mitigation']} 
-                        value={risk.mitigation} 
-                        onUpdate={onUpdateData} 
-                        onGenerate={onGenerateField} 
-                        isLoading={isLoading} 
-                        placeholder={t.risks.mitigationPlaceholder} 
-                        generateTitle={`${t.generateField} ${t.risks.mitigation}`}
-                        missingApiKey={missingApiKey}
-                    />
+                    <TextArea label={t.risks.mitigation} path={[...path, index, 'mitigation']} value={risk.mitigation} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.risks.mitigationPlaceholder} generateTitle={`${t.generateField} ${t.risks.mitigation}`} missingApiKey={missingApiKey} />
                 </div>
             )})}
         </div>
     );
 };
 
-// --- RENDER KERs (Sub-Component of Expected Results) ---
-// ═══════════════════════════════════════════════════════════════
-// ★ v4.8: KERs now has GenerateButton calling onGenerateSection('kers')
-// ═══════════════════════════════════════════════════════════════
 const renderKERs = (props) => {
     const { projectData, onUpdateData, onGenerateField, onGenerateSection, onAddItem, onRemoveItem, isLoading, language, missingApiKey } = props;
     const { kers } = projectData;
@@ -744,34 +709,15 @@ const renderKERs = (props) => {
             {(kers || []).map((ker, index) => (
                  <div key={index} className="p-5 border border-slate-200 rounded-xl mb-4 bg-white shadow-sm relative group hover:shadow-md transition-all">
                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem(path, index)} text={t.remove} /></div>
-                     
                      <div className="flex flex-wrap gap-4 mb-4">
                         <div className="w-28">
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.kers.kerId}</label>
-                            <input 
-                                type="text"
-                                value={ker.id || ''}
-                                onChange={(e) => onUpdateData([...path, index, 'id'], e.target.value)}
-                                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-bold bg-slate-50 text-base"
-                            />
+                            <input type="text" value={ker.id || ''} onChange={(e) => onUpdateData([...path, index, 'id'], e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-bold bg-slate-50 text-base" />
                         </div>
                         <div className="flex-1 min-w-[200px]">
-                             <TextArea 
-                                label={t.kers.kerTitle}
-                                path={[...path, index, 'title']} 
-                                value={ker.title} 
-                                onUpdate={onUpdateData} 
-                                onGenerate={onGenerateField} 
-                                isLoading={isLoading} 
-                                rows={1}
-                                placeholder={t.kers.titlePlaceholder} 
-                                generateTitle={`${t.generateField} ${t.title}`}
-                                missingApiKey={missingApiKey}
-                                className="w-full group"
-                            />
+                             <TextArea label={t.kers.kerTitle} path={[...path, index, 'title']} value={ker.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.kers.titlePlaceholder} generateTitle={`${t.generateField} ${t.title}`} missingApiKey={missingApiKey} className="w-full group" />
                         </div>
                      </div>
-
                      <TextArea label={t.kers.kerDesc} path={[...path, index, 'description']} value={ker.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.kers.descPlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
                      <TextArea label={t.kers.exploitationStrategy} path={[...path, index, 'exploitationStrategy']} value={ker.exploitationStrategy} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.kers.strategyPlaceholder} generateTitle={`${t.generateField} ${t.kers.exploitationStrategy}`} missingApiKey={missingApiKey} />
                 </div>
@@ -785,9 +731,6 @@ const renderActivities = (props) => {
     const path = ['activities'];
     const t = TEXT[language] || TEXT['en'];
 
-    // ★ FIX: Ensure activities is always a valid array — AI sometimes returns
-    // an object wrapper { activities: [...] } or a single WP object instead of array.
-    // This guard prevents the app from crashing during/after generation.
     const rawActivities = projectData.activities;
     const activities = Array.isArray(rawActivities)
         ? rawActivities
@@ -820,13 +763,7 @@ const renderActivities = (props) => {
 
             <div id="workplan">
                 <SectionHeader title={t.subSteps.workplan} onAdd={() => onAddItem(path, { id: `WP${activities.length + 1}`, title: '', tasks: [], milestones: [], deliverables: [] })} addText={t.add}>
-                    <GenerateButton 
-                        onClick={() => onGenerateSection('activities')} 
-                        isLoading={isLoading === `${t.generating} activities...`} 
-                        title={t.generateSection} 
-                        text={t.generateAI} 
-                        missingApiKey={missingApiKey} 
-                    />
+                    <GenerateButton onClick={() => onGenerateSection('activities')} isLoading={isLoading === `${t.generating} activities...`} title={t.generateSection} text={t.generateAI} missingApiKey={missingApiKey} />
                 </SectionHeader>
                 
                 {(activities || []).map((wp, wpIndex) => (
@@ -854,35 +791,16 @@ const renderActivities = (props) => {
                                     <div className="grid grid-cols-2 gap-4 mt-2">
                                         <div>
                                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.startDate}</label>
-                                            <input 
-                                                type="date"
-                                                value={task.startDate || ''}
-                                                onChange={(e) => handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'startDate'], e.target.value)}
-                                                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white text-base"
-                                            />
+                                            <input type="date" value={task.startDate || ''} onChange={(e) => handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'startDate'], e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white text-base" />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.endDate}</label>
-                                            <input
-                                                type="date"
-                                                value={task.endDate || ''}
-                                                onChange={(e) => handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'endDate'], e.target.value)}
-                                                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white text-base"
-                                            />
+                                            <input type="date" value={task.endDate || ''} onChange={(e) => handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'endDate'], e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white text-base" />
                                         </div>
                                     </div>
-                                    <DependencySelector 
-                                        task={task} 
-                                        allTasks={allTasks}
-                                        language={language}
-                                        onAddDependency={(dep) => {
-                                            const deps = task.dependencies || [];
-                                            handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'dependencies'], [...deps, dep]);
-                                        }}
-                                        onRemoveDependency={(depIdx) => {
-                                            const deps = task.dependencies || [];
-                                            handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'dependencies'], deps.filter((_, i) => i !== depIdx));
-                                        }}
+                                    <DependencySelector task={task} allTasks={allTasks} language={language}
+                                        onAddDependency={(dep) => { const deps = task.dependencies || []; handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'dependencies'], [...deps, dep]); }}
+                                        onRemoveDependency={(depIdx) => { const deps = task.dependencies || []; handleTaskUpdate([...path, wpIndex, 'tasks', taskIndex, 'dependencies'], deps.filter((_, i) => i !== depIdx)); }}
                                     />
                                 </div>
                             ))}
@@ -894,42 +812,18 @@ const renderActivities = (props) => {
                                 const enGen = TEXT.en.generating;
                                 const siGen = TEXT.si.generating;
                                 const dateLoading = isLoading === `${enGen} date...` || isLoading === `${siGen} date...`;
-
                                 return (
                                     <div key={msIndex} className="relative mb-3 bg-amber-50/50 p-4 rounded-lg border border-amber-100 group">
                                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([...path, wpIndex, 'milestones'], msIndex)} text={t.remove} /></div>
                                         <div className="flex flex-col md:flex-row gap-4">
                                             <div className="flex-1">
-                                                <TextArea 
-                                                    label={`Milestone ${milestone.id}`} 
-                                                    path={[...path, wpIndex, 'milestones', msIndex, 'description']} 
-                                                    value={milestone.description} 
-                                                    onUpdate={onUpdateData} 
-                                                    onGenerate={onGenerateField} 
-                                                    isLoading={isLoading} 
-                                                    rows={1} 
-                                                    placeholder={t.milestonePlaceholder} 
-                                                    generateTitle={`${t.generateField} ${t.description}`} 
-                                                    missingApiKey={missingApiKey}
-                                                    className="w-full group"
-                                                />
+                                                <TextArea label={`Milestone ${milestone.id}`} path={[...path, wpIndex, 'milestones', msIndex, 'description']} value={milestone.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.milestonePlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} className="w-full group" />
                                             </div>
                                             <div className="w-full md:w-48">
                                                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">{t.dates}</label>
                                                 <div className="flex gap-1 items-end">
-                                                    <input 
-                                                        type="date"
-                                                        value={milestone.date || ''}
-                                                        onChange={(e) => onUpdateData([...path, wpIndex, 'milestones', msIndex, 'date'], e.target.value)}
-                                                        className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white text-base flex-1"
-                                                    />
-                                                    <GenerateButton 
-                                                        onClick={() => onGenerateField([...path, wpIndex, 'milestones', msIndex, 'date'])} 
-                                                        isLoading={dateLoading} 
-                                                        isField 
-                                                        title={t.generateAI} 
-                                                        missingApiKey={missingApiKey} 
-                                                    />
+                                                    <input type="date" value={milestone.date || ''} onChange={(e) => onUpdateData([...path, wpIndex, 'milestones', msIndex, 'date'], e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white text-base flex-1" />
+                                                    <GenerateButton onClick={() => onGenerateField([...path, wpIndex, 'milestones', msIndex, 'date'])} isLoading={dateLoading} isField title={t.generateAI} missingApiKey={missingApiKey} />
                                                 </div>
                                             </div>
                                         </div>
@@ -939,13 +833,11 @@ const renderActivities = (props) => {
                         </div>
 
                         <div className="mt-6 pl-4 border-l-4 border-indigo-100">
-                            {/* ★ FIX 7: deliverables onAddItem now includes title: '' */}
                             <SectionHeader title={t.deliverables} onAdd={() => onAddItem([...path, wpIndex, 'deliverables'], { id: `D${wpIndex + 1}.${(wp.deliverables || []).length + 1}`, title: '', description: '', indicator: '' })} addText={t.add} />
                             {(wp.deliverables || []).map((deliverable, dIndex) => (
                                 <div key={dIndex} className="relative mb-4 bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 group">
                                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([...path, wpIndex, 'deliverables'], dIndex)} text={t.remove} /></div>
                                     <h5 className="font-semibold text-slate-700 mb-3">{deliverable.id}</h5>
-                                    {/* ★ FIX 8: NEW — TextArea for deliverable title */}
                                     <TextArea label={t.deliverableTitle || 'Deliverable Title'} path={[...path, wpIndex, 'deliverables', dIndex, 'title']} value={deliverable.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.deliverableTitlePlaceholder || 'Enter deliverable title...'} generateTitle={`${t.generateField} ${t.title}`} missingApiKey={missingApiKey} />
                                     <TextArea label={t.description} path={[...path, wpIndex, 'deliverables', dIndex, 'description']} value={deliverable.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.deliverableDescPlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
                                     <TextArea label={t.indicator} path={[...path, wpIndex, 'deliverables', dIndex, 'indicator']} value={deliverable.indicator} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.indicatorPlaceholder} generateTitle={`${t.generateField} ${t.indicator}`} missingApiKey={missingApiKey} />
@@ -1020,7 +912,6 @@ const ProjectDisplay = (props) => {
                     : <GenerateButton onClick={() => onGenerateSection(sectionKey)} isLoading={isLoading === `${t.generating} ${sectionKey}...`} title={t.generateSection} text={t.generateAI} missingApiKey={missingApiKey} />
               )}
           </div>
-
       </header>
 
       {error && <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 m-6 rounded-r shadow-sm" role="alert"><p className="font-bold">Error</p><p>{error}</p></div>}
