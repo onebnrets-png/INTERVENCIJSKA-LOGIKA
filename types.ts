@@ -1,94 +1,95 @@
 // types.ts
 // ═══════════════════════════════════════════════════════════════
-// Central type definitions for Intervencijska logika
-// v4.3 — 2026-02-14 — CHANGES:
-//   - Added 'environmental' to RiskCategory type
+// Central type definitions for EU Project Idea Draft
+// v5.0 — 2026-02-16 — CHANGES:
+//   - FULL REWRITE: All interfaces now match the ACTUAL runtime
+//     data structures used by ProjectDisplay.tsx and geminiService.ts.
+//   - ProjectIdea: projectTitle, projectAcronym, mainAim, stateOfTheArt,
+//     proposedSolution, startDate, durationMonths, policies, readinessLevels
+//   - ProblemAnalysis.coreProblem: { title, description } object (not string)
+//   - ObjectiveItem: { title, description, indicator } (matches UI)
+//   - ResultItem: { title, description, indicator } (matches UI)
+//   - RiskItem: added 'title' field (matches UI + AI schema)
+//   - KERItem: simplified to match UI (id, title, description, exploitationStrategy)
+//   - TaskDependency: predecessorId (not taskId) to match AI schema
+//   - ReadinessLevels: { TRL, SRL, ORL, LRL } with { level, justification }
+//   - Previous v4.3 'environmental' RiskCategory preserved
 // ═══════════════════════════════════════════════════════════════
 
 // ─── Problem Analysis ────────────────────────────────────────
 export interface ProblemNode {
-  id: string;
-  text: string;
-  children?: ProblemNode[];
+  id?: string;
+  title: string;
+  description: string;
+}
+
+export interface CoreProblem {
+  title: string;
+  description: string;
 }
 
 export interface PolicyItem {
-  id: string;
-  level: 'eu' | 'national' | 'regional' | 'local';
+  id?: string;
   name: string;
   description: string;
-  relevance: string;
 }
 
 export interface ObjectiveItem {
-  id: string;
-  text: string;
-  indicators: string;
-  targetValue: string;
-  baselineValue: string;
-  verificationSource: string;
+  id?: string;
+  title: string;
+  description: string;
+  indicator: string;
 }
 
 // ─── Readiness Levels ────────────────────────────────────────
+export interface ReadinessLevelValue {
+  level: number | null;
+  justification: string;
+}
+
 export interface ReadinessLevels {
-  trl: number;
-  srl: number;
-  orl: number;
-  lrl: number;
+  TRL: ReadinessLevelValue;
+  SRL: ReadinessLevelValue;
+  ORL: ReadinessLevelValue;
+  LRL: ReadinessLevelValue;
 }
 
 // ─── Tasks & Work Packages ───────────────────────────────────
 export interface TaskDependency {
-  taskId: string;
+  predecessorId: string;
   type: 'FS' | 'SS' | 'FF' | 'SF';
-  lag: number;
 }
 
 export interface Task {
   id: string;
-  wpId: string;
   title: string;
   description: string;
   startDate: string;
   endDate: string;
-  duration: number;
   dependencies: TaskDependency[];
-  responsiblePartner: string;
-  resources: string;
-  isManagement?: boolean;
 }
 
 export interface Milestone {
   id: string;
-  wpId: string;
-  title: string;
-  date: string;
   description: string;
-  verificationMethod: string;
+  date: string;
 }
 
 export interface Deliverable {
   id: string;
-  wpId: string;
   title: string;
-  date: string;
-  type: 'report' | 'prototype' | 'software' | 'dataset' | 'other';
   description: string;
-  disseminationLevel: 'public' | 'confidential' | 'restricted';
+  indicator: string;
 }
 
 export interface WorkPackage {
   id: string;
   title: string;
-  description: string;
-  startDate: string;
-  endDate: string;
-  leadPartner: string;
-  participants: string[];
+  startDate?: string;
+  endDate?: string;
   tasks: Task[];
   milestones: Milestone[];
   deliverables: Deliverable[];
-  isManagement?: boolean;
 }
 
 // ─── Risk Management ─────────────────────────────────────────
@@ -99,12 +100,11 @@ export type RiskImpact = 'low' | 'medium' | 'high';
 export interface RiskItem {
   id: string;
   category: RiskCategory;
+  title: string;
   description: string;
   likelihood: RiskLikelihood;
   impact: RiskImpact;
   mitigation: string;
-  contingency: string;
-  responsiblePartner: string;
 }
 
 // ─── KER (Key Exploitable Results) ──────────────────────────
@@ -112,22 +112,15 @@ export interface KERItem {
   id: string;
   title: string;
   description: string;
-  type: 'product' | 'process' | 'service' | 'method' | 'knowledge' | 'other';
-  owners: string;
   exploitationStrategy: string;
-  targetUsers: string;
-  ipProtection: string;
-  trlCurrent: number;
-  trlTarget: number;
 }
 
-// ─── Result Items ────────────────────────────────────────────
+// ─── Result Items (outputs, outcomes, impacts) ───────────────
 export interface ResultItem {
-  id: string;
-  text: string;
-  indicators: string;
-  targetValue: string;
-  verificationSource: string;
+  id?: string;
+  title: string;
+  description: string;
+  indicator: string;
 }
 
 // ─── Project Management ──────────────────────────────────────
@@ -135,7 +128,7 @@ export interface ProjectManagementStructure {
   coordinator: string;
   steeringCommittee: string;
   advisoryBoard: string;
-  wpLeaders: string[];
+  wpLeaders: string;
 }
 
 export interface ProjectManagement {
@@ -145,19 +138,20 @@ export interface ProjectManagement {
 
 // ─── Project Sections ────────────────────────────────────────
 export interface ProblemAnalysis {
-  coreProblem: string;
+  coreProblem: CoreProblem;
   causes: ProblemNode[];
   consequences: ProblemNode[];
-  stakeholders: string;
-  policies: PolicyItem[];
 }
 
 export interface ProjectIdea {
-  title: string;
-  summary: string;
-  innovation: string;
-  targetGroups: string;
-  expectedImpact: string;
+  projectTitle: string;
+  projectAcronym: string;
+  mainAim: string;
+  stateOfTheArt: string;
+  proposedSolution: string;
+  startDate?: string;
+  durationMonths?: number;
+  policies: PolicyItem[];
   readinessLevels: ReadinessLevels;
 }
 
@@ -173,9 +167,6 @@ export interface ProjectData {
   outcomes: ResultItem[];
   impacts: ResultItem[];
   kers: KERItem[];
-  projectStartDate?: string;
-  projectDurationMonths?: number;  // ★ v4.5: Project duration in months
-  projectEndDate?: string;
 }
 
 // ─── App State Types ─────────────────────────────────────────
@@ -305,4 +296,3 @@ export interface SubStepDefinition {
   key: string;
   title: { en: string; si: string };
 }
-
