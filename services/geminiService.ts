@@ -965,7 +965,14 @@ export const generateTargetedFill = async (
     }
   }
 
-  console.log(`[TargetedFill] ${sectionKey}: Filled ${Math.min(generatedItems.length, emptyIndices.length)} of ${emptyIndices.length} empty items at indices [${emptyIndices.join(', ')}]`);
+    console.log(`[TargetedFill] ${sectionKey}: Filled ${Math.min(generatedItems.length, emptyIndices.length)} of ${emptyIndices.length} empty items at indices [${emptyIndices.join(', ')}]`);
+
+  // ★ v5.0: Post-process activities with temporal integrity and dependency sanitization
+  if (sectionKey === 'activities') {
+    let processed = sanitizeActivities(filledData);
+    processed = enforceTemporalIntegrity(processed, projectData);
+    return processed;
+  }
 
   return filledData;
 };
