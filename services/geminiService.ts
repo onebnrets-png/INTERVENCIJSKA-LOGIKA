@@ -1386,14 +1386,64 @@ NO tasks, milestones, or deliverables — ONLY scaffold.`,
 
     // Determine WP type for focused instructions
     let wpTypeInstruction: string;
-    if (isLast) {
+      if (isLast) {
       wpTypeInstruction = language === 'si'
-        ? `Ta DS je "Upravljanje in koordinacija projekta" (ZADNJI DS). MORA trajati od ${projectStart} do ${projectEnd}. Naloge vključujejo: koordinacijo konzorcija, spremljanje napredka, poročanje, zagotavljanje kakovosti, finančno upravljanje, zaključno poročilo. Vključi zaključni mejnik na ali pred ${projectEnd}.`
-        : `This WP is "Project Management and Coordination" (LAST WP). It MUST span from ${projectStart} to ${projectEnd}. Tasks include: consortium coordination, progress monitoring, reporting, quality assurance, financial management, final report. Include a closing milestone on or before ${projectEnd}.`;
-    } else if (isSecondToLast) {
+        ? `Ta DS je "Upravljanje in koordinacija projekta" (ZADNJI DS). MORA trajati od ${projectStart} do ${projectEnd}.
+KRITIČNO PRAVILO ZA RAZPOREDITEV NALOG:
+- Naloge MORAJO ENAKOMERNO pokrivati CELOTNO obdobje projekta od ${projectStart} do ${projectEnd}.
+- NE stiskaj vseh nalog v prvo polovico — razporedi jih čez celotno trajanje.
+- Vsaka naloga traja vsaj 30-50% celotnega projekta ali več — naloge se prekrivajo.
+- Primer za 36-mesečni projekt:
+  T.1 "Koordinacija konzorcija in operativno upravljanje" od M1 do M36
+  T.2 "Spremljanje napredka in poročanje" od M1 do M36
+  T.3 "Zagotavljanje kakovosti in obvladovanje tveganj" od M3 do M36
+  T.4 "Finančno upravljanje" od M1 do M36
+  T.5 "Zaključno poročilo in zaprtje projekta" od M30 do M36
+- Naloge T.1–T.4 so VZPOREDNE in trajajo skoraj celotno obdobje.
+- SAMO zaključno poročilo je kratka naloga na koncu.
+- Vključi zaključni mejnik na ali pred ${projectEnd}.`
+        : `This WP is "Project Management and Coordination" (LAST WP). It MUST span from ${projectStart} to ${projectEnd}.
+CRITICAL TASK DISTRIBUTION RULE:
+- Tasks MUST EVENLY cover the ENTIRE project duration from ${projectStart} to ${projectEnd}.
+- Do NOT compress all tasks into the first half — distribute them across the full duration.
+- Each task should last at least 30-50% of the total project or more — tasks overlap.
+- Example for a 36-month project:
+  T.1 "Consortium coordination and operational management" from M1 to M36
+  T.2 "Progress monitoring and reporting" from M1 to M36
+  T.3 "Quality assurance and risk management" from M3 to M36
+  T.4 "Financial management" from M1 to M36
+  T.5 "Final report and project closure" from M30 to M36
+- Tasks T.1–T.4 are PARALLEL and span nearly the entire duration.
+- ONLY the final report is a short task at the end.
+- Include a closing milestone on or before ${projectEnd}.`;
+
+        } else if (isSecondToLast) {
       wpTypeInstruction = language === 'si'
-        ? `Ta DS je "Diseminacija, komunikacija in izkoriščanje rezultatov" (PREDZADNJI DS). MORA trajati od ${projectStart} do ${projectEnd}. Naloge vključujejo: vizualno identiteto in komunikacijske kanale, spletno stran in družbena omrežja, strokovne dogodke in delavnice, publikacije in poročila, eksploatacijsko strategijo, odprtokodno skupnost.`
-        : `This WP is "Dissemination, Communication and Exploitation of Results" (SECOND-TO-LAST WP). It MUST span from ${projectStart} to ${projectEnd}. Tasks include: visual identity and communication channels, website and social media, professional events and workshops, publications and reports, exploitation strategy, open-source community.`;
+        ? `Ta DS je "Diseminacija, komunikacija in izkoriščanje rezultatov" (PREDZADNJI DS). MORA trajati od ${projectStart} do ${projectEnd}.
+KRITIČNO PRAVILO ZA RAZPOREDITEV NALOG:
+- Naloge MORAJO pokrivati CELOTNO obdobje projekta — NE stiskaj v prvo ali drugo polovico.
+- Nekatere naloge (npr. vizualna identiteta, spletna stran) se začnejo na začetku in trajajo dalj časa.
+- Druge naloge (npr. eksploatacijska strategija) se začnejo pozneje ampak trajajo do konca.
+- Naloge se prekrivajo — niso strogo zaporedne.
+- Primer za 36-mesečni projekt:
+  T.1 "Vzpostavitev vizualne identitete in komunikacijskih kanalov" od M1 do M6
+  T.2 "Upravljanje spletne strani in družbenih omrežij" od M2 do M36
+  T.3 "Organizacija strokovnih dogodkov in delavnic" od M6 do M36
+  T.4 "Priprava publikacij in poročil za diseminacijo" od M6 do M36
+  T.5 "Razvoj strategije za izkoriščanje rezultatov" od M12 do M36`
+        : `This WP is "Dissemination, Communication and Exploitation of Results" (SECOND-TO-LAST WP). It MUST span from ${projectStart} to ${projectEnd}.
+CRITICAL TASK DISTRIBUTION RULE:
+- Tasks MUST cover the ENTIRE project duration — do NOT compress into the first or second half.
+- Some tasks (e.g., visual identity, website) start early and run for a longer period.
+- Other tasks (e.g., exploitation strategy) start later but run until the end.
+- Tasks overlap — they are NOT strictly sequential.
+- Example for a 36-month project:
+  T.1 "Establishment of visual identity and communication channels" from M1 to M6
+  T.2 "Website and social media management" from M2 to M36
+  T.3 "Organisation of professional events and workshops" from M6 to M36
+  T.4 "Preparation of dissemination publications and reports" from M6 to M36
+  T.5 "Development of results exploitation strategy" from M12 to M36`;
+
     } else {
       wpTypeInstruction = language === 'si'
         ? `Ta DS je vsebinski/tehnični DS. Traja od ${wp.startDate} do ${wp.endDate}. NE sme trajati celotno obdobje projekta. Naloge so zaporedne ali zamaknjene znotraj tega obdobja.`
