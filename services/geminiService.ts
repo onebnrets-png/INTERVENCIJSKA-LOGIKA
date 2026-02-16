@@ -559,15 +559,14 @@ const enforceTemporalIntegrity = (activities: any[], projectData: any): any[] =>
   const months = projectData.projectIdea?.durationMonths || 24;
 
   if (!startStr) return activities;
-  if (!activities || activities.length === 0) return activities; // ★ v5.0: empty guard
+  if (!activities || activities.length === 0) return activities;
 
   const startISO = startStr;
   const endISO = calculateProjectEndDate(startStr, months);
   const projectStart = new Date(startISO + 'T00:00:00Z');
   const projectEnd = new Date(endISO + 'T00:00:00Z');
 
-  const startISO = projectStart.toISOString().split('T')[0];
-  const endISO = projectEnd.toISOString().split('T')[0];
+  console.log(`[TemporalIntegrity] Enforcing project envelope: ${startISO} → ${endISO} (${months} months)`);
 
   console.log(`[TemporalIntegrity] Enforcing project envelope: ${startISO} → ${endISO} (${months} months)`);
 
