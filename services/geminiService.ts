@@ -481,7 +481,7 @@ const schemas: Record<string, any> = {
       required: ['id', 'category', 'title', 'description', 'likelihood', 'impact', 'mitigation']
     }
   },
-  kers: {
+    kers: {
     type: Type.ARRAY,
     items: {
       type: Type.OBJECT,
@@ -493,8 +493,57 @@ const schemas: Record<string, any> = {
       },
       required: ['id', 'title', 'description', 'exploitationStrategy']
     }
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // ★ v5.4: SUB-SECTION SCHEMAS — for per-subsection generation
+  // ═══════════════════════════════════════════════════════════════
+  coreProblem: problemNodeSchema,
+  causes: { type: Type.ARRAY, items: problemNodeSchema },
+  consequences: { type: Type.ARRAY, items: problemNodeSchema },
+  projectTitleAcronym: {
+    type: Type.OBJECT,
+    properties: {
+      projectTitle: { type: Type.STRING },
+      projectAcronym: { type: Type.STRING }
+    },
+    required: ['projectTitle', 'projectAcronym']
+  },
+  mainAim: {
+    type: Type.OBJECT,
+    properties: { mainAim: { type: Type.STRING } },
+    required: ['mainAim']
+  },
+  stateOfTheArt: {
+    type: Type.OBJECT,
+    properties: { stateOfTheArt: { type: Type.STRING } },
+    required: ['stateOfTheArt']
+  },
+  proposedSolution: {
+    type: Type.OBJECT,
+    properties: { proposedSolution: { type: Type.STRING } },
+    required: ['proposedSolution']
+  },
+  readinessLevels: {
+    type: Type.OBJECT,
+    properties: {
+      TRL: readinessLevelValueSchema,
+      SRL: readinessLevelValueSchema,
+      ORL: readinessLevelValueSchema,
+      LRL: readinessLevelValueSchema,
+    },
+    required: ['TRL', 'SRL', 'ORL', 'LRL']
+  },
+  policies: {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: { name: { type: Type.STRING }, description: { type: Type.STRING } },
+      required: ['name', 'description']
+    }
   }
 };
+
 
 // ─── MAPPINGS ────────────────────────────────────────────────────
 
