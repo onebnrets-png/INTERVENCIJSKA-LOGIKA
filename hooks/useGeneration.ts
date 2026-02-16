@@ -697,10 +697,220 @@ export const useGeneration = ({
             );
           }
 
+                } else if (mode === 'fill') {
+          // ──────────────────────────────────────────────────────
+          // ★ v4.0: UNIVERSAL SMART FILL for non-activities sections
+          // Handles both OBJECT sections (projectIdea, problemAnalysis,
+          // projectManagement) and ARRAY sections (generalObjectives,
+          // specificObjectives, risks).
+          // ──────────────────────────────────────────────────────
+          const sectionData = projectData[sectionKey];
+
+          if (!sectionData || (Array.isArray(sectionData) && sectionData.length === 0) || !hasDeepContent(sectionData)) {
+            // ── No data at all → full regeneration ──
+            console.log(`[SmartFill] ${sectionKey}: No data → full regeneration`);
+            setIsLoading(
+              language === 'si'
+                ? `Generiram ${sectionKey} (ni obstoječih podatkov)...`
+                : `Generating ${sectionKey} (no existing data)...`
+            );
+            generatedData = await generateSectionContent(
+              sectionKey,
+              projectData,
+              language,
+              'regenerate'
+            );
+
+          } else if (Array.isArray(sectionData)) {
+            // ── Array section (generalObjectives, specificObjectives, risks) ──
+            const emptyIndices: number[] = [];
+            sectionData.forEach((item: any, index: number) => {
+              if (!item || !hasDeepContent(item)) {
+                emptyIndices.push(index);
+              } else {
+                const hasEmptyFields = Object.entries(item).some(([key, val]) => {
+                  if (key === 'id') return false;
+                  return typeof val === 'string' && (val as string).trim().length === 0;
+                });
+                if (hasEmptyFields) {
+                  emptyIndices.push(index);
+                }
+              }
+            });
+
+            if (emptyIndices.length === 0) {
+              // All items complete → show modal
+              console.log(`[SmartFill] ${sectionKey}: All ${sectionData.length} items complete → nothing to fill`);
+              setModalConfig({
+                isOpen: true,
+                title: language === 'si' ? 'Vse je izpolnjeno' : 'Everything is filled',
+                message: language === 'si'
+                  ? `Vsi elementi v razdelku "${sectionKey}" so že izpolnjeni. Za izboljšanje vsebine uporabite "Izboljšaj obstoječe".`
+                  : `All items in "${sectionKey}" are already filled. To improve content, use "Enhance existing".`,
+                confirmText: language === 'si' ? 'V redu' : 'OK',
+                secondaryText: '',
+                cancelText: '',
+                onConfirm: () => closeModal(),
+                onSecondary: null,
+                onCancel: () => closeModal(),
+              });
+              generatedData = sectionData;
+            } else {
+              console.log(`[SmartFill] ${sectionKey}: ${emptyIndices.length} of ${sectionData.length} items need filling at indices [${emptyIndices.join(', ')}]`);
+              setIsLoading(
+                language === 'si'
+                  ? `Dopolnjujem ${emptyIndices.length} od ${sectionData.length} elementov v ${sectionKey}...`
+                  : `Filling ${emptyIndices.length} of ${sectionData.length} items in ${sectionKey}...`
+              );
+              generatedData = await generateTargetedFill(
+                sectionKey,
+                projectData,
+                language,
+                emptyIndices
+              );
+            }
+
+          } else if (typeof sectionData === 'object') {
+            // ── Object section (projectIdea, problemAnalysis, projectManagement) ──
+            const emptyFields: string[] = [];
+
+            // Deep check for empty fields based on section type
+            if (sectionKey === 'projectIdea') {
+              // Top-level string fields
+              for (const field of ['projectTitle', 'projectAcronym', 'mainAim', 'stateOfTheArt', 'proposedSolution']) {
+                const val = sectionData[field];
+                if (!val || (typeof val === 'string' && val.trim().length === 0)) {
+                  emptyFields.push(field);
+                }
+              }
+              // Nested: readinessLevels
+              const rl = sectionData.readinessLevels;
+              if (!rl || !rl.TRL || !rl.SRL || !rl.ORL || !rl.LRL) {
+                emptyFields.push('readinessLevels');
+              } else {
+                for (const level of ['TRL', 'SRL', 'ORL', 'LRL']) {
+                  if (rl[level] && (!rl[level].justification || rl[level].justification.trim().length === 0)) {
+                    if (!emptyFields.includes('readinessLevels')) emptyFields.push('readinessLevels');
+                    break;
+                  }
+                }
+              }
+              // Nested: policies
+              const policies = sectionData.policies;
+              if (!policies || !Array.isArray(policies) || policies.length === 0) {
+                emptyFields.push('policies');
+              } else {
+                const hasEmptyPolicy = policies.some((p: any) =>
+                  !p.name || p.name.trim().length === 0 || !p.description || p.description.trim().length === 0
+                );
+                if (hasEmptyPolicy && !emptyFields.includes('policies')) {
+                  emptyFields.push('policies');
+                }
+              }
+
+            } else if (sectionKey === 'problemAnalysis') {
+              // coreProblem
+              const cp = sectionData.coreProblem;
+              if (!cp || !cp.title || cp.title.trim().length === 0 || !cp.description || cp.description.trim().length === 0) {
+                emptyFields.push('coreProblem');
+              }
+              // causes array
+              const causes = sectionData.causes;
+              if (!causes || !Array.isArray(causes) || causes.length === 0) {
+                emptyFields.push('causes');
+              } else {
+                const hasEmptyCause = causes.some((c: any) =>
+                  !c.title || c.title.trim().length === 0 || !c.description || c.description.trim().length === 0
+                );
+                if (hasEmptyCause && !emptyFields.includes('causes')) {
+                  emptyFields.push('causes');
+                }
+              }
+              // consequences array
+              const consequences = sectionData.consequences;
+              if (!consequences || !Array.isArray(consequences) || consequences.length === 0) {
+                emptyFields.push('consequences');
+              } else {
+                const hasEmptyConseq = consequences.some((c: any) =>
+                  !c.title || c.title.trim().length === 0 || !c.description || c.description.trim().length === 0
+                );
+                if (hasEmptyConseq && !emptyFields.includes('consequences')) {
+                  emptyFields.push('consequences');
+                }
+              }
+
+            } else if (sectionKey === 'projectManagement') {
+              // description
+              if (!sectionData.description || sectionData.description.trim().length === 0) {
+                emptyFields.push('description');
+              }
+              // structure fields
+              const structure = sectionData.structure;
+              if (!structure) {
+                emptyFields.push('structure');
+              } else {
+                for (const field of ['coordinator', 'steeringCommittee', 'advisoryBoard', 'wpLeaders']) {
+                  if (!structure[field] || structure[field].trim().length === 0) {
+                    if (!emptyFields.includes('structure')) emptyFields.push('structure');
+                    break;
+                  }
+                }
+              }
+
+            } else {
+              // Generic object: check all top-level string fields
+              for (const [key, val] of Object.entries(sectionData)) {
+                if (typeof val === 'string' && val.trim().length === 0) {
+                  emptyFields.push(key);
+                }
+              }
+            }
+
+            if (emptyFields.length === 0) {
+              console.log(`[SmartFill] ${sectionKey}: All fields complete → nothing to fill`);
+              setModalConfig({
+                isOpen: true,
+                title: language === 'si' ? 'Vse je izpolnjeno' : 'Everything is filled',
+                message: language === 'si'
+                  ? `Vsa polja v razdelku "${sectionKey}" so že izpolnjena. Za izboljšanje vsebine uporabite "Izboljšaj obstoječe".`
+                  : `All fields in "${sectionKey}" are already filled. To improve content, use "Enhance existing".`,
+                confirmText: language === 'si' ? 'V redu' : 'OK',
+                secondaryText: '',
+                cancelText: '',
+                onConfirm: () => closeModal(),
+                onSecondary: null,
+                onCancel: () => closeModal(),
+              });
+              generatedData = sectionData;
+            } else {
+              const fieldNames = emptyFields.join(', ');
+              console.log(`[SmartFill] ${sectionKey}: Empty fields detected: [${fieldNames}]`);
+              setIsLoading(
+                language === 'si'
+                  ? `Dopolnjujem ${emptyFields.length} praznih polj (${fieldNames})...`
+                  : `Filling ${emptyFields.length} empty fields (${fieldNames})...`
+              );
+              generatedData = await generateObjectFill(
+                sectionKey,
+                projectData,
+                language,
+                emptyFields
+              );
+            }
+
+          } else {
+            // ── Fallback: unknown section type ──
+            generatedData = await generateSectionContent(
+              sectionKey,
+              projectData,
+              language,
+              mode
+            );
+          }
+
         } else {
           // ──────────────────────────────────────────────────────
-          // Non-activities section — standard generation
-          // (regenerate, enhance, or fill for array sections)
+          // Non-activities, non-fill mode (regenerate, enhance)
           // ──────────────────────────────────────────────────────
           generatedData = await generateSectionContent(
             sectionKey,
@@ -709,7 +919,6 @@ export const useGeneration = ({
             mode
           );
         }
-
         let newData = { ...projectData };
         if (['problemAnalysis', 'projectIdea'].includes(sectionKey)) {
           newData[sectionKey] = { ...newData[sectionKey], ...generatedData };
