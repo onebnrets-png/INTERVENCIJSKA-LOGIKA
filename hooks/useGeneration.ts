@@ -371,13 +371,35 @@ export const useGeneration = ({
       setIsLoading(`${t.generating} ${sectionKey}...`);
       setError(null);
 
-      try {
-        const generatedData = await generateSectionContent(
-          sectionKey,
-          projectData,
-          language,
-          mode
-        );
+            try {
+        let generatedData;
+
+        // ★ v3.8: Per-WP generation for activities
+        if (sectionKey === 'activities' && mode === 'regenerate') {
+          generatedData = await generateActivitiesPerWP(
+            projectData,
+            language,
+            mode,
+            (wpIndex, wpTotal, wpTitle) => {
+              if (wpIndex === -1) {
+                setIsLoading(language === 'si' ? 'Generiranje strukture DS...' : 'Generating WP structure...');
+              } else {
+                setIsLoading(
+                  language === 'si'
+                    ? `Generiram DS ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                    : `Generating WP ${wpIndex + 1}/${wpTotal}: ${wpTitle}...`
+                );
+              }
+            }
+          );
+        } else {
+          generatedData = await generateSectionContent(
+            sectionKey,
+            projectData,
+            language,
+            mode
+          );
+        }
 
         let newData = { ...projectData };
         if (['problemAnalysis', 'projectIdea'].includes(sectionKey)) {
