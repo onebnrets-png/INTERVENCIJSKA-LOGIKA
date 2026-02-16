@@ -1204,19 +1204,36 @@ export const useGeneration = ({
                 }
               } catch (e2) {
                 console.error('[Auto-gen risks] Retry also failed:', e2);
-                setError(
-                  language === 'si'
-                    ? 'Tveganja niso bila generirana (omejitev API). Generirajte jih ročno v koraku 5 → Obvladovanje tveganj.'
-                    : 'Risks were not generated (API limit). Generate them manually in Step 5 → Risk Mitigation.'
-                );
+                setModalConfig({
+                  isOpen: true,
+                  title: language === 'si' ? 'Tveganja niso bila generirana' : 'Risks Were Not Generated',
+                  message: language === 'si'
+                    ? 'Avtomatsko generiranje tveganj ni uspelo zaradi omejitve API ponudnika.\n\nTo ni kritična napaka — aktivnosti in implementacija so uspešno generirani.\n\nTveganja lahko generirate ročno:\n• Pojdite na korak 5 → Obvladovanje tveganj\n• Kliknite "Generiraj z UI"'
+                    : 'Automatic risk generation failed due to API provider limits.\n\nThis is not a critical error — activities and implementation were generated successfully.\n\nYou can generate risks manually:\n• Go to Step 5 → Risk Mitigation\n• Click "Generate with AI"',
+                  confirmText: language === 'si' ? 'V redu' : 'OK',
+                  secondaryText: '',
+                  cancelText: '',
+                  onConfirm: () => closeModal(),
+                  onSecondary: null,
+                  onCancel: () => closeModal(),
+                });
               }
             } else {
-              setError(
-                language === 'si'
-                  ? 'Tveganja niso bila generirana. Generirajte jih ročno v koraku 5 → Obvladovanje tveganj.'
-                  : 'Risks were not generated. Generate them manually in Step 5 → Risk Mitigation.'
-              );
+              setModalConfig({
+                isOpen: true,
+                title: language === 'si' ? 'Tveganja niso bila generirana' : 'Risks Were Not Generated',
+                message: language === 'si'
+                  ? 'Avtomatsko generiranje tveganj ni uspelo.\n\nTo ni kritična napaka — aktivnosti in implementacija so uspešno generirani.\n\nTveganja lahko generirate ročno:\n• Pojdite na korak 5 → Obvladovanje tveganj\n• Kliknite "Generiraj z UI"'
+                  : 'Automatic risk generation failed.\n\nThis is not a critical error — activities and implementation were generated successfully.\n\nYou can generate risks manually:\n• Go to Step 5 → Risk Mitigation\n• Click "Generate with AI"',
+                confirmText: language === 'si' ? 'V redu' : 'OK',
+                secondaryText: '',
+                cancelText: '',
+                onConfirm: () => closeModal(),
+                onSecondary: null,
+                onCancel: () => closeModal(),
+              });
             }
+
           }
         }
 
