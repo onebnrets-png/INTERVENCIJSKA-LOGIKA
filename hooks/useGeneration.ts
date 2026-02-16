@@ -49,6 +49,7 @@ import {
   generateFieldContent,
   generateProjectSummary,
   generateTargetedFill,
+  generateActivitiesPerWP,
 } from '../services/geminiService.ts';
 import { generateSummaryDocx } from '../services/docxGenerator.ts';
 import { recalculateProjectSchedule, downloadBlob } from '../utils.ts';
