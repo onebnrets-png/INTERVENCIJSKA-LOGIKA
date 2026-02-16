@@ -1251,7 +1251,7 @@ function buildDefaultInstructions() {
       Object.entries(FIELD_RULES).map(([key, val]) => [key, val.en])
     ),
     TRANSLATION_RULES: TRANSLATION_RULES.en.join('\n'),
-    SUMMARY_RULES: SUMMARY_RULES.en.join('\n'),
+    SUMMARY_RULES: SUMMARY_RULES.en,
   };
 }
 
