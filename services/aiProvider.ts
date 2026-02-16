@@ -314,12 +314,23 @@ async function generateWithOpenRouter(config: AIProviderConfig, options: AIGener
     }
 
     return { text };
-  } catch (e: any) {
-    if (e.message === 'MISSING_API_KEY' || e.message?.includes('Quota') || e.message?.includes('Insufficient OpenRouter')) {
+    } catch (e: any) {
+    // Already classified errors — pass through
+    if (e.message === 'MISSING_API_KEY' ||
+        e.message?.startsWith('RATE_LIMIT|') ||
+        e.message?.startsWith('INSUFFICIENT_CREDITS|') ||
+        e.message?.startsWith('MODEL_OVERLOADED|') ||
+        e.message?.startsWith('SERVER_ERROR|') ||
+        e.message?.startsWith('TIMEOUT|') ||
+        e.message?.startsWith('NETWORK_ERROR|') ||
+        e.message?.startsWith('CONTENT_BLOCKED|') ||
+        e.message?.startsWith('CONTEXT_TOO_LONG|') ||
+        e.message?.startsWith('INVALID_JSON|') ||
+        e.message?.startsWith('UNKNOWN_ERROR|')) {
       throw e;
     }
     handleProviderError(e, 'openrouter');
-    throw e;
+    throw e; // unreachable — handleProviderError always throws
   }
 }
 
