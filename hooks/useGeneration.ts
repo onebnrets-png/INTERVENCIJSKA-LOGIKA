@@ -1,6 +1,12 @@
 // hooks/useGeneration.ts
 // ═══════════════════════════════════════════════════════════════
 // AI content generation — sections, fields, summaries.
+// v3.8 — 2026-02-16 — PER-WP GENERATION
+//   - Activities in 'regenerate' mode now use generateActivitiesPerWP()
+//     which generates each WP individually for better quality.
+//   - Progress callback shows current WP being generated.
+//   - 'fill' and 'enhance' modes still use generateSectionContent().
+//   - All previous v3.7 changes preserved.
 //
 // v3.7 — 2026-02-15 — CHANGES:
 //   - FIX: runComposite in FILL mode now detects which sections
