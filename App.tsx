@@ -1,12 +1,10 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v2.0 — 2026-02-17
-//   - DARK-MODE: onThemeChange listener keeps isDark in sync
-//   - DARK-MODE: loading overlay uses isDark-aware background
-//   - FIX #1: adminHook.checkAdminStatus() re-called when auth.currentUser changes
-//   - FIX #3: ToolbarButton, ToolbarSeparator now accept `colors` prop for dark-mode
-//   - Previous: Merged SettingsModal into unified AdminPanel
+// v2.1 — 2026-02-17
+//   - FIX: Sidebar collapse → main content responsive marginLeft
+//     sidebarCollapsed state + onCollapseChange prop + reactive <main>
+//   - Previous (v2.0): Dark mode, adminHook fix, ToolbarButton colors prop
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -162,6 +160,9 @@ const App = () => {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const adminHook = useAdmin();
+
+  // ★ v2.1: Track sidebar collapsed state for responsive main content
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // ─── Dark mode reactive state ────────────────────────────────────
   const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
@@ -540,10 +541,20 @@ useEffect(() => {
               onLanguageSwitch={translation.handleLanguageSwitchRequest}
               onSubStepClick={pm.handleSubStepClick}
               isLoading={!!generation.isLoading}
+              // ★ v2.1: Pass collapse callback to Sidebar
+              onCollapseChange={setSidebarCollapsed}
             />
 
             {/* ═══ MAIN CONTENT ═══ */}
-            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginLeft: 280 }}>
+            {/* ★ v2.1: Reactive marginLeft follows sidebar collapse state */}
+            <main style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              marginLeft: sidebarCollapsed ? 64 : 280,
+              transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}>
               {/* ═══ TOOLBAR ═══ */}
               <div style={{
                 background: colors.surface.card,
