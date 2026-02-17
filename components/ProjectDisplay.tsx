@@ -1,5 +1,11 @@
 // components/ProjectDisplay.tsx
 // ═══════════════════════════════════════════════════════════════
+// v4.9 — 2026-02-17 — INLINE CHARTS FOR ALL DESCRIPTION FIELDS:
+//   - NEW: InlineChart added after each cause description (fieldContext=cause_N)
+//   - NEW: InlineChart added after each consequence description (fieldContext=consequence_N)
+//   - NEW: InlineChart added after each output/outcome/impact description (fieldContext=sectionKey_N)
+//   - Previous InlineChart fields: coreProblem, stateOfTheArt, proposedSolution
+//
 // v4.8 — 2026-02-16 — SECTION GENERATE BUTTONS FOR ALL SUB-SECTIONS:
 //   - NEW: Every sub-section now has its own "Generate with AI" button
 //     that generates ONLY that specific sub-section (not the full chapter).
@@ -306,6 +312,7 @@ const renderProblemAnalysis = (props) => {
                          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([...path, 'causes'], index)} text={t.remove} /></div>
                         <TextArea label={`${t.causeTitle} #${index + 1}`} path={[...path, 'causes', index, 'title']} value={cause.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.causePlaceholder} generateTitle={`${t.generateField} ${t.title}`} missingApiKey={missingApiKey} />
                         <TextArea label={t.description} path={[...path, 'causes', index, 'description']} value={cause.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.causeDescPlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
+                        <InlineChart text={cause.description || ''} fieldContext={`cause_${index}`} language={language} />
                     </div>
                 ))}
             </div>
@@ -325,6 +332,7 @@ const renderProblemAnalysis = (props) => {
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([...path, 'consequences'], index)} text={t.remove} /></div>
                         <TextArea label={`${t.consequenceTitle} #${index + 1}`} path={[...path, 'consequences', index, 'title']} value={consequence.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.consequencePlaceholder} generateTitle={`${t.generateField} ${t.title}`} missingApiKey={missingApiKey} />
                         <TextArea label={t.description} path={[...path, 'consequences', index, 'description']} value={consequence.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.consequenceDescPlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
+                        <InlineChart text={consequence.description || ''} fieldContext={`consequence_${index}`} language={language} />
                     </div>
                 ))}
             </div>
@@ -513,6 +521,7 @@ const renderGenericResults = (props, sectionKey) => {
                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><RemoveButton onClick={() => onRemoveItem([sectionKey], index)} text={t.remove} /></div>
                     <TextArea label={`${prefix}${index + 1}`} path={[sectionKey, index, 'title']} value={item.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.enterTitle} generateTitle={`${t.generateField} ${t.title}`} missingApiKey={missingApiKey} />
                     <TextArea label={t.description} path={[sectionKey, index, 'description']} value={item.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.enterDesc} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
+                    <InlineChart text={item.description || ''} fieldContext={`${sectionKey}_${index}`} language={language} />
                     <TextArea label={t.indicator} path={[sectionKey, index, 'indicator']} value={item.indicator} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.indicatorPlaceholder} generateTitle={`${t.generateField} ${t.indicator}`} missingApiKey={missingApiKey} />
                 </div>
             ))}

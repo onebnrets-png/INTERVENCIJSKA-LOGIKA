@@ -1,8 +1,10 @@
-// // App.tsx
+// App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v1.1 — 2026-02-15 — Added copyright footer in sidebar.
-// Main application shell — orchestration only.
+// v1.4 — 2026-02-17
+//   - NEW: Sidebar extracted to components/Sidebar.tsx (Design System)
+//   - NEW: Toolbar redesign with grouped actions + design system tokens
+//   - Previous: Admin Panel, ProjectDashboard, global instructions cache
 // All business logic lives in hooks:
 //   - useAuth           → authentication, session, API key check, MFA
 //   - useProjectManager → CRUD, save/load, import/export, navigation
@@ -23,11 +25,13 @@ import SettingsModal from './components/SettingsModal.tsx';
 import ProjectListModal from './components/ProjectListModal.tsx';
 import AdminPanel from './components/AdminPanel.tsx';
 import ProjectDashboard from './components/ProjectDashboard.tsx';
+import Sidebar from './components/Sidebar.tsx';
 import { useAdmin } from './hooks/useAdmin.ts';
 import { ensureGlobalInstructionsLoaded } from './services/globalInstructionsService.ts';
-import { ICONS, getSteps, getSubSteps, BRAND_ASSETS } from './constants.tsx';
+import { ICONS, getSteps, BRAND_ASSETS } from './constants.tsx';
 import { TEXT } from './locales.ts';
-import { isStepCompleted, isSubStepCompleted } from './utils.ts';
+import { isStepCompleted } from './utils.ts';
+import { colors, shadows, radii, spacing, animation, typography } from './design/theme.ts';
 
 import { useAuth } from './hooks/useAuth.ts';
 import { useProjectManager } from './hooks/useProjectManager.ts';
@@ -37,11 +41,80 @@ import { useGeneration } from './hooks/useGeneration.ts';
 // ─── Small UI Components ─────────────────────────────────────────
 
 const HamburgerIcon = ({ onClick }: { onClick: () => void }) => (
-  <button onClick={onClick} className="p-2 rounded-md text-slate-500 hover:bg-slate-200 lg:hidden">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+  <button onClick={onClick} className="p-2 rounded-md text-slate-500 hover:bg-slate-200 lg:hidden" style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 24, height: 24 }}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
     </svg>
   </button>
+);
+
+// ─── Toolbar Button ──────────────────────────────────────────────
+
+const ToolbarButton = ({
+  onClick,
+  title,
+  icon,
+  disabled = false,
+  variant = 'default',
+}: {
+  onClick: () => void;
+  title: string;
+  icon: React.ReactNode;
+  disabled?: boolean;
+  variant?: 'default' | 'primary' | 'success' | 'warning';
+}) => {
+  const variantColors: Record<string, { hover: string; active: string }> = {
+    default: { hover: colors.primary[50], active: colors.primary[600] },
+    primary: { hover: colors.primary[50], active: colors.primary[600] },
+    success: { hover: colors.success[50], active: colors.success[600] },
+    warning: { hover: colors.warning[50], active: colors.warning[600] },
+  };
+  const vc = variantColors[variant] || variantColors.default;
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        padding: spacing.sm,
+        borderRadius: radii.lg,
+        border: 'none',
+        background: 'transparent',
+        color: disabled ? colors.text.muted : colors.text.body,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: `all ${animation.duration.fast} ${animation.easing.default}`,
+        opacity: disabled ? 0.4 : 1,
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) {
+          e.currentTarget.style.background = vc.hover;
+          e.currentTarget.style.color = vc.active;
+        }
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = disabled ? colors.text.muted : colors.text.body;
+      }}
+    >
+      {icon}
+    </button>
+  );
+};
+
+// ─── Toolbar Separator ───────────────────────────────────────────
+
+const ToolbarSeparator = () => (
+  <div style={{
+    width: 1,
+    height: 24,
+    background: colors.border.light,
+    margin: `0 ${spacing.xs}`,
+    flexShrink: 0,
+  }} />
 );
 
 const ApiWarningBanner = ({
@@ -176,7 +249,6 @@ const App = () => {
 
   const t = TEXT[language] || TEXT['en'];
   const STEPS = getSteps(language);
-  const SUB_STEPS = getSubSteps(language);
 
   const completedStepsStatus = useMemo(() => {
     return STEPS.map((step) => isStepCompleted(pm.projectData, step.key));
@@ -388,7 +460,14 @@ const App = () => {
         </div>
       ) : (
         /* ═══ MAIN APP LAYOUT ═══ */
-        <div className="flex flex-col h-[100dvh] bg-slate-100 font-sans overflow-hidden print:hidden">
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100dvh',
+          background: colors.surface.background,
+          fontFamily: typography.fontFamily.sans,
+          overflow: 'hidden',
+        }} className="print:hidden">
           {auth.shouldShowBanner && (
             <ApiWarningBanner
               onDismiss={auth.dismissWarning}
@@ -397,157 +476,148 @@ const App = () => {
             />
           )}
 
-          <div className="flex flex-1 overflow-hidden relative">
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
             {/* Loading overlay */}
             {generation.isLoading && (
-              <div className="fixed inset-0 bg-white/50 z-[60] flex items-center justify-center backdrop-blur-sm cursor-wait">
-                <div className="bg-white p-6 rounded-lg shadow-xl text-center border border-slate-200">
-                  <div className="inline-block w-8 h-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                  <p className="font-semibold text-slate-800">
+              <div style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(255,255,255,0.5)',
+                zIndex: 60,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backdropFilter: 'blur(4px)',
+                cursor: 'wait',
+              }}>
+                <div style={{
+                  background: colors.surface.card,
+                  padding: spacing['3xl'],
+                  borderRadius: radii.xl,
+                  boxShadow: shadows.xl,
+                  textAlign: 'center',
+                  border: `1px solid ${colors.border.light}`,
+                }}>
+                  <div style={{
+                    width: 32,
+                    height: 32,
+                    border: `4px solid ${colors.primary[500]}`,
+                    borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    margin: '0 auto 16px',
+                  }} />
+                  <p style={{
+                    fontWeight: typography.fontWeight.semibold,
+                    color: colors.text.heading,
+                    margin: 0,
+                  }}>
                     {typeof generation.isLoading === 'string' ? generation.isLoading : t.loading}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Mobile sidebar overlay */}
-            {isSidebarOpen && (
-              <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/30 z-20 lg:hidden" aria-hidden="true" />
-            )}
-
             {/* ═══ SIDEBAR ═══ */}
-            <aside className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 p-5 flex flex-col flex-shrink-0 transform transition-transform duration-300 ease-in-out w-72 lg:w-64 xl:w-72 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-              <div className="flex flex-col mb-4 flex-shrink-0">
-                <div className="flex justify-between items-center mb-6">
-                  <button onClick={pm.handleBackToWelcome} className="flex items-center gap-2 text-xl font-bold text-slate-800 text-left hover:opacity-80 transition-opacity mr-5 max-w-[150px]">
-                    <img src={auth.appLogo} alt="Logo" className="h-10 w-auto object-contain object-left" />
-                  </button>
-                  <div className="flex bg-slate-100 rounded-md p-1 flex-shrink-0">
-                    <button
-                      onClick={() => translation.handleLanguageSwitchRequest('si')}
-                      disabled={!!generation.isLoading}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded ${language === 'si' ? 'bg-white shadow text-sky-700' : 'text-slate-500'} disabled:opacity-50`}
-                    >SI</button>
-                    <button
-                      onClick={() => translation.handleLanguageSwitchRequest('en')}
-                      disabled={!!generation.isLoading}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded ${language === 'en' ? 'bg-white shadow text-sky-700' : 'text-slate-500'} disabled:opacity-50`}
-                    >EN</button>
-                  </div>
-                </div>
-
-                <div className="mb-4 bg-slate-50 rounded-lg p-3 border border-slate-200">
-                  <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">{t.projects.currentProject}</p>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-slate-800 truncate pr-2" title={displayTitle}>{displayTitle}</h3>
-                    <button onClick={() => setIsProjectListOpen(true)} className="text-sky-600 hover:text-sky-800 p-1 hover:bg-sky-50 rounded" title={t.projects.switchProject}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="text-xs text-slate-500 flex justify-between items-center">
-                  <span>{t.auth.welcome} <strong>{auth.currentUser}</strong></span>
-                  <button onClick={() => setIsSettingsOpen(true)} className="text-sky-600 hover:underline">{t.auth.settings}</button>
-                </div>
-              </div>
-
-              {/* Step Navigation */}
-              <nav className="flex-1 flex flex-col space-y-1 overflow-y-auto custom-scrollbar min-h-0">
-                {STEPS.map((step, idx) => {
-                  const isStepCompletedStatus = completedStepsStatus[idx];
-                  const isClickable = step.id === 1 || completedStepsStatus[0];
-
-                  return (
-                    <div key={step.id}>
-                      <button
-                        onClick={() => isClickable && pm.setCurrentStepId(step.id)}
-                        disabled={!isClickable}
-                        className={`w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between ${pm.currentStepId === step.id ? 'bg-sky-100 text-sky-700 font-semibold' : 'text-slate-600 hover:bg-slate-100'} ${!isClickable ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <span>{step.title}</span>
-                        {isStepCompletedStatus
-                          ? <ICONS.CHECK className="h-5 w-5 text-green-500 flex-shrink-0" />
-                          : (pm.currentStepId === step.id && <div className="h-2 w-2 rounded-full bg-sky-400"></div>)
-                        }
-                      </button>
-
-                      {pm.currentStepId === step.id && SUB_STEPS[step.key] && SUB_STEPS[step.key].length > 0 && (
-                        <div className="pl-4 mt-1 space-y-1 border-l-2 border-sky-200 ml-4 mb-2">
-                          {SUB_STEPS[step.key].map((subStep: any) => (
-                            <button
-                              key={subStep.id}
-                              onClick={() => pm.handleSubStepClick(subStep.id)}
-                              className="w-full text-left px-3 py-1.5 rounded text-xs text-slate-500 hover:text-sky-700 hover:bg-sky-50 flex items-center gap-2"
-                            >
-                              {isSubStepCompleted(pm.projectData, step.key, subStep.id)
-                                ? <ICONS.CHECK className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                                : <div className="h-1.5 w-1.5 rounded-full bg-slate-300 flex-shrink-0"></div>
-                              }
-                              <span>{subStep.title}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </nav>
-
-              {/* Sidebar Footer */}
-              <div className="mt-4 pt-4 border-t border-slate-200 flex-shrink-0">
-                {adminHook.isAdmin && (
-                  <button
-                    onClick={() => setIsAdminPanelOpen(true)}
-                    className="w-full text-left px-4 py-2 rounded-md text-sm text-indigo-600 hover:bg-indigo-50 font-medium flex items-center gap-2 mb-1"
-                  >
-                    <span>🛡️</span>
-                    {language === 'si' ? 'Admin Panel' : 'Admin Panel'}
-                  </button>
-                )}
-                <button onClick={handleLogout} className="w-full text-left px-4 py-2 rounded-md text-sm text-slate-500 hover:bg-red-50 hover:text-red-600">
-                  {t.auth.logout}
-                </button>
-                <p className="text-[10px] text-slate-300 text-center mt-2">{t.copyright}</p>
-              </div>
-            </aside>
+            <Sidebar
+              language={language}
+              projectData={pm.projectData}
+              currentStepId={pm.currentStepId}
+              setCurrentStepId={pm.setCurrentStepId}
+              completedStepsStatus={completedStepsStatus}
+              displayTitle={displayTitle}
+              currentUser={auth.currentUser}
+              appLogo={auth.appLogo}
+              isAdmin={adminHook.isAdmin}
+              isSidebarOpen={isSidebarOpen}
+              onCloseSidebar={() => setIsSidebarOpen(false)}
+              onBackToWelcome={pm.handleBackToWelcome}
+              onOpenProjectList={() => setIsProjectListOpen(true)}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+              onLogout={handleLogout}
+              onLanguageSwitch={translation.handleLanguageSwitchRequest}
+              onSubStepClick={pm.handleSubStepClick}
+              isLoading={!!generation.isLoading}
+            />
 
             {/* ═══ MAIN CONTENT ═══ */}
-            <main className="flex-1 flex flex-col overflow-hidden">
-              {/* TOOLBAR */}
-              <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
+            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* ═══ TOOLBAR ═══ */}
+              <div style={{
+                background: colors.surface.card,
+                borderBottom: `1px solid ${colors.border.light}`,
+                padding: `${spacing.sm} ${spacing.lg}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: spacing.sm,
+                flexShrink: 0,
+              }}>
+                {/* Left: hamburger (mobile) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs }}>
+                  <div className="lg:hidden">
+                    <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setIsDashboardOpen(true)} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-indigo-600" title={language === 'si' ? 'Pregled projekta' : 'Project Dashboard'}>
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-                    </svg>
-                  </button>
-                  <button onClick={pm.handleSaveToStorage} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.saveProject}>
-                    <ICONS.SAVE className="h-5 w-5" />
-                  </button>
-                  <label className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600 cursor-pointer" title={t.importProject}>
-                    <ICONS.IMPORT className="h-5 w-5" />
-                    <input ref={pm.importInputRef} type="file" accept=".json" onChange={handleImportProject} className="hidden" />
+
+                {/* Right: Action buttons, grouped */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  {/* Group 1: Dashboard */}
+                  <ToolbarButton
+                    onClick={() => setIsDashboardOpen(true)}
+                    title={language === 'si' ? 'Pregled projekta' : 'Project Dashboard'}
+                    variant="primary"
+                    icon={
+                      <svg style={{ width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                      </svg>
+                    }
+                  />
+
+                  <ToolbarSeparator />
+
+                  {/* Group 2: Save + Import */}
+                  <ToolbarButton
+                    onClick={pm.handleSaveToStorage}
+                    title={t.saveProject}
+                    variant="success"
+                    icon={<ICONS.SAVE style={{ width: 20, height: 20 }} />}
+                  />
+                  <label style={{
+                    padding: spacing.sm,
+                    borderRadius: radii.lg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: `all ${animation.duration.fast}`,
+                    color: colors.text.body,
+                  }} title={t.importProject}>
+                    <ICONS.IMPORT style={{ width: 20, height: 20 }} />
+                    <input ref={pm.importInputRef} type="file" accept=".json" onChange={handleImportProject} style={{ display: 'none' }} />
                   </label>
-                  <button onClick={handleExportDocx} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.exportDocx}>
-                    <ICONS.DOCX className="h-5 w-5" />
-                  </button>
-                  <button
+
+                  <ToolbarSeparator />
+
+                  {/* Group 3: Export (DOCX + Summary + Print) */}
+                  <ToolbarButton
+                    onClick={handleExportDocx}
+                    title={t.exportDocx}
+                    icon={<ICONS.DOCX style={{ width: 20, height: 20 }} />}
+                  />
+                  <ToolbarButton
                     onClick={generation.handleExportSummary}
-                    className={`p-2 rounded-md hover:bg-slate-100 ${auth.showAiWarning ? 'text-amber-400 cursor-not-allowed' : 'text-slate-500 hover:text-sky-600'}`}
                     title={t.exportSummary}
                     disabled={auth.showAiWarning}
-                  >
-                    <ICONS.SUMMARY className="h-5 w-5" />
-                  </button>
-                  <button onClick={handlePrint} className="p-2 rounded-md text-slate-500 hover:bg-slate-100 hover:text-sky-600" title={t.print}>
-                    <ICONS.PRINT className="h-5 w-5" />
-                  </button>
+                    variant={auth.showAiWarning ? 'warning' : 'default'}
+                    icon={<ICONS.SUMMARY style={{ width: 20, height: 20 }} />}
+                  />
+                  <ToolbarButton
+                    onClick={handlePrint}
+                    title={t.print}
+                    icon={<ICONS.PRINT style={{ width: 20, height: 20 }} />}
+                  />
                 </div>
               </div>
 
