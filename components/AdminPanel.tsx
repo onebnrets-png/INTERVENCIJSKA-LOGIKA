@@ -29,6 +29,7 @@ import {
   saveAppInstructions,
   resetAppInstructions,
   LANGUAGE_DIRECTIVES,
+  LANGUAGE_MISMATCH_TEMPLATE,
   ACADEMIC_RIGOR_RULES,
   HUMANIZATION_RULES,
   PROJECT_TITLE_RULES,
@@ -38,13 +39,12 @@ import {
   TEMPORAL_INTEGRITY_RULE,
   CHAPTER_LABELS,
   FIELD_RULE_LABELS,
-  // These need the new export we added:
   CHAPTERS,
   GLOBAL_RULES,
   FIELD_RULES,
   SUMMARY_RULES,
   TRANSLATION_RULES,
-} from '../services/Instructions';
+} from '../services/Instructions.ts';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -153,6 +153,7 @@ const ADMIN_TEXT = {
         translation: 'Translation',
         summary: 'Summary',
         chapter: 'Chapter Mapping',
+        temporal: 'Temporal Integrity',
       },
     },
     log: {
@@ -234,6 +235,7 @@ const ADMIN_TEXT = {
         translation: 'Prevod',
         summary: 'Povzetek',
         chapter: 'Mapiranje poglavij',
+        temporal: 'Časovna celovitost',
       },
     },
     log: {
@@ -314,6 +316,122 @@ const UserAvatar: React.FC<{ name: string; email: string; size?: number }> = ({
       {initials}
     </div>
   );
+};
+
+// ─── Build default instructions for each section ─────────────
+
+const buildDefaultInstructions = (): Record<string, string> => {
+  const fmtGates = (gates: string[]): string =>
+    gates.map((g, i) => `  ${i + 1}. ${g}`).join('\n');
+
+  return {
+    global: `═══ GLOBAL RULES ═══
+These are the master rules that govern ALL AI content generation.
+
+ARCHITECTURE PRINCIPLE:
+  Instructions.ts is the SINGLE SOURCE OF TRUTH for all AI rules.
+  geminiService.ts reads from here — it has ZERO own rules.
+
+${GLOBAL_RULES}`,
+
+    language: `═══ LANGUAGE DIRECTIVES ═══
+
+── English ──
+${LANGUAGE_DIRECTIVES.en}
+
+── Slovenščina ──
+${LANGUAGE_DIRECTIVES.si}
+
+── Language Mismatch Template ──
+${LANGUAGE_MISMATCH_TEMPLATE}`,
+
+    academic: `═══ ACADEMIC RIGOR & CITATION RULES ═══
+
+── English ──
+${ACADEMIC_RIGOR_RULES.en}
+
+── Slovenščina ──
+${ACADEMIC_RIGOR_RULES.si}`,
+
+    humanization: `═══ HUMANIZATION RULES ═══
+
+── English ──
+${HUMANIZATION_RULES.en}
+
+── Slovenščina ──
+${HUMANIZATION_RULES.si}`,
+
+    projectTitle: `═══ PROJECT TITLE RULES ═══
+
+── English ──
+${PROJECT_TITLE_RULES.en}
+
+── Slovenščina ──
+${PROJECT_TITLE_RULES.si}`,
+
+    mode: `═══ MODE INSTRUCTIONS ═══
+
+${Object.entries(MODE_INSTRUCTIONS).map(([mode, langs]) =>
+  `── ${mode.toUpperCase()} ──\n\n[EN]\n${langs.en}\n\n[SI]\n${langs.si}`
+).join('\n\n════════════════════════════════════\n\n')}`,
+
+    qualityGates: `═══ QUALITY GATES ═══
+
+${Object.entries(QUALITY_GATES).map(([section, langs]) =>
+  `── ${section} ──\n\n[EN]\n${fmtGates(langs.en || [])}\n\n[SI]\n${fmtGates(langs.si || [])}`
+).join('\n\n════════════════════════════════════\n\n')}`,
+
+    sectionTask: `═══ SECTION TASK INSTRUCTIONS ═══
+
+${Object.entries(SECTION_TASK_INSTRUCTIONS).map(([section, langs]) =>
+  `── ${section} ──\n\n[EN]\n${langs.en || '(empty)'}\n\n[SI]\n${langs.si || '(empty)'}`
+).join('\n\n════════════════════════════════════\n\n')}`,
+
+    fieldRules: `═══ FIELD RULES ═══
+
+${Object.entries(FIELD_RULES).map(([key, val]) => {
+  const label = (FIELD_RULE_LABELS as Record<string, string>)[key] || key;
+  return `── ${label} ──\n[EN] ${val.en || '(empty)'}\n[SI] ${val.si || '(empty)'}`;
+}).join('\n\n')}`,
+
+    translation: `═══ TRANSLATION RULES ═══
+
+── English ──
+${TRANSLATION_RULES.en.map((r: string, i: number) => `  ${i + 1}. ${r}`).join('\n')}
+
+── Slovenščina ──
+${TRANSLATION_RULES.si.map((r: string, i: number) => `  ${i + 1}. ${r}`).join('\n')}`,
+
+    summary: `═══ SUMMARY RULES ═══
+
+── English ──
+${SUMMARY_RULES.en}
+
+── Slovenščina ──
+${SUMMARY_RULES.si}`,
+
+    chapter: `═══ CHAPTER RULES ═══
+
+${Object.entries(CHAPTERS).map(([key, val]) => {
+  const label = (CHAPTER_LABELS as Record<string, string>)[key] || key;
+  return `── ${label} ──\n${val}`;
+}).join('\n\n════════════════════════════════════\n\n')}`,
+
+    temporal: `═══ TEMPORAL INTEGRITY RULE ═══
+
+── English ──
+${TEMPORAL_INTEGRITY_RULE.en}
+
+── Slovenščina ──
+${TEMPORAL_INTEGRITY_RULE.si}`,
+  };
+};
+
+// ─── Placeholder text for sections without custom overrides ──
+
+const getDefaultPlaceholder = (section: string): string => {
+  const defaults = buildDefaultInstructions();
+  return defaults[section] || `Enter custom ${section} instructions...`;
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1113,7 +1231,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
                       <textarea
                         value={editedInstructions[activeInstructionSection] || ''}
                         onChange={(e) => handleInstructionChange(activeInstructionSection, e.target.value)}
-                        placeholder="Type rules here..."
+                        placeholder={getDefaultPlaceholder(activeInstructionSection)}
                         style={{
                           flex: 1, minHeight: '300px', padding: '16px', borderRadius: radii.xl,
                           border: `1px solid ${colors.border.light}`, fontSize: typography.fontSize.sm,

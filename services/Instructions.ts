@@ -915,7 +915,7 @@ Brez markdown. Variraj stavčne strukture.`
 // CHAPTERS (long-form rules for each section)
 // ───────────────────────────────────────────────────────────────
 
-const CHAPTERS: Record<string, string> = {
+export const CHAPTERS: Record<string, string> = {
   chapter1_problemAnalysis: `CHAPTER 1 — PROBLEM ANALYSIS
 
 The Problem Analysis is the foundation of the entire intervention logic.
@@ -1018,7 +1018,7 @@ Each includes exploitation strategy.`
 // GLOBAL RULES
 // ───────────────────────────────────────────────────────────────
 
-const GLOBAL_RULES = `
+export const GLOBAL_RULES = `
 1. All content must be directly relevant to the specific project context.
 2. Every claim must be evidence-based with verifiable citations.
 3. No markdown formatting (**, ##, \`) in any output text.
@@ -1038,7 +1038,7 @@ const GLOBAL_RULES = `
 // ═══════════════════════════════════════════════════════════════
 // ───────────────────────────────────────────────────────────────
 
-const FIELD_RULES: Record<string, Record<string, string>> = {
+export const FIELD_RULES: Record<string, Record<string, string>> = {
   title: {
     en: 'Generate a concise, professional title. Follow the title format rules for this section type.',
     si: 'Generiraj jedrnat, strokoven naslov. Upoštevaj pravila za format naslova za ta tip razdelka.'
@@ -1078,7 +1078,7 @@ const FIELD_RULES: Record<string, Record<string, string>> = {
 // Executive Summary — EXTRACTION + CONDENSATION engine
 // ───────────────────────────────────────────────────────────────
 
-const SUMMARY_RULES: Record<string, string> = {
+export const SUMMARY_RULES: Record<string, string> = {
   en: `
 YOU ARE A CONDENSATION ENGINE — NOT A COPY-PASTE ENGINE.
 Your job is to DISTILL the project into a SHORT executive summary.
@@ -1159,7 +1159,7 @@ STROGA PRAVILA OBLIKOVANJA:
 // TRANSLATION RULES
 // ───────────────────────────────────────────────────────────────
 
-const TRANSLATION_RULES: Record<string, string[]> = {
+export const TRANSLATION_RULES: Record<string, string[]> = {
   en: [
     'Translate all text values to British English',
     'Keep JSON structure identical — do not add/remove keys',
