@@ -21,6 +21,8 @@ import ConfirmationModal from './components/ConfirmationModal.tsx';
 import AuthScreen from './components/AuthScreen.tsx';
 import SettingsModal from './components/SettingsModal.tsx';
 import ProjectListModal from './components/ProjectListModal.tsx';
+import AdminPanel from './components/AdminPanel.tsx';
+import { useAdmin } from './hooks/useAdmin.ts';
 import { ICONS, getSteps, getSubSteps, BRAND_ASSETS } from './constants.tsx';
 import { TEXT } from './locales.ts';
 import { isStepCompleted, isSubStepCompleted } from './utils.ts';
@@ -80,6 +82,8 @@ const App = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProjectListOpen, setIsProjectListOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const adminHook = useAdmin();
 
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
@@ -267,6 +271,11 @@ const App = () => {
         language={language}
       />
       <ConfirmationModal isOpen={modalConfig.isOpen} {...modalConfig} />
+      <AdminPanel
+        isOpen={isAdminPanelOpen}
+        onClose={() => setIsAdminPanelOpen(false)}
+        language={language}
+      />
       <ProjectListModal
         isOpen={isProjectListOpen}
         onClose={() => setIsProjectListOpen(false)}
@@ -473,6 +482,15 @@ const App = () => {
 
               {/* Sidebar Footer */}
               <div className="mt-4 pt-4 border-t border-slate-200 flex-shrink-0">
+                {adminHook.isAdmin && (
+                  <button
+                    onClick={() => setIsAdminPanelOpen(true)}
+                    className="w-full text-left px-4 py-2 rounded-md text-sm text-indigo-600 hover:bg-indigo-50 font-medium flex items-center gap-2 mb-1"
+                  >
+                    <span>🛡️</span>
+                    {language === 'si' ? 'Admin Panel' : 'Admin Panel'}
+                  </button>
+                )}
                 <button onClick={handleLogout} className="w-full text-left px-4 py-2 rounded-md text-sm text-slate-500 hover:bg-red-50 hover:text-red-600">
                   {t.auth.logout}
                 </button>

@@ -296,3 +296,62 @@ export interface SubStepDefinition {
   key: string;
   title: { en: string; si: string };
 }
+
+// ─── Admin Types ─────────────────────────────────────────────
+export type UserRole = 'admin' | 'user';
+
+export interface AdminUserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  createdAt: string;
+  lastSignIn: string | null;
+}
+
+export interface AdminLogEntry {
+  id: string;
+  adminId: string;
+  adminEmail?: string;
+  action: 'role_change' | 'instructions_update' | 'instructions_reset' | 'user_block';
+  targetUserId: string | null;
+  targetEmail?: string;
+  details: Record<string, any>;
+  createdAt: string;
+}
+
+// ─── Empirical Data Visualization Types ──────────────────────
+export type ChartType =
+  | 'comparison_bar'
+  | 'donut'
+  | 'line'
+  | 'radar'
+  | 'heatmap'
+  | 'gauge'
+  | 'stacked_bar'
+  | 'progress'
+  | 'sankey';
+
+export interface ExtractedDataPoint {
+  label: string;
+  value: number;
+  unit: string;
+  category?: string;
+  date?: string;
+}
+
+export interface ExtractedChartData {
+  id: string;
+  chartType: ChartType;
+  title: string;
+  source?: string;
+  dataPoints: ExtractedDataPoint[];
+  insight?: string;
+  sectionKey: string;
+  fieldPath: string;
+}
+
+export interface ProjectVisualizationData {
+  charts: ExtractedChartData[];
+  lastExtracted: string;
+}
