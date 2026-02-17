@@ -1,10 +1,12 @@
 // components/Sidebar.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Sidebar — Design System Edition
-// v1.1 — 2026-02-17
+// v1.2 — 2026-02-17
 //   - NEW: Dark mode toggle button (sun/moon icon) in footer
 //   - NEW: Dynamic sidebar background via isDark + darkColors
 //   - NEW: themeService integration (getThemeMode, toggleTheme, onThemeChange)
+//   - FIX: JS-based isDesktop (matchMedia 1024px) replaces Tailwind lg: breakpoint
+//          so sidebar is always visible on desktop without relying on CSS classes
 //
 // FEATURES:
 //   - Gradient background with design system tokens
@@ -186,6 +188,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(() => getThemeMode() === 'dark');
 
+  // Desktop detection — replaces Tailwind lg: breakpoint
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   // Subscribe to theme changes
   React.useEffect(() => {
     return onThemeChange((mode) => setIsDark(mode === 'dark'));
@@ -223,7 +234,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   // Mobile transform
-  const mobileTransform = isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)';
+  const mobileTransform = isDesktop || isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)';
 
   const responsiveStyle: React.CSSProperties = {
     ...sidebarStyle,
@@ -287,7 +298,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       <aside
         style={responsiveStyle}
-        className="lg:relative lg:translate-x-0"
       >
         <CollapseToggle />
 
