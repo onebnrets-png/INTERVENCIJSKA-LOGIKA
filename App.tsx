@@ -1,9 +1,11 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v1.7 — 2026-02-17
-//   - NEW: Dark mode reactive for inline styles (ToolbarButton, loading overlay)
-//   - Previous: initTheme(), SummaryModal extraction, Sidebar, Toolbar redesign
+// v1.8 — 2026-02-17
+//   - REFACTOR: Merged SettingsModal into unified AdminPanel
+//   - REMOVE: SettingsModal import and usage
+//   - NEW: adminPanelInitialTab state to open specific tabs
+//   - All setIsSettingsOpen calls now open AdminPanel with initialTab='ai'
 // All business logic lives in hooks:
 //   - useAuth           → authentication, session, API key check, MFA
 //   - useProjectManager → CRUD, save/load, import/export, navigation
@@ -20,9 +22,8 @@ import PERTChart from './components/PERTChart.tsx';
 import Organigram from './components/Organigram.tsx';
 import ConfirmationModal from './components/ConfirmationModal.tsx';
 import AuthScreen from './components/AuthScreen.tsx';
-import SettingsModal from './components/SettingsModal.tsx';
-import ProjectListModal from './components/ProjectListModal.tsx';
 import AdminPanel from './components/AdminPanel.tsx';
+import ProjectListModal from './components/ProjectListModal.tsx';
 import ProjectDashboard from './components/ProjectDashboard.tsx';
 import Sidebar from './components/Sidebar.tsx';
 import SummaryModal from './components/SummaryModal.tsx';
@@ -161,6 +162,7 @@ const App = () => {
   const [language, setLanguage] = useState<'en' | 'si'>('en');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [adminPanelInitialTab, setAdminPanelInitialTab] = useState<string | undefined>(undefined);
   const [isProjectListOpen, setIsProjectListOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
@@ -199,12 +201,18 @@ const App = () => {
     currentUser: auth.currentUser,
   });
 
+  // Wrapper: when hooks call setIsSettingsOpen(true), open AdminPanel on AI tab
+  const openSettingsFromHook = (val: boolean) => {
+    if (val) { setAdminPanelInitialTab('ai'); }
+    setIsSettingsOpen(val);
+  };
+
   const generation = useGeneration({
     projectData: pm.projectData,
     setProjectData: pm.setProjectData,
     language,
     ensureApiKey: auth.ensureApiKey,
-    setIsSettingsOpen,
+    setIsSettingsOpen: openSettingsFromHook,
     setHasUnsavedTranslationChanges: pm.setHasUnsavedTranslationChanges,
     handleUpdateData: pm.handleUpdateData,
     checkSectionHasContent: pm.checkSectionHasContent,
@@ -231,7 +239,7 @@ const App = () => {
     ensureApiKey: auth.ensureApiKey,
     setIsLoading: generation.setIsLoading,
     setError: generation.setError,
-    setIsSettingsOpen,
+    setIsSettingsOpen: openSettingsFromHook,
     setModalConfig,
     closeModal,
   });
@@ -283,6 +291,8 @@ const App = () => {
 
   const handleSettingsClose = async () => {
     setIsSettingsOpen(false);
+    setIsAdminPanelOpen(false);
+    setAdminPanelInitialTab(undefined);
     await auth.checkApiKey();
     auth.loadCustomLogo();
   };
@@ -336,20 +346,21 @@ const App = () => {
         {auth.shouldShowBanner && (
           <ApiWarningBanner
             onDismiss={auth.dismissWarning}
-            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenSettings={() => { setAdminPanelInitialTab('ai'); setIsSettingsOpen(true); }}
             language={language}
           />
         )}
-        <SettingsModal
+        <AdminPanel
           isOpen={isSettingsOpen}
           onClose={handleSettingsClose}
           language={language}
+          initialTab="ai"
         />
         <AuthScreen
           onLoginSuccess={auth.handleLoginSuccess}
           language={language}
           setLanguage={(lang: string) => setLanguage(lang as 'en' | 'si')}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => { setAdminPanelInitialTab('ai'); setIsSettingsOpen(true); }}
           needsMFAVerify={auth.needsMFAVerify}       // ★ MFA
           mfaFactorId={auth.mfaFactorId}             // ★ MFA
           onMFAVerified={auth.handleMFAVerified}     // ★ MFA
@@ -364,16 +375,12 @@ const App = () => {
   // ═══════════════════════════════════════════════════════════════
   return (
     <>
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={handleSettingsClose}
-        language={language}
-      />
       <ConfirmationModal isOpen={modalConfig.isOpen} {...modalConfig} />
       <AdminPanel
-        isOpen={isAdminPanelOpen}
-        onClose={() => setIsAdminPanelOpen(false)}
+        isOpen={isAdminPanelOpen || isSettingsOpen}
+        onClose={handleSettingsClose}
         language={language}
+        initialTab={adminPanelInitialTab}
       />
       <ProjectDashboard
         isOpen={isDashboardOpen}
@@ -409,7 +416,7 @@ const App = () => {
           {auth.shouldShowBanner && (
             <ApiWarningBanner
               onDismiss={auth.dismissWarning}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={() => { setAdminPanelInitialTab('ai'); setIsSettingsOpen(true); }}
               language={language}
             />
           )}
@@ -421,7 +428,7 @@ const App = () => {
               </svg>
               <span className="max-w-[150px] truncate">{displayTitle}</span>
             </button>
-            <button onClick={() => setIsSettingsOpen(true)} className="px-3 py-1 bg-white/80 backdrop-blur rounded shadow text-sm font-semibold text-slate-700 hover:bg-white flex items-center gap-1 cursor-pointer">
+            <button onClick={() => { setAdminPanelInitialTab(undefined); setIsSettingsOpen(true); }} className="px-3 py-1 bg-white/80 backdrop-blur rounded shadow text-sm font-semibold text-slate-700 hover:bg-white flex items-center gap-1 cursor-pointer">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -460,7 +467,7 @@ const App = () => {
           {auth.shouldShowBanner && (
             <ApiWarningBanner
               onDismiss={auth.dismissWarning}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={() => { setAdminPanelInitialTab('ai'); setIsSettingsOpen(true); }}
               language={language}
             />
           )}
@@ -522,8 +529,7 @@ const App = () => {
               onCloseSidebar={() => setIsSidebarOpen(false)}
               onBackToWelcome={pm.handleBackToWelcome}
               onOpenProjectList={() => setIsProjectListOpen(true)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-              onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+              onOpenAdminPanel={(tab?: string) => { setAdminPanelInitialTab(tab); setIsAdminPanelOpen(true); }}
               onLogout={handleLogout}
               onLanguageSwitch={translation.handleLanguageSwitchRequest}
               onSubStepClick={pm.handleSubStepClick}

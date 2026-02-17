@@ -1,13 +1,11 @@
 // components/Sidebar.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Sidebar — Design System Edition
-// v1.3 — 2026-02-17
-//   - NEW: Dark mode toggle button (sun/moon icon) in footer
-//   - NEW: Dynamic sidebar background via isDark + darkColors
-//   - NEW: themeService integration (getThemeMode, toggleTheme, onThemeChange)
-//   - FIX: JS-based isDesktop (matchMedia 1024px) replaces Tailwind lg: breakpoint
-//   - FIX: All colors.* refs replaced with activeColors.* for proper dark mode
-//          (text, borders, surfaces, icons all respond to theme toggle)
+// v1.4 — 2026-02-17
+//   - REFACTOR: Unified Admin/Settings button for all users in footer
+//   - REMOVE: Header "Settings" link (replaced by unified panel)
+//   - FIX: Footer order: Admin/Settings → Dark Mode → Logout → ©
+//   - Previous: Dark mode toggle, themeService, isDesktop, activeColors
 //
 // FEATURES:
 //   - Gradient background with design system tokens
@@ -155,8 +153,7 @@ interface SidebarProps {
   onCloseSidebar: () => void;
   onBackToWelcome: () => void;
   onOpenProjectList: () => void;
-  onOpenSettings: () => void;
-  onOpenAdminPanel: () => void;
+  onOpenAdminPanel: (initialTab?: string) => void;
   onLogout: () => void;
   onLanguageSwitch: (lang: 'en' | 'si') => void;
   onSubStepClick: (subStepId: string) => void;
@@ -179,7 +176,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   onCloseSidebar,
   onBackToWelcome,
   onOpenProjectList,
-  onOpenSettings,
   onOpenAdminPanel,
   onLogout,
   onLanguageSwitch,
@@ -473,18 +469,22 @@ const Sidebar: React.FC<SidebarProps> = ({
               }}>
                 <span>{t.auth.welcome} <strong style={{ color: activeColors.text.body }}>{currentUser}</strong></span>
                 <button
-                  onClick={onOpenSettings}
+                  onClick={() => onOpenAdminPanel('profile')}
                   style={{
                     border: 'none',
                     background: 'none',
                     color: activeColors.primary[500],
                     cursor: 'pointer',
-                    fontSize: typography.fontSize.xs,
-                    textDecoration: 'underline',
+                    display: 'flex',
+                    alignItems: 'center',
                     padding: 0,
                   }}
+                  title={t.auth.settings}
                 >
-                  {t.auth.settings}
+                  <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
                 </button>
               </div>
             </>
@@ -661,9 +661,10 @@ const Sidebar: React.FC<SidebarProps> = ({
           borderTop: `1px solid ${activeColors.border.light}`,
           flexShrink: 0,
         }}>
-          {isAdmin && !isCollapsed && (
+          {/* Admin/Settings button — visible for ALL users */}
+          {!isCollapsed && (
             <button
-              onClick={onOpenAdminPanel}
+              onClick={() => onOpenAdminPanel()}
               style={{
                 width: '100%',
                 textAlign: 'left',
@@ -682,14 +683,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                 fontFamily: 'inherit',
               }}
             >
-              <span>🛡️</span>
-              Admin Panel
+              <span>{isAdmin ? '🛡️' : '⚙️'}</span>
+              {isAdmin
+                ? (language === 'si' ? 'Admin / Nastavitve' : 'Admin / Settings')
+                : (language === 'si' ? 'Nastavitve' : 'Settings')}
             </button>
           )}
 
-          {isAdmin && isCollapsed && (
+          {isCollapsed && (
             <button
-              onClick={onOpenAdminPanel}
+              onClick={() => onOpenAdminPanel()}
               style={{
                 width: '100%',
                 display: 'flex',
@@ -701,9 +704,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                 cursor: 'pointer',
                 marginBottom: '2px',
               }}
-              title="Admin Panel"
+              title={isAdmin ? 'Admin / Settings' : 'Settings'}
             >
-              <span style={{ fontSize: '18px' }}>🛡️</span>
+              <span style={{ fontSize: '18px' }}>{isAdmin ? '🛡️' : '⚙️'}</span>
             </button>
           )}
 
