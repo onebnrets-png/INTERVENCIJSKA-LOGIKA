@@ -37,6 +37,7 @@ import GanttChart from './GanttChart.tsx';
 import PERTChart from './PERTChart.tsx';
 import Organigram from './Organigram.tsx';
 import { recalculateProjectSchedule } from '../utils.ts';
+import InlineChart from './InlineChart.tsx';
 
 const FieldHeader = ({ title, description, id = '' }) => (
     <div className="mb-2 pt-4" id={id}>
@@ -286,6 +287,7 @@ const renderProblemAnalysis = (props) => {
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea label={t.title} path={[...path, 'coreProblem', 'title']} value={coreProblem.title} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} rows={1} placeholder={t.coreProblemTitlePlaceholder} generateTitle={`${t.generateField} ${t.coreProblem}`} missingApiKey={missingApiKey} />
                     <TextArea label={t.description} path={[...path, 'coreProblem', 'description']} value={coreProblem.description} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.coreProblemDescPlaceholder} generateTitle={`${t.generateField} ${t.description}`} missingApiKey={missingApiKey} />
+                    <InlineChart text={coreProblem.description || ''} fieldContext="coreProblem" language={language} />
                 </div>
             </div>
 
@@ -426,6 +428,7 @@ const renderProjectIdea = (props) => {
                 <p className="text-sm text-slate-500 mb-3 -mt-2">{t.stateOfTheArtDesc}</p>
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea label={t.stateOfTheArt} path={[...path, 'stateOfTheArt']} value={stateOfTheArt} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.stateOfTheArtPlaceholder} generateTitle={`${t.generateField} ${t.stateOfTheArt}`} missingApiKey={missingApiKey} />
+                    <InlineChart text={stateOfTheArt || ''} fieldContext="stateOfTheArt" language={language} />
                 </div>
             </div>
 
@@ -442,6 +445,7 @@ const renderProjectIdea = (props) => {
                 <p className="text-sm text-slate-500 mb-3 -mt-2">{t.proposedSolutionDesc}</p>
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <TextArea label={t.proposedSolution} path={[...path, 'proposedSolution']} value={proposedSolution} onUpdate={onUpdateData} onGenerate={onGenerateField} isLoading={isLoading} placeholder={t.proposedSolutionPlaceholder} generateTitle={`${t.generateField} ${t.proposedSolution}`} missingApiKey={missingApiKey} />
+                    <InlineChart text={proposedSolution || ''} fieldContext="proposedSolution" language={language} />
                 </div>
             </div>
             
