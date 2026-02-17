@@ -1,4 +1,16 @@
-import React from 'react';
+// components/ConfirmationModal.tsx
+// ═══════════════════════════════════════════════════════════════
+// Universal confirmation/choice modal — Design System Edition
+// v2.0 — 2026-02-17
+//   - Redesigned with design system tokens (colors, shadows, radii, etc.)
+//   - Preserved: 3-option card layout for generation choice
+//   - Preserved: 2-button layout for legacy modals
+//   - NEW: Smooth scaleIn animation, backdrop blur
+//   - NEW: Escape key to close
+// ═══════════════════════════════════════════════════════════════
+
+import React, { useEffect, useCallback } from 'react';
+import { colors, shadows, radii, spacing, animation, typography } from '../design/theme.ts';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -23,103 +35,265 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   confirmText, secondaryText, tertiaryText, cancelText,
   confirmDesc, secondaryDesc, tertiaryDesc
 }) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onCancel();
+  }, [onCancel]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, handleKeyDown]);
+
   if (!isOpen) return null;
 
-  // v3.3: Detect 3-option card layout (generation choice)
   const isThreeOptionLayout = !!(onSecondary && onTertiary);
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className={`bg-white rounded-lg shadow-xl ${isThreeOptionLayout ? 'max-w-lg' : 'max-w-md'} w-full overflow-hidden border border-slate-200 transform scale-100 transition-all`}>
+  const optionCards = isThreeOptionLayout ? [
+    {
+      onClick: onConfirm,
+      text: confirmText,
+      desc: confirmDesc,
+      icon: '✦',
+      color: colors.success,
+    },
+    {
+      onClick: onSecondary!,
+      text: secondaryText,
+      desc: secondaryDesc,
+      icon: '+',
+      color: colors.primary,
+    },
+    {
+      onClick: onTertiary!,
+      text: tertiaryText,
+      desc: tertiaryDesc,
+      icon: '↻',
+      color: colors.warning,
+    },
+  ] : [];
 
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: spacing.lg,
+        background: colors.surface.overlayBlur,
+        backdropFilter: 'blur(8px)',
+        animation: 'fadeIn 0.2s ease-out',
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div
+        style={{
+          background: colors.surface.card,
+          borderRadius: radii['2xl'],
+          boxShadow: shadows['2xl'],
+          maxWidth: isThreeOptionLayout ? 520 : 440,
+          width: '100%',
+          overflow: 'hidden',
+          border: `1px solid ${colors.border.light}`,
+          animation: 'scaleIn 0.2s ease-out',
+          fontFamily: typography.fontFamily.sans,
+        }}
+      >
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-100">
-          <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+        <div style={{
+          padding: `${spacing.lg} ${spacing['2xl']}`,
+          borderBottom: `1px solid ${colors.border.light}`,
+          background: colors.surface.sidebar,
+        }}>
+          <h3 style={{
+            fontSize: typography.fontSize.lg,
+            fontWeight: typography.fontWeight.bold,
+            color: colors.text.heading,
+            margin: 0,
+          }}>
+            {title}
+          </h3>
         </div>
 
         {/* Body */}
-        <div className="p-6">
-          <p className="text-slate-600 leading-relaxed mb-4">{message}</p>
+        <div style={{ padding: spacing['2xl'] }}>
+          <p style={{
+            color: colors.text.body,
+            lineHeight: typography.lineHeight.relaxed,
+            marginBottom: isThreeOptionLayout ? spacing.xl : spacing.lg,
+            fontSize: typography.fontSize.sm,
+            whiteSpace: 'pre-line',
+          }}>
+            {message}
+          </p>
 
-          {isThreeOptionLayout ? (
-            /* ── 3-option card layout for generation choice ── */
-            <div className="space-y-3">
-
-              {/* Option 1: Enhance (green) */}
-              <button
-                onClick={onConfirm}
-                className="w-full text-left p-4 rounded-lg border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-bold">✦</div>
-                  <div>
-                    <div className="font-semibold text-emerald-800 group-hover:text-emerald-900">{confirmText}</div>
-                    {confirmDesc && <div className="text-xs text-emerald-600 mt-0.5">{confirmDesc}</div>}
+          {isThreeOptionLayout && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              {optionCards.map((card, idx) => (
+                <button
+                  key={idx}
+                  onClick={card.onClick}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: spacing.lg,
+                    borderRadius: radii.xl,
+                    border: `2px solid ${card.color[200]}`,
+                    background: card.color[50],
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: spacing.md,
+                    transition: `all ${animation.duration.fast} ${animation.easing.default}`,
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = card.color[100];
+                    e.currentTarget.style.borderColor = card.color[300];
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = shadows.md;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = card.color[50];
+                    e.currentTarget.style.borderColor = card.color[200];
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: radii.full,
+                    background: card.color[500],
+                    color: colors.text.inverse,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: typography.fontSize.sm,
+                    fontWeight: typography.fontWeight.bold,
+                    flexShrink: 0,
+                  }}>
+                    {card.icon}
                   </div>
-                </div>
-              </button>
-
-              {/* Option 2: Fill Missing (blue) */}
-              <button
-                onClick={onSecondary!}
-                className="w-full text-left p-4 rounded-lg border-2 border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sky-500 text-white flex items-center justify-center text-sm font-bold">+</div>
                   <div>
-                    <div className="font-semibold text-sky-800 group-hover:text-sky-900">{secondaryText}</div>
-                    {secondaryDesc && <div className="text-xs text-sky-600 mt-0.5">{secondaryDesc}</div>}
+                    <div style={{
+                      fontWeight: typography.fontWeight.semibold,
+                      color: card.color[800],
+                      fontSize: typography.fontSize.sm,
+                    }}>
+                      {card.text}
+                    </div>
+                    {card.desc && (
+                      <div style={{
+                        fontSize: typography.fontSize.xs,
+                        color: card.color[600],
+                        marginTop: 2,
+                      }}>
+                        {card.desc}
+                      </div>
+                    )}
                   </div>
-                </div>
-              </button>
-
-              {/* Option 3: Regenerate All (amber) */}
-              <button
-                onClick={onTertiary!}
-                className="w-full text-left p-4 rounded-lg border-2 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:border-amber-300 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-sm font-bold">↻</div>
-                  <div>
-                    <div className="font-semibold text-amber-800 group-hover:text-amber-900">{tertiaryText}</div>
-                    {tertiaryDesc && <div className="text-xs text-amber-600 mt-0.5">{tertiaryDesc}</div>}
-                  </div>
-                </div>
-              </button>
+                </button>
+              ))}
             </div>
-          ) : null}
+          )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-3 sm:justify-end">
+        <div style={{
+          padding: `${spacing.lg} ${spacing['2xl']}`,
+          borderTop: `1px solid ${colors.border.light}`,
+          background: colors.surface.sidebar,
+          display: 'flex',
+          justifyContent: isThreeOptionLayout ? 'center' : 'flex-end',
+          gap: spacing.md,
+        }}>
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-md transition-colors"
+            style={{
+              padding: `${spacing.sm} ${spacing.lg}`,
+              fontSize: typography.fontSize.sm,
+              fontWeight: typography.fontWeight.medium,
+              color: colors.text.muted,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: radii.lg,
+              cursor: 'pointer',
+              transition: `all ${animation.duration.fast}`,
+              fontFamily: 'inherit',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = colors.surface.sidebar;
+              e.currentTarget.style.color = colors.text.body;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = colors.text.muted;
+            }}
           >
             {cancelText}
           </button>
 
-          {/* Legacy 2-button layout (for non-generation modals) */}
           {!isThreeOptionLayout && (
             <>
-              {onSecondary && (
+              {onSecondary && secondaryText && (
                 <button
                   onClick={onSecondary}
-                  className="px-4 py-2 text-sm font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-md transition-colors"
+                  style={{
+                    padding: `${spacing.sm} ${spacing.lg}`,
+                    fontSize: typography.fontSize.sm,
+                    fontWeight: typography.fontWeight.medium,
+                    color: colors.primary[700],
+                    background: colors.primary[50],
+                    border: `1px solid ${colors.primary[200]}`,
+                    borderRadius: radii.lg,
+                    cursor: 'pointer',
+                    transition: `all ${animation.duration.fast}`,
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = colors.primary[100];
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = colors.primary[50];
+                  }}
                 >
                   {secondaryText}
                 </button>
               )}
               <button
                 onClick={onConfirm}
-                className="px-4 py-2 text-sm font-medium text-white bg-sky-600 hover:bg-sky-700 rounded-md shadow-sm transition-colors"
+                style={{
+                  padding: `${spacing.sm} ${spacing.xl}`,
+                  fontSize: typography.fontSize.sm,
+                  fontWeight: typography.fontWeight.semibold,
+                  color: colors.text.inverse,
+                  background: colors.primary.gradient,
+                  border: 'none',
+                  borderRadius: radii.lg,
+                  cursor: 'pointer',
+                  boxShadow: shadows.sm,
+                  transition: `all ${animation.duration.fast}`,
+                  fontFamily: 'inherit',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = colors.primary.gradientHover;
+                  e.currentTarget.style.boxShadow = shadows.primaryGlow;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = colors.primary.gradient;
+                  e.currentTarget.style.boxShadow = shadows.sm;
+                }}
               >
                 {confirmText}
               </button>
             </>
           )}
         </div>
-
       </div>
     </div>
   );

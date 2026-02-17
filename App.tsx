@@ -1,10 +1,9 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v1.4 — 2026-02-17
-//   - NEW: Sidebar extracted to components/Sidebar.tsx (Design System)
-//   - NEW: Toolbar redesign with grouped actions + design system tokens
-//   - Previous: Admin Panel, ProjectDashboard, global instructions cache
+// v1.5 — 2026-02-17
+//   - NEW: SummaryModal extracted to components/SummaryModal.tsx (Design System)
+//   - Previous: Sidebar extracted, Toolbar redesign, Dashboard, global instructions
 // All business logic lives in hooks:
 //   - useAuth           → authentication, session, API key check, MFA
 //   - useProjectManager → CRUD, save/load, import/export, navigation
@@ -26,6 +25,7 @@ import ProjectListModal from './components/ProjectListModal.tsx';
 import AdminPanel from './components/AdminPanel.tsx';
 import ProjectDashboard from './components/ProjectDashboard.tsx';
 import Sidebar from './components/Sidebar.tsx';
+import SummaryModal from './components/SummaryModal.tsx';
 import { useAdmin } from './hooks/useAdmin.ts';
 import { ensureGlobalInstructionsLoaded } from './services/globalInstructionsService.ts';
 import { ICONS, getSteps, BRAND_ASSETS } from './constants.tsx';
@@ -376,43 +376,15 @@ const App = () => {
       />
 
       {/* Summary Modal */}
-      {generation.summaryModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm print:hidden">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full border border-slate-200 flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-800">{t.modals.summaryTitle}</h3>
-              <button onClick={() => generation.setSummaryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1">
-              {generation.isGeneratingSummary ? (
-                <div className="flex flex-col items-center justify-center h-48">
-                  <div className="inline-block w-8 h-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                  <p className="text-slate-500">{t.generating}</p>
-                </div>
-              ) : (
-                <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap">{generation.summaryText}</div>
-              )}
-            </div>
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between gap-3">
-              <button onClick={() => generation.setSummaryModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-md">
-                {t.modals.closeBtn}
-              </button>
-              <div className="flex gap-2">
-                <button onClick={generation.runSummaryGeneration} className="px-4 py-2 text-sm font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-md">
-                  {t.modals.regenerateBtn}
-                </button>
-                <button onClick={generation.handleDownloadSummaryDocx} className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md shadow-sm">
-                  {t.modals.downloadDocxBtn}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <SummaryModal
+        isOpen={generation.summaryModalOpen}
+        onClose={() => generation.setSummaryModalOpen(false)}
+        summaryText={generation.summaryText}
+        isGenerating={generation.isGeneratingSummary}
+        onRegenerate={generation.runSummaryGeneration}
+        onDownloadDocx={generation.handleDownloadSummaryDocx}
+        language={language}
+      />
 
       {pm.currentStepId === null ? (
         /* ═══ WELCOME SCREEN ═══ */
