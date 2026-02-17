@@ -1,20 +1,10 @@
 // components/Sidebar.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Sidebar — Design System Edition
-// v1.4 — 2026-02-17
-//   - REFACTOR: Unified Admin/Settings button for all users in footer
-//   - REMOVE: Header "Settings" link (replaced by unified panel)
-//   - FIX: Footer order: Admin/Settings → Dark Mode → Logout → ©
-//   - Previous: Dark mode toggle, themeService, isDesktop, activeColors
-//
-// FEATURES:
-//   - Gradient background with design system tokens
-//   - ProgressRing per step (completion %)
-//   - Collapsible icon-only mode (~60px)
-//   - Step colors from theme.stepColors
-//   - Smooth expand/collapse animation
-//   - Sub-steps with step accent color
-//   - Admin button, logout, copyright
+// v1.5 — 2026-02-17
+//   - FIX: onCollapseChange prop — notifies App.tsx when sidebar
+//     collapses/expands so main content can adjust marginLeft
+//   - Previous (v1.4): Unified Admin/Settings, Dark mode, collapse
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo } from 'react';
@@ -160,6 +150,8 @@ interface SidebarProps {
   onLanguageSwitch: (lang: 'en' | 'si') => void;
   onSubStepClick: (subStepId: string) => void;
   isLoading: boolean;
+  // ★ v1.5: Notify parent when sidebar collapses/expands
+  onCollapseChange?: (collapsed: boolean) => void;
 }
 
 // ─── Component ───────────────────────────────────────────────
@@ -183,6 +175,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLanguageSwitch,
   onSubStepClick,
   isLoading,
+  // ★ v1.5: Destructure new prop
+  onCollapseChange,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(() => getThemeMode() === 'dark');
@@ -774,10 +768,14 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
             </aside>
 
-      {/* ★ FIX #2: CollapseToggle OUTSIDE <aside> — position: fixed, never clipped */}
+      {/* ★ v1.5: CollapseToggle — now also calls onCollapseChange */}
       {(isDesktop || isSidebarOpen) && (
         <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={() => {
+            const next = !isCollapsed;
+            setIsCollapsed(next);
+            onCollapseChange?.(next);
+          }}
           style={{
             position: 'fixed',
             top: 12,
