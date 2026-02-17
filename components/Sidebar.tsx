@@ -1,7 +1,10 @@
 // components/Sidebar.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Sidebar — Design System Edition
-// v1.0 — 2026-02-17
+// v1.1 — 2026-02-17
+//   - NEW: Dark mode toggle button (sun/moon icon) in footer
+//   - NEW: Dynamic sidebar background via isDark + darkColors
+//   - NEW: themeService integration (getThemeMode, toggleTheme, onThemeChange)
 //
 // FEATURES:
 //   - Gradient background with design system tokens
@@ -14,11 +17,12 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo } from 'react';
-import { colors, stepColors, shadows, radii, spacing, animation, typography, zIndex, type StepColorKey } from '../design/theme.ts';
+import { colors, darkColors, stepColors, shadows, radii, spacing, animation, typography, zIndex, type StepColorKey } from '../design/theme.ts';
 import { ProgressRing } from '../design/components/ProgressRing.tsx';
 import { ICONS, getSteps, getSubSteps } from '../constants.tsx';
 import { TEXT } from '../locales.ts';
 import { isSubStepCompleted } from '../utils.ts';
+import { getThemeMode, toggleTheme, getActiveColors, onThemeChange } from '../services/themeService.ts';
 import type { ProjectData } from '../types.ts';
 
 // ─── Step Icons (SVG for collapsed mode) ─────────────────────
@@ -180,6 +184,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   isLoading,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDark, setIsDark] = useState(() => getThemeMode() === 'dark');
+
+  // Subscribe to theme changes
+  React.useEffect(() => {
+    return onThemeChange((mode) => setIsDark(mode === 'dark'));
+  }, []);
+
+  const activeColors = getActiveColors();
 
   const t = TEXT[language] || TEXT['en'];
   const STEPS = getSteps(language);
@@ -198,8 +210,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     inset: '0 auto 0 0',
     zIndex: zIndex.sidebar,
     width: sidebarWidth,
-    background: `linear-gradient(180deg, ${colors.surface.card} 0%, ${colors.surface.sidebar} 100%)`,
-    borderRight: `1px solid ${colors.border.light}`,
+    background: isDark
+      ? `linear-gradient(180deg, ${darkColors.surface.card} 0%, ${darkColors.surface.sidebar} 100%)`
+      : `linear-gradient(180deg, ${colors.surface.card} 0%, ${colors.surface.sidebar} 100%)`,
+    borderRight: `1px solid ${isDark ? darkColors.border.light : colors.border.light}`,
     display: 'flex',
     flexDirection: 'column',
     transition: `width ${animation.duration.normal} ${animation.easing.default}, transform ${animation.duration.normal} ${animation.easing.default}`,
@@ -678,6 +692,70 @@ const Sidebar: React.FC<SidebarProps> = ({
               title="Admin Panel"
             >
               <span style={{ fontSize: '18px' }}>🛡️</span>
+            </button>
+          )}
+
+          {/* Dark mode toggle — expanded */}
+          {!isCollapsed && (
+            <button
+              onClick={() => { toggleTheme(); }}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                padding: `${spacing.sm} ${spacing.lg}`,
+                borderRadius: radii.lg,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: typography.fontSize.sm,
+                color: colors.text.muted,
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacing.sm,
+                marginBottom: '2px',
+                fontFamily: 'inherit',
+              }}
+            >
+              {isDark ? (
+                <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+              <span>{isDark ? (language === 'si' ? 'Svetli način' : 'Light Mode') : (language === 'si' ? 'Temni način' : 'Dark Mode')}</span>
+            </button>
+          )}
+
+          {/* Dark mode toggle — collapsed */}
+          {isCollapsed && (
+            <button
+              onClick={() => { toggleTheme(); }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                padding: `${spacing.sm} 0`,
+                borderRadius: radii.lg,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                marginBottom: '2px',
+                color: colors.text.muted,
+              }}
+              title={isDark ? 'Light Mode' : 'Dark Mode'}
+            >
+              {isDark ? (
+                <svg style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
             </button>
           )}
 
