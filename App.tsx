@@ -662,6 +662,7 @@ useEffect(() => {
               language={language}
               onCollapseChange={setDashboardCollapsed}
             />
+            
            </div>
         </div>
       )}
