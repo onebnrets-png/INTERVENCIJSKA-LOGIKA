@@ -1,8 +1,12 @@
 // components/AdminPanel.tsx
 // ═══════════════════════════════════════════════════════════════
 // Unified Admin / Settings Panel
-// v2.0 — 2026-02-17
-//   Merges old AdminPanel (users, instructions, audit log) +
+// v2.1 — 2026-02-17
+//   ★ v2.1: EN-only Instructions display (SI variants removed
+//     from buildDefaultInstructionsDisplay and getDefaultPlaceholder).
+//     Removed duplicate inner functions.
+//
+//   v2.0: Merges old AdminPanel (users, instructions, audit log) +
 //   SettingsModal (AI provider, profile/logo, security/2FA)
 //   into a single 5-tab (admin) / 2-tab (regular) modal.
 //
@@ -52,7 +56,7 @@ interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
   language: 'en' | 'si';
-  initialTab?: string; // e.g., 'ai' to open that tab directly
+  initialTab?: string;
 }
 
 type TabId = 'users' | 'instructions' | 'ai' | 'profile' | 'audit';
@@ -318,9 +322,8 @@ const UserAvatar: React.FC<{ name: string; email: string; size?: number }> = ({
   );
 };
 
-// ─── Build default instructions for each section ─────────────
-// ★ v5.0: EN-only — SI variants removed from display.
-// LANGUAGE DIRECTIVES is the ONLY section showing both EN + SI.
+// ─── Build default instructions for display — EN only ────────
+// ★ v2.1: SI variants removed. Only LANGUAGE_DIRECTIVES shows both.
 
 const buildDefaultInstructionsDisplay = (): Record<string, string> => {
   const fmtGates = (gates: string[]): string =>
@@ -414,7 +417,6 @@ const getDefaultPlaceholder = (section: string): string => {
   const defaults = buildDefaultInstructionsDisplay();
   return defaults[section] || `Enter custom ${section} instructions...`;
 };
-
 // ═══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
@@ -489,7 +491,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   const [enrollCode, setEnrollCode] = useState('');
   const [enrollError, setEnrollError] = useState('');
 
-  // ─── App instructions state (user-level, from SettingsModal) ──
+  // ─── App instructions state (user-level) ──────────────────
   const [appInstructions, setAppInstructions] = useState<any>(null);
   const [instructionsSubTab, setInstructionsSubTab] = useState('global');
   const [instructionsChanged, setInstructionsChanged] = useState(false);
@@ -502,12 +504,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
 
   useEffect(() => {
     if (isOpen) {
-      // Load admin data
       if (isUserAdmin) {
         admin.fetchUsers();
         admin.fetchGlobalInstructions();
       }
-      // Load settings data
       loadSettingsData();
     }
   }, [isOpen, isUserAdmin]);
@@ -519,19 +519,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     }
   }, [activeTab, isOpen, isUserAdmin]);
 
-  // ★ FIX: Sync edited instructions — MERGE defaults with overrides
-  // Admin always sees FULL rules, editable, deletable, customizable
+  // ★ v2.1: Sync edited instructions — uses buildDefaultInstructionsDisplay()
   useEffect(() => {
-    const defaults = buildDefaultInstructions();
+    const defaults = buildDefaultInstructionsDisplay();
     const overrides = admin.globalInstructions?.custom_instructions || {};
-    // Merge: override wins if it exists, otherwise show default
     const merged: Record<string, string> = {};
     for (const key of Object.keys(defaults)) {
       merged[key] = (overrides[key] !== undefined && overrides[key] !== null)
         ? overrides[key]
         : defaults[key];
     }
-    // Also include any override keys not in defaults
     for (const key of Object.keys(overrides)) {
       if (!(key in merged)) {
         merged[key] = overrides[key];
@@ -549,7 +546,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     }
   }, [toast]);
 
-  // Clear message after 4s
   useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(''), 4000);
@@ -571,7 +567,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
       setModelName(model || (provider === 'gemini' ? 'gemini-3-pro-preview' : 'deepseek/deepseek-v3.2'));
       setCustomLogo(storageService.getCustomLogo());
 
-      // Deep clone instructions to avoid mutating defaults
       setAppInstructions(JSON.parse(JSON.stringify(getFullInstructions())));
       setInstructionsChanged(false);
 
@@ -766,128 +761,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     setMessage(language === 'si' ? `Razdelek ponastavljen.` : `Section reset to default.`);
     setIsError(false);
   };
-  // ★ FIX: Show default rules as placeholder when no override exists
-  const getDefaultPlaceholder = (section: string): string => {
-    const lang = language;
-    switch (section) {
-      case 'global':
-        return [
-          '── This section has no override. Default hardcoded rules from Instructions.ts are active. ──',
-          '',
-          'To customize, type your rules here and click Save.',
-          'Leave empty to keep using defaults.',
-        ].join('\n');
-      case 'language':
-        return `── LANGUAGE DIRECTIVES (defaults) ──\n\nEN:\n${LANGUAGE_DIRECTIVES.en}\n\n─────────────────\n\nSI:\n${LANGUAGE_DIRECTIVES.si}`;
-      case 'academic':
-        return `── ACADEMIC RIGOR RULES (defaults) ──\n\nEN:\n${ACADEMIC_RIGOR_RULES.en}\n\n─────────────────\n\nSI:\n${ACADEMIC_RIGOR_RULES.si}`;
-      case 'humanization':
-        return `── HUMANIZATION RULES (defaults) ──\n\nEN:\n${HUMANIZATION_RULES.en}\n\n─────────────────\n\nSI:\n${HUMANIZATION_RULES.si}`;
-      case 'projectTitle':
-        return `── PROJECT TITLE RULES (defaults) ──\n\nEN:\n${PROJECT_TITLE_RULES.en}\n\n─────────────────\n\nSI:\n${PROJECT_TITLE_RULES.si}`;
-      case 'mode':
-        return Object.entries(MODE_INSTRUCTIONS).map(([mode, langs]) =>
-          `── ${mode.toUpperCase()} ──\nEN:\n${langs.en}\n\nSI:\n${langs.si}`
-        ).join('\n\n═════════════════\n\n');
-      case 'qualityGates':
-        return Object.entries(QUALITY_GATES).map(([key, langs]) =>
-          `── ${key} ──\nEN:\n${(langs.en || []).join('\n• ')}\n\nSI:\n${(langs.si || []).join('\n• ')}`
-        ).join('\n\n═════════════════\n\n');
-      case 'sectionTask':
-        return Object.entries(SECTION_TASK_INSTRUCTIONS).map(([key, langs]) =>
-          `── ${key} ──\nEN:\n${(langs.en || '').substring(0, 300)}...\n\nSI:\n${(langs.si || '').substring(0, 300)}...`
-        ).join('\n\n═════════════════\n\n');
-      case 'fieldRules': {
-        const labels = FIELD_RULE_LABELS || {};
-        return `── FIELD RULES (defaults) ──\n\n${Object.keys(labels).map(k => `• ${k}: ${labels[k]}`).join('\n')}`;
-      }
-      case 'translation':
-        return '── TRANSLATION RULES ──\nTranslation rules are defined in Instructions.ts.\nOverride here to customize translation behavior for all users.';
-      case 'summary':
-        return '── SUMMARY RULES ──\nSummary condensation rules are defined in Instructions.ts.\nOverride here to customize summary generation.';
-      case 'chapter': {
-        const labels = CHAPTER_LABELS || {};
-        return `── CHAPTER MAPPING (defaults) ──\n\n${Object.keys(labels).map(k => `• ${k}: ${labels[k]}`).join('\n')}`;
-      }
-      default:
-        return 'No default rules available for this section.';
-    }
-  };
-  // ★ FIX: Build full default instructions for every section
-  const buildDefaultInstructions = (): Record<string, string> => {
-    const defaults: Record<string, string> = {};
 
-    // Global Rules
-    defaults['global'] = [
-      '═══ GLOBAL RULES ═══',
-      'These are the master rules that govern ALL AI content generation.',
-      '',
-      'ARCHITECTURE PRINCIPLE:',
-      '  Instructions.ts is the SINGLE SOURCE OF TRUTH for all AI rules.',
-      '  geminiService.ts reads from here — it has ZERO own rules.',
-      '',
-      'Edit below to customize. Click Save to apply to all users.',
-    ].join('\n');
-
-    // Language Rules
-    defaults['language'] = `═══ LANGUAGE DIRECTIVES ═══\n\n── English ──\n${LANGUAGE_DIRECTIVES.en}\n\n── Slovenščina ──\n${LANGUAGE_DIRECTIVES.si}`;
-
-    // Academic Writing
-    defaults['academic'] = `═══ ACADEMIC RIGOR & CITATION RULES ═══\n\n── English ──\n${ACADEMIC_RIGOR_RULES.en}\n\n── Slovenščina ──\n${ACADEMIC_RIGOR_RULES.si}`;
-
-    // Humanization
-    defaults['humanization'] = `═══ HUMANIZATION RULES ═══\n\n── English ──\n${HUMANIZATION_RULES.en}\n\n── Slovenščina ──\n${HUMANIZATION_RULES.si}`;
-
-    // Project Title
-    defaults['projectTitle'] = `═══ PROJECT TITLE RULES ═══\n\n── English ──\n${PROJECT_TITLE_RULES.en}\n\n── Slovenščina ──\n${PROJECT_TITLE_RULES.si}`;
-
-    // Mode Rules
-    defaults['mode'] = Object.entries(MODE_INSTRUCTIONS).map(([mode, langs]) =>
-      `═══ MODE: ${mode.toUpperCase()} ═══\n\n── English ──\n${langs.en}\n\n── Slovenščina ──\n${langs.si}`
-    ).join('\n\n════════════════════════════════════\n\n');
-
-    // Quality Gates
-    defaults['qualityGates'] = Object.entries(QUALITY_GATES).map(([section, langs]) =>
-      `═══ QUALITY GATES: ${section} ═══\n\n── English ──\n${(langs.en || []).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n')}\n\n── Slovenščina ──\n${(langs.si || []).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n')}`
-    ).join('\n\n════════════════════════════════════\n\n');
-
-    // Section Tasks
-    defaults['sectionTask'] = Object.entries(SECTION_TASK_INSTRUCTIONS).map(([section, langs]) =>
-      `═══ SECTION TASK: ${section} ═══\n\n── English ──\n${langs.en || '(empty)'}\n\n── Slovenščina ──\n${langs.si || '(empty)'}`
-    ).join('\n\n════════════════════════════════════\n\n');
-
-    // Field Rules
-    const fieldLabels = FIELD_RULE_LABELS || {};
-    const fullInstr = getFullInstructions();
-    const fieldRulesObj = fullInstr?.FIELD_RULES || {};
-    defaults['fieldRules'] = `═══ FIELD RULES ═══\n\n` + Object.entries(fieldRulesObj).map(([key, val]: [string, any]) => {
-      const label = (fieldLabels as Record<string, string>)[key] || key;
-      if (typeof val === 'string') return `── ${label} ──\n${val}`;
-      if (typeof val === 'object' && val !== null) {
-        return `── ${label} ──\nEN: ${val.en || '(empty)'}\nSI: ${val.si || '(empty)'}`;
-      }
-      return `── ${label} ──\n${JSON.stringify(val)}`;
-    }).join('\n\n');
-
-    // Translation
-    const transRules = fullInstr?.TRANSLATION_RULES;
-    defaults['translation'] = `═══ TRANSLATION RULES ═══\n\n${typeof transRules === 'string' ? transRules : (typeof transRules === 'object' ? `EN: ${transRules?.en || '(empty)'}\n\nSI: ${transRules?.si || '(empty)'}` : '(No translation rules defined)')}`;
-
-    // Summary
-    const summaryRules = fullInstr?.SUMMARY_RULES;
-    defaults['summary'] = `═══ SUMMARY RULES ═══\n\n${typeof summaryRules === 'string' ? summaryRules : (typeof summaryRules === 'object' ? `EN: ${summaryRules?.en || '(empty)'}\n\nSI: ${summaryRules?.si || '(empty)'}` : '(No summary rules defined)')}`;
-
-    // Chapter Mapping
-    const chapterLabels = CHAPTER_LABELS || {};
-    const chaptersObj = fullInstr?.CHAPTERS || {};
-    defaults['chapter'] = `═══ CHAPTER MAPPING ═══\n\n` + Object.entries(chaptersObj).map(([key, val]: [string, any]) => {
-      const label = (chapterLabels as Record<string, string>)[key] || key;
-      const text = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
-      return `── ${label} ──\n${text}`;
-    }).join('\n\n════════════════════════════════════\n\n');
-
-    return defaults;
-  };
   // ─── Tab save router ──────────────────────────────────────
 
   const handleSave = () => {
@@ -952,8 +826,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     color: colors.text.heading,
     marginBottom: '6px',
   };
-
-  // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════
 
