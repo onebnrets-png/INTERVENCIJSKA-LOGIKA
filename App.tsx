@@ -164,8 +164,11 @@ const App = () => {
   // ─── Dark mode reactive state ────────────────────────────────────
   const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
   useEffect(() => {
-    return onThemeChange((mode) => setIsDark(mode === 'dark'));
-  }, []);
+    if (auth.currentUser) {
+      ensureGlobalInstructionsLoaded();
+      adminHook.checkAdminStatus();
+    }
+  }, [auth.currentUser]);
   const colors = isDark ? darkColors : lightColors;
 
   const [modalConfig, setModalConfig] = useState({
