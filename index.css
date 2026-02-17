@@ -382,3 +382,66 @@
   border-color: color-mix(in srgb, var(--step-card-border, #3B4F6B) 30%, #4B6282 70%) !important;
   color: #E2E8F0 !important;
 }
+/* ═══ DARK MODE v3 — GLOBAL TEXT COLOR INHERITANCE FIX ═══
+   Problem: Most ProjectDisplay elements have NO CSS classes and NO inline
+   color styles. They inherit text color from the root, which defaults to
+   dark (browser default). This sets the root text color for dark mode so
+   ALL elements without explicit color inherit a readable light color.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Root-level text color for dark mode */
+html.dark,
+html.dark body {
+  color: #E2E8F0 !important;
+}
+
+/* Common block elements that may not have classes */
+html.dark p,
+html.dark span,
+html.dark div,
+html.dark label,
+html.dark li,
+html.dark td,
+html.dark th,
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  color: inherit;
+}
+
+/* Ensure textarea and inputs are readable */
+html.dark textarea,
+html.dark input[type="text"],
+html.dark input[type="number"],
+html.dark input[type="email"],
+html.dark input[type="password"],
+html.dark input[type="date"],
+html.dark select {
+  background-color: #162032 !important;
+  color: #E2E8F0 !important;
+  border-color: #475569 !important;
+}
+
+html.dark textarea::placeholder,
+html.dark input::placeholder {
+  color: #64748B !important;
+}
+
+/* Links in dark mode */
+html.dark a {
+  color: #93C5FD;
+}
+
+/* Table headers */
+html.dark thead th {
+  color: #94A3B8 !important;
+}
+
+/* Muted text elements */
+html.dark .text-muted,
+html.dark [style*="muted"] {
+  color: #94A3B8;
+}
