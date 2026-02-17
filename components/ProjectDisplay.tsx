@@ -973,7 +973,14 @@ const ProjectDisplay = (props) => {
       
       {isLoading && <div className="p-4 m-6 text-center text-sky-700 bg-sky-50 rounded-lg animate-pulse border border-sky-100 font-medium">{typeof isLoading === 'string' ? isLoading : t.loading}</div>}
 
-      <div id="main-scroll-container" className="flex-1 overflow-y-auto p-6 scroll-smooth relative">
+        <div 
+        id="main-scroll-container" 
+        className="step-content flex-1 overflow-y-auto p-6 scroll-smooth relative"
+        style={{
+          '--step-card-bg': stepColors[sectionKey as keyof typeof stepColors]?.light || '#FFFFFF',
+          '--step-card-border': stepColors[sectionKey as keyof typeof stepColors]?.border || '#E2E8F0',
+        } as React.CSSProperties}
+      >
         <div className="max-w-5xl mx-auto pb-20">
           <div className="animate-fadeIn" key={activeStepId}>
             {renderContent()}
