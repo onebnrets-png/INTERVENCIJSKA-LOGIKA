@@ -1,15 +1,8 @@
 // components/ProjectListModal.tsx
-// ═══════════════════════════════════════════════════════════════
-// Project list modal — Design System Edition
-// v2.0 — 2026-02-17
-//   - Redesigned with design system tokens
-//   - Escape key to close
-//   - Smooth animations
-//   - Empty state illustration
-// ═══════════════════════════════════════════════════════════════
-
-import React, { useEffect, useCallback } from 'react';
-import { colors, shadows, radii, spacing, animation, typography } from '../design/theme.ts';
+// v3.0 - 2026-02-17  Dark-mode: isDark + colors pattern
+import React, { useState, useEffect, useCallback } from 'react';
+import { lightColors, darkColors, shadows, radii, spacing, animation, typography } from '../design/theme.ts';
+import { getThemeMode, onThemeChange } from '../services/themeService.ts';
 import { TEXT } from '../locales.ts';
 
 interface ProjectListModalProps {
@@ -27,6 +20,13 @@ const ProjectListModal: React.FC<ProjectListModalProps> = ({
   isOpen, onClose, projects, currentProjectId,
   onSelectProject, onCreateProject, onDeleteProject, language
 }) => {
+  const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
+  useEffect(() => {
+    const unsub = onThemeChange((m) => setIsDark(m === 'dark'));
+    return unsub;
+  }, []);
+  const colors = isDark ? darkColors : lightColors;
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
   }, [onClose]);
@@ -156,7 +156,7 @@ const ProjectListModal: React.FC<ProjectListModalProps> = ({
                       padding: spacing.lg,
                       borderRadius: radii.xl,
                       border: `2px solid ${isCurrent ? colors.primary[300] : colors.border.light}`,
-                      background: isCurrent ? colors.primary[50] : colors.surface.card,
+                      background: isCurrent ? (isDark ? 'rgba(99,102,241,0.15)' : colors.primary[50]) : colors.surface.card,
                       boxShadow: shadows.card,
                       display: 'flex',
                       alignItems: 'center',
@@ -186,7 +186,7 @@ const ProjectListModal: React.FC<ProjectListModalProps> = ({
                         <h4 style={{
                           fontSize: typography.fontSize.base,
                           fontWeight: typography.fontWeight.semibold,
-                          color: isCurrent ? colors.primary[800] : colors.text.heading,
+                          color: isCurrent ? colors.primary[isDark ? 200 : 800] : colors.text.heading,
                           margin: 0,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -197,8 +197,8 @@ const ProjectListModal: React.FC<ProjectListModalProps> = ({
                         {isCurrent && (
                           <span style={{
                             fontSize: '10px',
-                            background: colors.primary[200],
-                            color: colors.primary[700],
+                            background: colors.primary[isDark ? 700 : 200],
+                            color: colors.primary[isDark ? 200 : 700],
                             padding: '2px 8px',
                             borderRadius: radii.full,
                             fontWeight: typography.fontWeight.bold,
@@ -233,7 +233,7 @@ const ProjectListModal: React.FC<ProjectListModalProps> = ({
                         flexShrink: 0,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = colors.error[50];
+                        e.currentTarget.style.background = isDark ? 'rgba(239,68,68,0.15)' : colors.error[50];
                         e.currentTarget.style.color = colors.error[500];
                       }}
                       onMouseLeave={(e) => {
@@ -284,7 +284,7 @@ const ProjectListModal: React.FC<ProjectListModalProps> = ({
               gap: spacing.sm,
               padding: `${spacing.md} ${spacing.xl}`,
               background: colors.primary.gradient,
-              color: colors.text.inverse,
+              color: '#FFFFFF',
               fontWeight: typography.fontWeight.semibold,
               fontSize: typography.fontSize.sm,
               borderRadius: radii.xl,

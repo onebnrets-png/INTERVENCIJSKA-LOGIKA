@@ -1,11 +1,8 @@
 // components/SummaryModal.tsx
-// ═══════════════════════════════════════════════════════════════
-// Project summary modal — Design System Edition
-// v1.0 — 2026-02-17
-// ═══════════════════════════════════════════════════════════════
-
-import React, { useEffect, useCallback } from 'react';
-import { colors, shadows, radii, spacing, animation, typography } from '../design/theme.ts';
+// v2.0 - 2026-02-17  Dark-mode: isDark + colors pattern
+import React, { useState, useEffect, useCallback } from 'react';
+import { lightColors, darkColors, shadows, radii, spacing, animation, typography } from '../design/theme.ts';
+import { getThemeMode, onThemeChange } from '../services/themeService.ts';
 import { TEXT } from '../locales.ts';
 
 interface SummaryModalProps {
@@ -22,6 +19,13 @@ const SummaryModal: React.FC<SummaryModalProps> = ({
   isOpen, onClose, summaryText, isGenerating,
   onRegenerate, onDownloadDocx, language
 }) => {
+  const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
+  useEffect(() => {
+    const unsub = onThemeChange((m) => setIsDark(m === 'dark'));
+    return unsub;
+  }, []);
+  const colors = isDark ? darkColors : lightColors;
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
   }, [onClose]);
@@ -177,16 +181,16 @@ const SummaryModal: React.FC<SummaryModalProps> = ({
                 padding: `${spacing.sm} ${spacing.lg}`,
                 fontSize: typography.fontSize.sm,
                 fontWeight: typography.fontWeight.medium,
-                color: colors.primary[700],
-                background: colors.primary[50],
-                border: `1px solid ${colors.primary[200]}`,
+                color: colors.primary[isDark ? 200 : 700],
+                background: isDark ? 'rgba(99,102,241,0.1)' : colors.primary[50],
+                border: `1px solid ${colors.primary[isDark ? 700 : 200]}`,
                 borderRadius: radii.lg,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 transition: `all ${animation.duration.fast}`,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = colors.primary[100]; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = colors.primary[50]; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.2)' : colors.primary[100]; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.1)' : colors.primary[50]; }}
             >
               {t.modals.regenerateBtn}
             </button>
@@ -196,7 +200,7 @@ const SummaryModal: React.FC<SummaryModalProps> = ({
                 padding: `${spacing.sm} ${spacing.lg}`,
                 fontSize: typography.fontSize.sm,
                 fontWeight: typography.fontWeight.semibold,
-                color: colors.text.inverse,
+                color: '#FFFFFF',
                 background: colors.success[600],
                 border: 'none',
                 borderRadius: radii.lg,

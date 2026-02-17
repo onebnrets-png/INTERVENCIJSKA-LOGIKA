@@ -1,28 +1,13 @@
 // components/ProjectDashboard.tsx
-// ═══════════════════════════════════════════════════════════════
-// Project Dashboard — overview with structural visualizations.
-// Shows: Readiness Radar, Risk Categories, Completeness Bars,
-//        Risk Severity, and project meta info.
-//
-// v1.0 — 2026-02-17
-//
-// USAGE: Opened from toolbar Dashboard button in App.tsx.
-//   <ProjectDashboard
-//     isOpen={isDashboardOpen}
-//     onClose={() => setIsDashboardOpen(false)}
-//     projectData={pm.projectData}
-//     language={language}
-//   />
-// ═══════════════════════════════════════════════════════════════
-
-import React, { useMemo } from 'react';
+// v2.0 - 2026-02-17  Dark-mode: isDark + colors pattern
+import React, { useState, useEffect, useMemo } from 'react';
 import { extractStructuralData } from '../services/DataExtractionService.ts';
 import ChartRenderer from './ChartRenderer.tsx';
-import { theme } from '../design/theme.ts';
+import { lightColors, darkColors, shadows, radii, spacing, typography } from '../design/theme.ts';
+import { getThemeMode, onThemeChange } from '../services/themeService.ts';
 import { ProgressRing } from '../design/index.ts';
 
-// ─── Props ───────────────────────────────────────────────────
-
+// --- Props ---
 interface ProjectDashboardProps {
   isOpen: boolean;
   onClose: () => void;
@@ -30,21 +15,17 @@ interface ProjectDashboardProps {
   language: 'en' | 'si';
 }
 
-// ─── Section completeness calculator ─────────────────────────
-
+// --- Section completeness calculator ---
 const calculateOverallCompleteness = (projectData: any): number => {
   const sections = [
     'problemAnalysis', 'projectIdea', 'generalObjectives',
     'specificObjectives', 'activities', 'outputs',
   ];
-
   let totalScore = 0;
-  let totalSections = sections.length;
-
+  const totalSections = sections.length;
   for (const key of sections) {
     const data = projectData?.[key];
     if (!data) continue;
-
     if (Array.isArray(data)) {
       if (data.length === 0) continue;
       const filled = data.filter((item: any) => {
@@ -69,42 +50,20 @@ const calculateOverallCompleteness = (projectData: any): number => {
       totalScore += filled.length / values.length;
     }
   }
-
   return Math.round((totalScore / totalSections) * 100);
 };
 
-// ─── Meta info card ──────────────────────────────────────────
-
-const MetaCard: React.FC<{ label: string; value: string; icon?: string }> = ({ label, value, icon }) => (
-  <div style={{
-    backgroundColor: 'white',
-    borderRadius: theme.radii.lg,
-    border: `1px solid ${theme.colors.border.light}`,
-    padding: '16px 20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  }}>
-    {icon && <span style={{ fontSize: '24px' }}>{icon}</span>}
-    <div>
-      <p style={{ fontSize: '11px', fontWeight: 600, color: theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
-        {label}
-      </p>
-      <p style={{ fontSize: '16px', fontWeight: 700, color: theme.colors.text.heading, margin: '2px 0 0' }}>
-        {value || '—'}
-      </p>
-    </div>
-  </div>
-);
-
-// ─── Component ───────────────────────────────────────────────
-
+// --- Component ---
 const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
-  isOpen,
-  onClose,
-  projectData,
-  language,
+  isOpen, onClose, projectData, language,
 }) => {
+  const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
+  useEffect(() => {
+    const unsub = onThemeChange((m) => setIsDark(m === 'dark'));
+    return unsub;
+  }, []);
+  const colors = isDark ? darkColors : lightColors;
+
   const t = language === 'si' ? {
     title: 'Pregled projekta',
     projectTitle: 'Naziv projekta',
@@ -150,6 +109,29 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   if (!isOpen) return null;
 
+  // Meta info card (inline)
+  const MetaCard = ({ label, value, icon }: { label: string; value: string; icon?: string }) => (
+    <div style={{
+      backgroundColor: colors.surface.card,
+      borderRadius: radii.lg,
+      border: `1px solid ${colors.border.light}`,
+      padding: '16px 20px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+    }}>
+      {icon && <span style={{ fontSize: '24px' }}>{icon}</span>}
+      <div>
+        <p style={{ fontSize: '11px', fontWeight: 600, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+          {label}
+        </p>
+        <p style={{ fontSize: '16px', fontWeight: 700, color: colors.text.heading, margin: '2px 0 0' }}>
+          {value || '\u2014'}
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -160,44 +142,44 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         padding: '16px',
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: colors.surface.overlayBlur,
         backdropFilter: 'blur(4px)',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         style={{
-          backgroundColor: theme.colors.surface.background,
-          borderRadius: theme.radii.xl,
-          boxShadow: theme.shadows.xl,
+          backgroundColor: colors.surface.background,
+          borderRadius: radii.xl,
+          boxShadow: shadows.xl,
           width: '100%',
           maxWidth: '1100px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          border: `1px solid ${theme.colors.border.light}`,
+          border: `1px solid ${colors.border.light}`,
           animation: 'fadeIn 0.2s ease-out',
         }}
       >
         {/* Header */}
         <div style={{
           padding: '20px 24px',
-          borderBottom: `1px solid ${theme.colors.border.light}`,
-          backgroundColor: 'white',
+          borderBottom: `1px solid ${colors.border.light}`,
+          backgroundColor: colors.surface.card,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: theme.colors.text.heading }}>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: colors.text.heading }}>
               {t.title}
             </h2>
             <ProgressRing
               value={overallCompleteness}
               size={48}
               strokeWidth={5}
-              color={overallCompleteness >= 80 ? theme.colors.success[500] : overallCompleteness >= 40 ? theme.colors.warning[500] : theme.colors.error[500]}
+              color={overallCompleteness >= 80 ? colors.success[500] : overallCompleteness >= 40 ? colors.warning[500] : colors.error[500]}
               label={`${overallCompleteness}%`}
             />
           </div>
@@ -208,15 +190,15 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               border: 'none',
               cursor: 'pointer',
               padding: '8px',
-              borderRadius: theme.radii.md,
-              color: theme.colors.text.muted,
+              borderRadius: radii.md,
+              color: colors.text.muted,
               fontSize: '20px',
               lineHeight: 1,
             }}
-            onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.backgroundColor = theme.colors.surface.sidebar; }}
+            onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.backgroundColor = colors.surface.sidebar; }}
             onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
           >
-            ✕
+            \u2715
           </button>
         </div>
 
@@ -224,17 +206,17 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
           {/* Meta cards row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-            <MetaCard label={t.projectTitle} value={pi?.projectTitle || ''} icon="📋" />
-            <MetaCard label={t.acronym} value={pi?.projectAcronym || ''} icon="🏷️" />
-            <MetaCard label={t.duration} value={pi?.durationMonths ? `${pi.durationMonths} ${t.months}` : ''} icon="📅" />
-            <MetaCard label={t.startDate} value={pi?.startDate || ''} icon="🚀" />
+            <MetaCard label={t.projectTitle} value={pi?.projectTitle || ''} icon="\uD83D\uDCCB" />
+            <MetaCard label={t.acronym} value={pi?.projectAcronym || ''} icon="\uD83C\uDFF7\uFE0F" />
+            <MetaCard label={t.duration} value={pi?.durationMonths ? `${pi.durationMonths} ${t.months}` : ''} icon="\uD83D\uDCC5" />
+            <MetaCard label={t.startDate} value={pi?.startDate || ''} icon="\uD83D\uDE80" />
           </div>
 
           {/* Stats row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
-            <MetaCard label={t.workPackages} value={String(wpCount)} icon="📦" />
-            <MetaCard label={t.risks} value={String(riskCount)} icon="⚠️" />
-            <MetaCard label={t.objectives} value={String(objCount)} icon="🎯" />
+            <MetaCard label={t.workPackages} value={String(wpCount)} icon="\uD83D\uDCE6" />
+            <MetaCard label={t.risks} value={String(riskCount)} icon="\u26A0\uFE0F" />
+            <MetaCard label={t.objectives} value={String(objCount)} icon="\uD83C\uDFAF" />
           </div>
 
           {/* Charts */}
@@ -254,7 +236,7 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             <div style={{
               textAlign: 'center',
               padding: '60px 20px',
-              color: theme.colors.text.muted,
+              color: colors.text.muted,
               fontSize: '14px',
             }}>
               {t.noData}
@@ -265,8 +247,8 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         {/* Footer */}
         <div style={{
           padding: '16px 24px',
-          borderTop: `1px solid ${theme.colors.border.light}`,
-          backgroundColor: 'white',
+          borderTop: `1px solid ${colors.border.light}`,
+          backgroundColor: colors.surface.card,
           display: 'flex',
           justifyContent: 'flex-end',
         }}>
@@ -276,14 +258,14 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               padding: '8px 20px',
               fontSize: '14px',
               fontWeight: 600,
-              color: theme.colors.text.body,
-              backgroundColor: theme.colors.surface.sidebar,
-              border: `1px solid ${theme.colors.border.light}`,
-              borderRadius: theme.radii.md,
+              color: colors.text.body,
+              backgroundColor: colors.surface.sidebar,
+              border: `1px solid ${colors.border.light}`,
+              borderRadius: radii.md,
               cursor: 'pointer',
             }}
-            onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.backgroundColor = theme.colors.border.light; }}
-            onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.backgroundColor = theme.colors.surface.sidebar; }}
+            onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.backgroundColor = colors.border.light; }}
+            onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.backgroundColor = colors.surface.sidebar; }}
           >
             {t.close}
           </button>

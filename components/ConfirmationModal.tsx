@@ -1,16 +1,8 @@
 // components/ConfirmationModal.tsx
-// ═══════════════════════════════════════════════════════════════
-// Universal confirmation/choice modal — Design System Edition
-// v2.0 — 2026-02-17
-//   - Redesigned with design system tokens (colors, shadows, radii, etc.)
-//   - Preserved: 3-option card layout for generation choice
-//   - Preserved: 2-button layout for legacy modals
-//   - NEW: Smooth scaleIn animation, backdrop blur
-//   - NEW: Escape key to close
-// ═══════════════════════════════════════════════════════════════
-
-import React, { useEffect, useCallback } from 'react';
-import { colors, shadows, radii, spacing, animation, typography } from '../design/theme.ts';
+// v3.0 - 2026-02-17  Dark-mode: isDark + colors pattern
+import React, { useState, useEffect, useCallback } from 'react';
+import { lightColors, darkColors, shadows, radii, spacing, animation, typography } from '../design/theme.ts';
+import { getThemeMode, onThemeChange } from '../services/themeService.ts';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -35,6 +27,13 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   confirmText, secondaryText, tertiaryText, cancelText,
   confirmDesc, secondaryDesc, tertiaryDesc
 }) => {
+  const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
+  useEffect(() => {
+    const unsub = onThemeChange((m) => setIsDark(m === 'dark'));
+    return unsub;
+  }, []);
+  const colors = isDark ? darkColors : lightColors;
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onCancel();
   }, [onCancel]);
@@ -51,27 +50,9 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   const isThreeOptionLayout = !!(onSecondary && onTertiary);
 
   const optionCards = isThreeOptionLayout ? [
-    {
-      onClick: onConfirm,
-      text: confirmText,
-      desc: confirmDesc,
-      icon: '✦',
-      color: colors.success,
-    },
-    {
-      onClick: onSecondary!,
-      text: secondaryText,
-      desc: secondaryDesc,
-      icon: '+',
-      color: colors.primary,
-    },
-    {
-      onClick: onTertiary!,
-      text: tertiaryText,
-      desc: tertiaryDesc,
-      icon: '↻',
-      color: colors.warning,
-    },
+    { onClick: onConfirm, text: confirmText, desc: confirmDesc, icon: '\u2726', color: colors.success },
+    { onClick: onSecondary!, text: secondaryText, desc: secondaryDesc, icon: '+', color: colors.primary },
+    { onClick: onTertiary!, text: tertiaryText, desc: tertiaryDesc, icon: '\u21BB', color: colors.warning },
   ] : [];
 
   return (
@@ -142,8 +123,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     textAlign: 'left',
                     padding: spacing.lg,
                     borderRadius: radii.xl,
-                    border: `2px solid ${card.color[200]}`,
-                    background: card.color[50],
+                    border: `2px solid ${isDark ? card.color[700] : card.color[200]}`,
+                    background: isDark ? `rgba(${idx === 0 ? '16,185,129' : idx === 1 ? '99,102,241' : '245,158,11'}, 0.1)` : card.color[50],
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -152,14 +133,14 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     fontFamily: 'inherit',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = card.color[100];
-                    e.currentTarget.style.borderColor = card.color[300];
+                    e.currentTarget.style.background = isDark ? `rgba(${idx === 0 ? '16,185,129' : idx === 1 ? '99,102,241' : '245,158,11'}, 0.2)` : card.color[100];
+                    e.currentTarget.style.borderColor = isDark ? card.color[500] : card.color[300];
                     e.currentTarget.style.transform = 'translateY(-1px)';
                     e.currentTarget.style.boxShadow = shadows.md;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = card.color[50];
-                    e.currentTarget.style.borderColor = card.color[200];
+                    e.currentTarget.style.background = isDark ? `rgba(${idx === 0 ? '16,185,129' : idx === 1 ? '99,102,241' : '245,158,11'}, 0.1)` : card.color[50];
+                    e.currentTarget.style.borderColor = isDark ? card.color[700] : card.color[200];
                     e.currentTarget.style.transform = 'none';
                     e.currentTarget.style.boxShadow = 'none';
                   }}
@@ -169,7 +150,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     height: 32,
                     borderRadius: radii.full,
                     background: card.color[500],
-                    color: colors.text.inverse,
+                    color: '#FFFFFF',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -182,7 +163,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                   <div>
                     <div style={{
                       fontWeight: typography.fontWeight.semibold,
-                      color: card.color[800],
+                      color: isDark ? card.color[200] : card.color[800],
                       fontSize: typography.fontSize.sm,
                     }}>
                       {card.text}
@@ -190,7 +171,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     {card.desc && (
                       <div style={{
                         fontSize: typography.fontSize.xs,
-                        color: card.color[600],
+                        color: isDark ? card.color[300] : card.color[600],
                         marginTop: 2,
                       }}>
                         {card.desc}
@@ -247,19 +228,19 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     padding: `${spacing.sm} ${spacing.lg}`,
                     fontSize: typography.fontSize.sm,
                     fontWeight: typography.fontWeight.medium,
-                    color: colors.primary[700],
-                    background: colors.primary[50],
-                    border: `1px solid ${colors.primary[200]}`,
+                    color: colors.primary[isDark ? 200 : 700],
+                    background: isDark ? 'rgba(99,102,241,0.1)' : colors.primary[50],
+                    border: `1px solid ${colors.primary[isDark ? 700 : 200]}`,
                     borderRadius: radii.lg,
                     cursor: 'pointer',
                     transition: `all ${animation.duration.fast}`,
                     fontFamily: 'inherit',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = colors.primary[100];
+                    e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.2)' : colors.primary[100];
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = colors.primary[50];
+                    e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.1)' : colors.primary[50];
                   }}
                 >
                   {secondaryText}
@@ -271,7 +252,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                   padding: `${spacing.sm} ${spacing.xl}`,
                   fontSize: typography.fontSize.sm,
                   fontWeight: typography.fontWeight.semibold,
-                  color: colors.text.inverse,
+                  color: '#FFFFFF',
                   background: colors.primary.gradient,
                   border: 'none',
                   borderRadius: radii.lg,
