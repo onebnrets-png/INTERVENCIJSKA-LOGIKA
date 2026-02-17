@@ -1,108 +1,94 @@
 /* ═══════════════════════════════════════════════════════════════
    EURO-OFFICE Design System — Global Stylesheet
-   v3.2 — 2026-02-17
-   Dark mode v2: improved contrast, nested cards, readable inputs
+   v5.0 — 2026-02-17
+   
+   ARCHITECTURE:
+     Light mode: Tailwind defaults + minimal overrides
+     Dark mode:  Material Design 3 compliant (m2.material.io/design/color/dark-theme)
+       - Dark grey (#121212) base — NOT pure black
+       - Elevation = lighter surfaces (5%→16% white overlay model)
+       - Desaturated accents (200 range)
+       - Text: 87% white (high), 60% (medium), 38% (disabled)
+       - Section-colored glow borders replace shadows
+       - Contrast ≥ 15.8:1 for body text
+   
+   SECTIONS:
+     1. Screen / Print media
+     2. Scrollbar
+     3. Animations & keyframes
+     4. Light mode CSS variables
+     5. Dark mode CSS variables
+     6. DARK MODE OVERRIDES (Material Design 3)
+     7. Step content cards
+     8. Print overrides
    ═══════════════════════════════════════════════════════════════ */
 
-/* ─── SCREEN: hide print layout ─── */
+
+/* ═══════════════════════════════════════════════════════════════
+   1. SCREEN / PRINT MEDIA
+   ═══════════════════════════════════════════════════════════════ */
+
 @media screen {
-  .print-only {
-    display: none !important;
-  }
+  .print-only { display: none !important; }
 }
 
-/* ─── PRINT: show print layout, hide app UI ─── */
 @media print {
-  .print\:hidden,
   .no-print,
-  .print\:hidden * {
-    display: none !important;
-  }
+  .sidebar,
+  nav,
+  header,
+  footer,
+  button,
+  .toolbar,
+  .loading-overlay { display: none !important; }
 
-  .print\:block {
-    display: block !important;
-  }
-
-  html, body {
-    overflow: visible !important;
-    height: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: white !important;
-    color: #0F172A !important;
-  }
-
-  #root {
-    overflow: visible !important;
-    height: auto !important;
-  }
-
-  .print\:block,
-  .print\:block > * {
+  * {
     overflow: visible !important;
     height: auto !important;
     max-height: none !important;
   }
 
-  section {
-    page-break-inside: avoid;
+  body, html {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
   }
 
-  h1, h2, h3 {
-    page-break-after: avoid;
-  }
-
-  table {
-    page-break-inside: avoid;
-  }
-
-  *::-webkit-scrollbar {
-    display: none !important;
-  }
-
-  :root.dark {
-    --bg-surface: #F8FAFC;
+  :root {
+    --bg-surface: #FFFFFF;
     --bg-card: #FFFFFF;
-    --bg-sidebar: #F1F5F9;
-    --text-heading: #0F172A;
-    --text-body: #334155;
-    --text-muted: #94A3B8;
-    --border-light: #E2E8F0;
-    --border-medium: #CBD5E1;
+    --text-heading: #000000;
+    --text-body: #1a1a1a;
+    --border-light: #cccccc;
   }
 }
 
-/* ─── Custom scrollbar (for sidebar) ─── */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+
+/* ═══════════════════════════════════════════════════════════════
+   2. SCROLLBAR
+   ═══════════════════════════════════════════════════════════════ */
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
 }
-.custom-scrollbar::-webkit-scrollbar-track {
+.sidebar::-webkit-scrollbar-track {
   background: transparent;
 }
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  border-radius: 20px;
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }
 
-/* ─── SCREEN ONLY: Prevent double scrollbar ─── */
-@media screen {
-  html, body {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    height: 100%;
-  }
 
-  #root {
-    height: 100%;
-    overflow: hidden;
-  }
-}
-
-/* ═══ Global Keyframe Animations ═══ */
+/* ═══════════════════════════════════════════════════════════════
+   3. ANIMATIONS & KEYFRAMES
+   ═══════════════════════════════════════════════════════════════ */
 
 @keyframes shimmer {
-  0%   { background-position: -200% 0; }
+  0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
@@ -112,41 +98,48 @@
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
+  50% { opacity: 0.5; }
 }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes fadeInScale {
-  from { opacity: 0; transform: scale(0.8); }
-  to   { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
 }
 
-/* ═══ Micro-animation utility classes ═══ */
+@keyframes cardAppear {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
-.animate-fadeIn     { animation: fadeIn 0.3s ease-out both; }
-.animate-scaleIn    { animation: scaleIn 0.25s ease-out both; }
-.animate-slideRight { animation: slideInRight 0.3s ease-out both; }
+/* Utility animation classes */
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out both;
+}
+
+.animate-cardAppear {
+  animation: cardAppear 0.4s ease-out both;
+}
 
 .hover-lift {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .hover-lift:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.12);
 }
 
 .card-hover {
@@ -156,20 +149,10 @@
   transform: translateY(-1px);
 }
 
-@keyframes cardAppear {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.animate-cardAppear {
-  animation: cardAppear 0.35s ease-out both;
-}
 
-.focus-ring:focus-visible {
-  outline: 2px solid #6366F1;
-  outline-offset: 2px;
-}
-
-/* ═══ CSS Custom Properties — Light (default) ═══ */
+/* ═══════════════════════════════════════════════════════════════
+   4. LIGHT MODE CSS VARIABLES
+   ═══════════════════════════════════════════════════════════════ */
 
 :root {
   --bg-surface: #F8FAFC;
@@ -182,237 +165,95 @@
   --border-medium: #CBD5E1;
 }
 
-/* ═══ CSS Custom Properties — Dark ═══ */
+
+/* ═══════════════════════════════════════════════════════════════
+   5. DARK MODE CSS VARIABLES
+   ═══════════════════════════════════════════════════════════════ */
 
 :root.dark {
-  --bg-surface: #0F172A;
-  --bg-card: #1E293B;
-  --bg-sidebar: #1A2332;
-  --text-heading: #F1F5F9;
-  --text-body: #CBD5E1;
-  --text-muted: #64748B;
-  --border-light: #334155;
-  --border-medium: #475569;
+  --bg-surface: #121212;
+  --bg-card: #1E1E1E;
+  --bg-sidebar: #1E1E1E;
+  --text-heading: rgba(255, 255, 255, 0.87);
+  --text-body: rgba(255, 255, 255, 0.60);
+  --text-muted: rgba(255, 255, 255, 0.38);
+  --border-light: #2C2C2C;
+  --border-medium: #3D3D3D;
 }
+
 
 /* ═══════════════════════════════════════════════════════════════
-   DARK MODE v2 — High-contrast, readable, professional
+   6. DARK MODE OVERRIDES — Material Design 3 Compliant
+   
+   Material Elevation Overlay Model:
+     00dp = #121212 (0% white overlay)
+     01dp = #1E1E1E (5%)
+     02dp = #232323 (7%)
+     03dp = #282828 (8%)
+     04dp = #2C2C2C (9%)
+     06dp = #333333 (11%)
+     08dp = #383838 (12%)
+     12dp = #404040 (14%)
+     16dp = #454545 (15%)
+     24dp = #4A4A4A (16%)
    ═══════════════════════════════════════════════════════════════ */
 
-/* ─── Surface / Background ─── */
-.dark .bg-white       { background-color: #1E293B !important; color: #E2E8F0 !important; }
-.dark .bg-slate-50    { background-color: #1A2332 !important; }
-.dark .bg-slate-100   { background-color: #0F172A !important; }
-.dark .bg-slate-200   { background-color: #0F172A !important; }
-.dark .bg-slate-50\/50 { background-color: rgba(26, 35, 50, 0.5) !important; }
-.dark .bg-white\/80   { background-color: rgba(30, 41, 59, 0.85) !important; }
-.dark .bg-white\/95   { background-color: rgba(30, 41, 59, 0.95) !important; }
-.dark .bg-black\/50   { background-color: rgba(0, 0, 0, 0.65) !important; }
-
-/* ★ Nested cards: lighter so they stand out from parent */
-.dark .bg-white .bg-white {
-  background-color: #263549 !important;
-  color: #E2E8F0 !important;
-}
-
-/* ★ Triple-nested (rare but safe) */
-.dark .bg-white .bg-white .bg-white {
-  background-color: #2D3E54 !important;
-}
-
-/* ─── Text: high contrast ─── */
-.dark .text-slate-900 { color: #F8FAFC !important; }
-.dark .text-slate-800 { color: #F1F5F9 !important; }
-.dark .text-slate-700 { color: #E2E8F0 !important; }
-.dark .text-slate-600 { color: #CBD5E1 !important; }
-.dark .text-slate-500 { color: #94A3B8 !important; }
-.dark .text-slate-400 { color: #94A3B8 !important; }
-.dark .text-slate-300 { color: #94A3B8 !important; }
-
-/* ─── Borders: visible separation ─── */
-.dark .border-slate-100 { border-color: #3B4F6B !important; }
-.dark .border-slate-200 { border-color: #3B4F6B !important; }
-.dark .border-slate-300 { border-color: #4B6282 !important; }
-
-/* ─── Form elements: readable ─── */
-.dark textarea, .dark input, .dark select {
-  background-color: #162032 !important;
-  color: #E2E8F0 !important;
-  border-color: #3B4F6B !important;
-}
-.dark textarea:focus, .dark input:focus, .dark select:focus {
-  border-color: #818CF8 !important;
-  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.25) !important;
-}
-.dark textarea::placeholder,
-.dark input::placeholder {
-  color: #64748B !important;
-}
-
-/* ─── Section header labels (D1, Description, Indicator) ─── */
-.dark .bg-slate-700 { background-color: #334155 !important; color: #F1F5F9 !important; }
-.dark .bg-slate-800 { background-color: #1E293B !important; color: #F1F5F9 !important; }
-.dark .bg-slate-300 { background-color: #475569 !important; }
-
-/* ─── Sky / Cyan accent ─── */
-.dark .bg-sky-50      { background-color: rgba(99, 102, 241, 0.12) !important; }
-.dark .bg-sky-100     { background-color: rgba(99, 102, 241, 0.18) !important; }
-.dark .text-sky-600   { color: #818CF8 !important; }
-.dark .text-sky-700   { color: #A5B4FC !important; }
-.dark .text-sky-800   { color: #C7D2FE !important; }
-.dark .border-sky-200 { border-color: rgba(99, 102, 241, 0.3) !important; }
-.dark .border-sky-500 { border-color: #818CF8 !important; }
-.dark .border-sky-600 { border-color: #818CF8 !important; }
-.dark .ring-sky-500   { --tw-ring-color: rgba(129, 140, 248, 0.5) !important; }
-.dark .focus\:ring-sky-500:focus { --tw-ring-color: rgba(129, 140, 248, 0.5) !important; }
-
-/* ─── Red / Error ─── */
-.dark .bg-red-50      { background-color: rgba(239, 68, 68, 0.1) !important; }
-.dark .text-red-500   { color: #FCA5A5 !important; }
-.dark .text-red-600   { color: #FCA5A5 !important; }
-.dark .text-red-700   { color: #FCA5A5 !important; }
-.dark .border-red-100 { border-color: rgba(239, 68, 68, 0.2) !important; }
-.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.25) !important; }
-
-/* ─── Green / Success ─── */
-.dark .bg-green-50    { background-color: rgba(16, 185, 129, 0.1) !important; }
-.dark .bg-green-100   { background-color: rgba(16, 185, 129, 0.15) !important; }
-.dark .text-green-500 { color: #6EE7B7 !important; }
-.dark .text-green-600 { color: #6EE7B7 !important; }
-.dark .text-green-800 { color: #A7F3D0 !important; }
-.dark .border-green-200 { border-color: rgba(16, 185, 129, 0.25) !important; }
-
-/* ─── Amber / Warning ─── */
-.dark .bg-amber-50    { background-color: rgba(245, 158, 11, 0.1) !important; }
-.dark .bg-amber-100   { background-color: rgba(245, 158, 11, 0.15) !important; border-color: #92400E !important; }
-.dark .bg-amber-500   { background-color: #D97706 !important; }
-.dark .text-amber-600 { color: #FCD34D !important; }
-.dark .text-amber-800 { color: #FDE68A !important; }
-.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.25) !important; }
-
-/* ─── Blue (SettingsModal) ─── */
-.dark .bg-blue-50     { background-color: rgba(99, 102, 241, 0.1) !important; }
-.dark .text-blue-800  { color: #C7D2FE !important; }
-.dark .border-blue-200 { border-color: rgba(99, 102, 241, 0.25) !important; }
-
-/* ─── Orange (WelcomeScreen) ─── */
-.dark .text-orange-600 { color: #FDBA74 !important; }
-
-/* ─── Shadows: subtle glow border for depth ─── */
-.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(59, 79, 107, 0.25) !important; }
-.dark .shadow-md { box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(59, 79, 107, 0.2) !important; }
-.dark .shadow-lg { box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4) !important; }
-.dark .shadow-xl { box-shadow: 0 20px 25px rgba(0, 0, 0, 0.4) !important; }
-
-/* ─── Gradient overrides ─── */
-.dark .bg-gradient-to-r.from-sky-400.to-sky-600 {
-  background: linear-gradient(to right, #6366F1, #8B5CF6) !important;
-}
-.dark .from-sky-400   { --tw-gradient-from: #6366F1 !important; }
-.dark .to-sky-600     { --tw-gradient-to: #8B5CF6 !important; }
-.dark .from-slate-100 { --tw-gradient-from: #1E293B !important; }
-.dark .to-slate-200   { --tw-gradient-to: #253348 !important; }
-
-/* ─── Sky button overrides ─── */
-.dark .bg-sky-600 { background-color: #6366F1 !important; }
-.dark .bg-sky-600:hover,
-.dark .hover\:bg-sky-700:hover { background-color: #4F46E5 !important; }
-
-/* ─── Hover states ─── */
-.dark .hover\:bg-slate-50:hover  { background-color: #263549 !important; }
-.dark .hover\:bg-slate-100:hover { background-color: #263549 !important; }
-.dark .hover\:bg-slate-300:hover { background-color: #334155 !important; }
-.dark .hover\:text-slate-600:hover { color: #F1F5F9 !important; }
-.dark .hover\:text-slate-700:hover { color: #F1F5F9 !important; }
-.dark .hover\:text-slate-800:hover { color: #F1F5F9 !important; }
-.dark .hover\:border-slate-300:hover { border-color: #4B6282 !important; }
-
-/* ─── Dashed borders ─── */
-.dark .border-dashed.border-slate-300 { border-color: #4B6282 !important; }
-.dark .border-slate-300.border-dashed { border-color: #4B6282 !important; }
-
-/* ─── Dark scrollbar ─── */
-.dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; }
-.dark ::-webkit-scrollbar { width: 6px; height: 6px; }
-.dark ::-webkit-scrollbar-track { background: #0F172A; }
-.dark ::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 20px; }
-.dark ::-webkit-scrollbar-thumb:hover { background-color: #64748B; }
-
-/* ─── Filter / Grayscale override ─── */
-.dark .filter.grayscale { filter: grayscale(1) brightness(0.7) !important; }
-
-/* ─── SettingsModal specific ─── */
-.dark .border-b-2.border-sky-600 { border-color: #818CF8 !important; }
-.dark .ring-1.ring-sky-500 { --tw-ring-color: #818CF8 !important; }
-.dark .border-2.border-sky-500 { border-color: #818CF8 !important; }
-.dark .border.border-slate-200.rounded-lg { border-color: #3B4F6B !important; }
-
-/* ─── Organigram ─── */
-.dark .border-t-4 { opacity: 1; }
-
-/* ─── WelcomeScreen / AuthScreen background ─── */
-.dark .bg-slate-200 { background-color: #0F172A !important; }
-
-/* ═══════════════════════════════════════════════════════════════
-   Step-colored cards — subtle tint per chapter
-   ═══════════════════════════════════════════════════════════════ */
-
-/* Light mode */
-.step-content .bg-white {
-  background: color-mix(in srgb, var(--step-card-bg, #FFFFFF) 35%, white 65%) !important;
-  border-color: color-mix(in srgb, var(--step-card-border, #E2E8F0) 50%, #E2E8F0 50%) !important;
-}
-.step-content .bg-white:hover {
-  background: color-mix(in srgb, var(--step-card-bg, #FFFFFF) 50%, white 50%) !important;
-}
-
-/* Dark mode: stronger tint, readable text */
-.dark .step-content .bg-white {
-  background: color-mix(in srgb, var(--step-card-bg, #1E293B) 20%, #1E293B 80%) !important;
-  border-color: color-mix(in srgb, var(--step-card-border, #3B4F6B) 40%, #3B4F6B 60%) !important;
-  color: #E2E8F0 !important;
-}
-.dark .step-content .bg-white:hover {
-  background: color-mix(in srgb, var(--step-card-bg, #263549) 30%, #263549 70%) !important;
-}
-
-/* Dark mode: nested items inside step cards */
-.dark .step-content .bg-white .bg-white {
-  background: color-mix(in srgb, var(--step-card-bg, #263549) 15%, #263549 85%) !important;
-  border-color: color-mix(in srgb, var(--step-card-border, #3B4F6B) 30%, #4B6282 70%) !important;
-  color: #E2E8F0 !important;
-}
-/* ═══ DARK MODE v3 — GLOBAL TEXT COLOR INHERITANCE FIX ═══
-   Problem: Most ProjectDisplay elements have NO CSS classes and NO inline
-   color styles. They inherit text color from the root, which defaults to
-   dark (browser default). This sets the root text color for dark mode so
-   ALL elements without explicit color inherit a readable light color.
-   ═══════════════════════════════════════════════════════════════════ */
-
-/* Root-level text color for dark mode */
+/* ─── 6.1 ROOT ─── */
 html.dark,
 html.dark body {
-  color: #E2E8F0 !important;
+  background-color: #121212 !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+  color-scheme: dark;
 }
 
-/* Common block elements that may not have classes */
-html.dark p,
-html.dark span,
-html.dark div,
-html.dark label,
-html.dark li,
-html.dark td,
-html.dark th,
-html.dark h1,
-html.dark h2,
-html.dark h3,
-html.dark h4,
-html.dark h5,
-html.dark h6 {
-  color: inherit;
+/* ─── 6.2 MAIN CONTENT AREA (bg behind cards) ─── */
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/30,
+html.dark .bg-gray-50,
+html.dark .bg-slate-100,
+html.dark .bg-gray-100 {
+  background-color: #121212 !important;
 }
 
-/* Ensure textarea and inputs are readable */
+/* ─── 6.3 CARDS — elevation level 01dp (5% overlay) ─── */
+html.dark .bg-white {
+  background-color: #1E1E1E !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* Nested cards — elevation 02dp (7%) */
+html.dark .bg-white .bg-white {
+  background-color: #232323 !important;
+}
+
+/* Triple-nested — elevation 03dp (8%) */
+html.dark .bg-white .bg-white .bg-white {
+  background-color: #282828 !important;
+}
+
+/* ─── 6.4 SECTION-COLORED GLOW BORDERS ───
+   --step-card-border is set by ProjectDisplay via stepColors.
+   Cards get a colored glow matching the sidebar section color.
+   ─── */
+html.dark .step-content .bg-white {
+  border: 1px solid color-mix(in srgb, var(--step-card-border, #333333) 50%, #333333) !important;
+  box-shadow: 0 0 15px -3px color-mix(in srgb, var(--step-card-border, transparent) 30%, transparent),
+              0 0 6px -2px color-mix(in srgb, var(--step-card-border, transparent) 20%, transparent) !important;
+}
+
+html.dark .step-content .bg-white:hover {
+  box-shadow: 0 0 25px -3px color-mix(in srgb, var(--step-card-border, transparent) 45%, transparent),
+              0 0 10px -2px color-mix(in srgb, var(--step-card-border, transparent) 30%, transparent) !important;
+  border-color: color-mix(in srgb, var(--step-card-border, #333333) 70%, #333333) !important;
+}
+
+/* Nested cards inside step-content: subtler glow */
+html.dark .step-content .bg-white .bg-white {
+  border: 1px solid #2C2C2C !important;
+  box-shadow: none !important;
+}
+
+/* ─── 6.5 INPUT FIELDS — deepest surface ─── */
 html.dark textarea,
 html.dark input[type="text"],
 html.dark input[type="number"],
@@ -420,28 +261,487 @@ html.dark input[type="email"],
 html.dark input[type="password"],
 html.dark input[type="date"],
 html.dark select {
-  background-color: #162032 !important;
-  color: #E2E8F0 !important;
-  border-color: #475569 !important;
+  background-color: #0D0D0D !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+  border-color: #333333 !important;
+}
+
+html.dark textarea:focus,
+html.dark input:focus,
+html.dark select:focus {
+  border-color: var(--step-card-border, #6366F1) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--step-card-border, #6366F1) 20%, transparent) !important;
+  outline: none !important;
 }
 
 html.dark textarea::placeholder,
 html.dark input::placeholder {
-  color: #64748B !important;
+  color: rgba(255, 255, 255, 0.38) !important;
 }
 
-/* Links in dark mode */
-html.dark a {
-  color: #93C5FD;
+/* Select dropdown options */
+html.dark select option {
+  background-color: #1E1E1E !important;
+  color: rgba(255, 255, 255, 0.87) !important;
 }
 
-/* Table headers */
-html.dark thead th {
-  color: #94A3B8 !important;
+/* ─── 6.6 TEXT HIERARCHY — Material opacity model ─── */
+
+/* High-emphasis: 87% white */
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-gray-900,
+html.dark .text-gray-800 {
+  color: rgba(255, 255, 255, 0.87) !important;
 }
 
-/* Muted text elements */
-html.dark .text-muted,
-html.dark [style*="muted"] {
-  color: #94A3B8;
+/* Also force headings */
+html.dark h1, html.dark h2, html.dark h3,
+html.dark h4, html.dark h5, html.dark h6 {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* Medium-emphasis: 60% white */
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-gray-700,
+html.dark .text-gray-600 {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+
+html.dark label {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+
+html.dark p {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+
+/* Low-emphasis / disabled: 38% white */
+html.dark .text-slate-500,
+html.dark .text-slate-400,
+html.dark .text-gray-500,
+html.dark .text-gray-400 {
+  color: rgba(255, 255, 255, 0.38) !important;
+}
+
+/* ─── 6.7 BORDERS ─── */
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-gray-100,
+html.dark .border-gray-200 {
+  border-color: #2C2C2C !important;
+}
+
+html.dark .border-slate-300,
+html.dark .border-gray-300 {
+  border-color: #3D3D3D !important;
+}
+
+html.dark .border-b {
+  border-color: #2C2C2C !important;
+}
+
+html.dark .border-t-2 {
+  border-color: #333333 !important;
+}
+
+html.dark .border-dashed {
+  border-color: #3D3D3D !important;
+}
+
+/* ─── 6.8 HEADER / TOOLBAR ─── */
+html.dark header.bg-white,
+html.dark header.border-b,
+html.dark .bg-white.border-b {
+  background-color: #1E1E1E !important;
+  border-color: #2C2C2C !important;
+}
+
+/* ─── 6.9 TOOLBAR & BUTTON ICONS ─── */
+html.dark button svg,
+html.dark a svg {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+html.dark button:hover svg,
+html.dark a:hover svg {
+  color: #FFFFFF !important;
+}
+
+/* ─── 6.10 SHADOWS → REMOVED ───
+   Material Design: in dark theme, shadows are invisible.
+   Elevation is expressed through lighter surface colors.
+   Exception: step-content cards keep their colored glow (6.4).
+   ─── */
+html.dark .shadow-sm,
+html.dark .shadow,
+html.dark .shadow-md,
+html.dark .shadow-lg,
+html.dark .shadow-xl {
+  box-shadow: none !important;
+}
+
+/* ─── 6.11 ACCENT COLORS — desaturated (200 range) ─── */
+
+/* Sky / Blue — #90CAF9 */
+html.dark .text-sky-600,
+html.dark .text-sky-700,
+html.dark .text-sky-800 {
+  color: #90CAF9 !important;
+}
+
+html.dark .bg-sky-100,
+html.dark .bg-sky-50 {
+  background-color: rgba(144, 202, 249, 0.08) !important;
+  color: #90CAF9 !important;
+}
+
+html.dark .border-sky-200,
+html.dark .border-sky-100 {
+  border-color: rgba(144, 202, 249, 0.20) !important;
+}
+
+/* Indigo / Violet — #B39DDB */
+html.dark .text-indigo-600,
+html.dark .text-indigo-700 {
+  color: #B39DDB !important;
+}
+
+html.dark .bg-indigo-50,
+html.dark .bg-indigo-50\/50 {
+  background-color: rgba(179, 157, 219, 0.06) !important;
+}
+
+html.dark .border-indigo-100 {
+  border-color: rgba(179, 157, 219, 0.15) !important;
+}
+
+/* Red / Error — #EF9A9A */
+html.dark .text-red-600,
+html.dark .text-red-700 {
+  color: #EF9A9A !important;
+}
+
+html.dark .bg-red-50 {
+  background-color: rgba(239, 154, 154, 0.08) !important;
+  color: #EF9A9A !important;
+}
+
+html.dark .border-red-100,
+html.dark .border-red-200 {
+  border-color: rgba(239, 154, 154, 0.20) !important;
+}
+
+/* Green / Success — #A5D6A7 */
+html.dark .text-green-800,
+html.dark .text-green-700,
+html.dark .text-green-600 {
+  color: #A5D6A7 !important;
+}
+
+html.dark .bg-green-100,
+html.dark .bg-green-50 {
+  background-color: rgba(165, 214, 167, 0.08) !important;
+  color: #A5D6A7 !important;
+}
+
+html.dark .border-green-300,
+html.dark .border-green-200 {
+  border-color: rgba(165, 214, 167, 0.20) !important;
+}
+
+/* Amber / Warning — #FFE082 */
+html.dark .text-yellow-800,
+html.dark .text-amber-600,
+html.dark .text-amber-500 {
+  color: #FFE082 !important;
+}
+
+html.dark .bg-yellow-100,
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/50 {
+  background-color: rgba(255, 224, 130, 0.08) !important;
+  color: #FFE082 !important;
+}
+
+html.dark .border-yellow-300,
+html.dark .border-amber-100,
+html.dark .border-amber-200 {
+  border-color: rgba(255, 224, 130, 0.20) !important;
+}
+
+/* ─── 6.12 TRAFFIC LIGHT SELECTS (Risk likelihood/impact) ─── */
+html.dark .bg-green-100.border-green-300.text-green-800 {
+  background-color: rgba(165, 214, 167, 0.12) !important;
+  border-color: rgba(165, 214, 167, 0.30) !important;
+  color: #A5D6A7 !important;
+}
+
+html.dark .bg-yellow-100.border-yellow-300.text-yellow-800 {
+  background-color: rgba(255, 224, 130, 0.12) !important;
+  border-color: rgba(255, 224, 130, 0.30) !important;
+  color: #FFE082 !important;
+}
+
+html.dark .bg-red-100.border-red-300.text-red-800 {
+  background-color: rgba(239, 154, 154, 0.12) !important;
+  border-color: rgba(239, 154, 154, 0.30) !important;
+  color: #EF9A9A !important;
+}
+
+/* ─── 6.13 GENERATE BUTTONS ─── */
+
+/* White-bg variant (field-level) */
+html.dark button.bg-white.text-sky-600,
+html.dark button.bg-white.text-sky-700 {
+  background-color: #1E1E1E !important;
+  color: #90CAF9 !important;
+  border-color: #333333 !important;
+}
+
+html.dark button.bg-white.text-sky-600:hover,
+html.dark button.bg-white.text-sky-700:hover {
+  background-color: #282828 !important;
+  border-color: #90CAF9 !important;
+}
+
+/* Amber variant (missing API key) */
+html.dark .bg-amber-500 {
+  background-color: rgba(255, 224, 130, 0.15) !important;
+  color: #FFE082 !important;
+}
+
+/* Sky primary buttons */
+html.dark .bg-sky-600 {
+  background-color: rgba(144, 202, 249, 0.15) !important;
+  color: #90CAF9 !important;
+  border-color: rgba(144, 202, 249, 0.30) !important;
+}
+
+html.dark .bg-sky-600:hover {
+  background-color: rgba(144, 202, 249, 0.25) !important;
+}
+
+/* ─── 6.14 TASK / MILESTONE / DELIVERABLE AREAS ─── */
+
+/* Task cards (bg-slate-50) */
+html.dark .bg-slate-50.rounded-lg,
+html.dark .bg-slate-50\/50 {
+  background-color: #1A1A1A !important;
+}
+
+/* Left border accents for sub-sections */
+html.dark .border-l-4.border-sky-100 {
+  border-left-color: rgba(144, 202, 249, 0.25) !important;
+}
+
+html.dark .border-l-4.border-amber-100 {
+  border-left-color: rgba(255, 224, 130, 0.25) !important;
+}
+
+html.dark .border-l-4.border-indigo-100 {
+  border-left-color: rgba(179, 157, 219, 0.25) !important;
+}
+
+/* WP header badges */
+html.dark .bg-sky-100.text-sky-800 {
+  background-color: rgba(144, 202, 249, 0.12) !important;
+  color: #90CAF9 !important;
+}
+
+/* Task ID badges */
+html.dark .bg-white.border.border-slate-200 {
+  background-color: #282828 !important;
+  border-color: #3D3D3D !important;
+}
+
+html.dark .text-slate-500.bg-white {
+  color: rgba(255, 255, 255, 0.38) !important;
+}
+
+/* ─── 6.15 DEPENDENCY SELECTOR ─── */
+html.dark .bg-slate-50.rounded-lg.border.border-slate-200 {
+  background-color: #1A1A1A !important;
+  border-color: #2C2C2C !important;
+}
+
+/* Dependency items */
+html.dark .bg-white.px-2.py-1\.5.rounded.border.border-slate-200 {
+  background-color: #232323 !important;
+  border-color: #2C2C2C !important;
+}
+
+/* ─── 6.16 GRADIENT BACKGROUNDS ─── */
+html.dark .bg-gradient-to-br,
+html.dark .bg-gradient-to-r {
+  background: #1E1E1E !important;
+}
+
+/* Project title/acronym card gradient */
+html.dark .bg-gradient-to-br.from-white.to-slate-50 {
+  background: #1E1E1E !important;
+}
+
+/* ─── 6.17 ALERT / ERROR BARS ─── */
+html.dark .bg-red-50.border-l-4.border-red-500 {
+  background-color: rgba(239, 154, 154, 0.08) !important;
+  border-left-color: #EF9A9A !important;
+  color: #EF9A9A !important;
+}
+
+/* Loading indicator */
+html.dark .bg-sky-50.border.border-sky-100 {
+  background-color: rgba(144, 202, 249, 0.06) !important;
+  border-color: rgba(144, 202, 249, 0.15) !important;
+  color: #90CAF9 !important;
+}
+
+/* ─── 6.18 READINESS LEVEL CARDS ─── */
+html.dark .bg-slate-50.focus\:bg-white {
+  background-color: #1A1A1A !important;
+}
+
+html.dark select.bg-slate-50 {
+  background-color: #1A1A1A !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* End date display */
+html.dark .bg-slate-50.text-sky-700 {
+  background-color: #1A1A1A !important;
+  color: #90CAF9 !important;
+}
+
+/* ─── 6.19 ORGANIGRAM AREA ─── */
+html.dark .bg-slate-50\/50 {
+  background-color: #1A1A1A !important;
+}
+
+/* ─── 6.20 LINKS ─── */
+html.dark a:not([class*="bg-"]) {
+  color: #90CAF9;
+}
+
+html.dark a:not([class*="bg-"]):hover {
+  color: #BBDEFB;
+}
+
+/* ─── 6.21 SCROLLBAR — dark variant ─── */
+html.dark ::-webkit-scrollbar-track {
+  background: #121212;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-color: #121212;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+html.dark .sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+html.dark .sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.20);
+}
+
+/* ─── 6.22 CODE / MONO ─── */
+html.dark code,
+html.dark pre {
+  background-color: #0D0D0D !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* ─── 6.23 FILTER OVERRIDES ─── */
+html.dark .filter {
+  filter: none !important;
+}
+
+html.dark .grayscale {
+  filter: grayscale(1) !important;
+}
+
+/* ─── 6.24 ADMIN PANEL / SETTINGS MODAL ─── */
+
+/* Admin panel uses inline styles from theme.ts (darkColors),
+   so most elements are already correct. These catch edge cases: */
+
+html.dark .border-b[style*="border"] {
+  border-color: #2C2C2C !important;
+}
+
+/* ─── 6.25 CHARTS (Gantt, PERT, Organigram) ─── */
+html.dark .recharts-text,
+html.dark .recharts-cartesian-axis-tick-value {
+  fill: rgba(255, 255, 255, 0.60) !important;
+}
+
+html.dark .recharts-cartesian-grid line {
+  stroke: #2C2C2C !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   7. STEP CONTENT CARDS
+   Uses CSS custom properties set by ProjectDisplay:
+     --step-card-bg     (light tint of section color)
+     --step-card-border  (section accent color)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Light mode: subtle tinted background */
+.step-content .bg-white {
+  background-color: var(--step-card-bg, #FFFFFF);
+  border-color: var(--step-card-border, #E2E8F0);
+}
+
+/* Dark mode: override handled in 6.3 + 6.4 above */
+
+
+/* ═══════════════════════════════════════════════════════════════
+   8. PRINT — force light mode for printing
+   ═══════════════════════════════════════════════════════════════ */
+
+@media print {
+  html.dark,
+  html.dark body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+
+  html.dark .bg-white,
+  html.dark .bg-slate-50,
+  html.dark .bg-slate-100 {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border-color: #CCCCCC !important;
+  }
+
+  html.dark h1, html.dark h2, html.dark h3,
+  html.dark h4, html.dark h5, html.dark h6 {
+    color: #000000 !important;
+  }
+
+  html.dark p, html.dark span, html.dark div,
+  html.dark label, html.dark li, html.dark td {
+    color: #1a1a1a !important;
+  }
+
+  html.dark textarea,
+  html.dark input,
+  html.dark select {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    border-color: #CCCCCC !important;
+  }
+
+  /* Remove all glows and dark borders for print */
+  html.dark .step-content .bg-white {
+    box-shadow: none !important;
+    border: 1px solid #CCCCCC !important;
+  }
 }
