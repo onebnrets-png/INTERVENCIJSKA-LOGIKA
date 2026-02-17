@@ -115,3 +115,80 @@
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
 }
+
+/* ═══ DARK MODE — CSS Custom Properties ═══ */
+
+:root {
+  --bg-surface: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --bg-sidebar: #F1F5F9;
+  --text-heading: #0F172A;
+  --text-body: #334155;
+  --text-muted: #94A3B8;
+  --border-light: #E2E8F0;
+  --border-medium: #CBD5E1;
+}
+
+:root.dark {
+  --bg-surface: #0F172A;
+  --bg-card: #1E293B;
+  --bg-sidebar: #1A2332;
+  --text-heading: #F1F5F9;
+  --text-body: #CBD5E1;
+  --text-muted: #64748B;
+  --border-light: #334155;
+  --border-medium: #475569;
+}
+
+/* Dark mode overrides for Tailwind utility classes used in ProjectDisplay */
+.dark .bg-white { background-color: #1E293B !important; }
+.dark .bg-slate-50 { background-color: #1A2332 !important; }
+.dark .bg-slate-100 { background-color: #0F172A !important; }
+.dark .bg-slate-200 { background-color: #1E293B !important; }
+.dark .bg-slate-50\/50 { background-color: rgba(26, 35, 50, 0.5) !important; }
+
+.dark .text-slate-800, .dark .text-slate-700 { color: #F1F5F9 !important; }
+.dark .text-slate-600, .dark .text-slate-500 { color: #CBD5E1 !important; }
+.dark .text-slate-400, .dark .text-slate-300 { color: #94A3B8 !important; }
+
+.dark .border-slate-200, .dark .border-slate-100 { border-color: #334155 !important; }
+.dark .border-slate-300 { border-color: #475569 !important; }
+
+.dark textarea, .dark input, .dark select {
+  background-color: #0F172A !important;
+  color: #CBD5E1 !important;
+  border-color: #475569 !important;
+}
+.dark textarea:focus, .dark input:focus, .dark select:focus {
+  border-color: #818CF8 !important;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.3) !important;
+}
+
+.dark .bg-sky-100 { background-color: rgba(99, 102, 241, 0.15) !important; }
+.dark .text-sky-700 { color: #A5B4FC !important; }
+.dark .text-sky-600 { color: #818CF8 !important; }
+
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.1) !important; }
+.dark .text-red-600 { color: #FCA5A5 !important; }
+
+.dark .bg-green-100 { background-color: rgba(16, 185, 129, 0.15) !important; }
+.dark .text-green-500 { color: #6EE7B7 !important; }
+
+.dark .bg-amber-100 { border-color: #92400E !important; background-color: rgba(245, 158, 11, 0.15) !important; }
+
+.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important; }
+
+/* Dark scrollbar */
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #475569;
+}
+
+/* Print: always light */
+@media print {
+  :root.dark {
+    --bg-surface: #F8FAFC;
+    --bg-card: #FFFFFF;
+    --text-heading: #0F172A;
+    --text-body: #334155;
+  }
+}

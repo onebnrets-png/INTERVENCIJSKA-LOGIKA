@@ -1,9 +1,9 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v1.5 — 2026-02-17
-//   - NEW: SummaryModal extracted to components/SummaryModal.tsx (Design System)
-//   - Previous: Sidebar extracted, Toolbar redesign, Dashboard, global instructions
+// v1.6 — 2026-02-17
+//   - NEW: initTheme() call on mount for dark mode initialization
+//   - Previous: SummaryModal extraction, Sidebar, Toolbar redesign
 // All business logic lives in hooks:
 //   - useAuth           → authentication, session, API key check, MFA
 //   - useProjectManager → CRUD, save/load, import/export, navigation
@@ -32,6 +32,7 @@ import { ICONS, getSteps, BRAND_ASSETS } from './constants.tsx';
 import { TEXT } from './locales.ts';
 import { isStepCompleted } from './utils.ts';
 import { colors, shadows, radii, spacing, animation, typography } from './design/theme.ts';
+import { initTheme } from './services/themeService.ts';
 
 import { useAuth } from './hooks/useAuth.ts';
 import { useProjectManager } from './hooks/useProjectManager.ts';
@@ -236,6 +237,11 @@ const App = () => {
       ensureGlobalInstructionsLoaded();
     }
   }, [auth.currentUser]);
+
+  // ─── Init dark mode ──────────────────────────────────────────
+  useEffect(() => {
+    initTheme();
+  }, []);
 
   // ─── Show project list on login ────────────────────────────────
   useEffect(() => {

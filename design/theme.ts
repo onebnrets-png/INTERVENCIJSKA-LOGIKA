@@ -312,10 +312,45 @@ export const chartColors = {
   },
 } as const;
 
+// ─── DARK MODE COLORS ────────────────────────────────────────
+
+export const darkColors = {
+  primary: { ...colors.primary },
+  secondary: { ...colors.secondary },
+  success: { ...colors.success },
+  warning: { ...colors.warning },
+  error: { ...colors.error },
+
+  surface: {
+    background: '#0F172A',
+    card: '#1E293B',
+    sidebar: '#1A2332',
+    overlay: 'rgba(0, 0, 0, 0.6)',
+    overlayBlur: 'rgba(0, 0, 0, 0.5)',
+  },
+
+  text: {
+    heading: '#F1F5F9',
+    body: '#CBD5E1',
+    muted: '#64748B',
+    inverse: '#0F172A',
+    link: '#818CF8',
+    linkHover: '#A5B4FC',
+  },
+
+  border: {
+    light: '#334155',
+    medium: '#475569',
+    heavy: '#64748B',
+    focus: '#818CF8',
+  },
+} as const;
+
 // ─── EXPORT COMPLETE THEME ───────────────────────────────────
 
 export const theme = {
   colors,
+  darkColors,
   stepColors,
   spacing,
   shadows,
