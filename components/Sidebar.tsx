@@ -770,7 +770,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </p>
           )}
         </div>
-      </aside>
+            </aside>
 
       {/* ★ FIX #2: CollapseToggle OUTSIDE <aside> — position: fixed, never clipped */}
       {(isDesktop || isSidebarOpen) && (
