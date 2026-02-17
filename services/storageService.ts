@@ -1,6 +1,16 @@
 // services/storageService.ts
 // Supabase-backed storage service – replaces localStorage completely
 // All data now lives in PostgreSQL via Supabase
+//
+// v2.0 — 2026-02-17
+// FIXES:
+//   - FIX DB-1: login() now sets cachedUser even when profiles query fails
+//     (fallback to auth.user metadata). This prevents the silent-logout bug
+//     where Supabase auth succeeds but the app thinks nobody is logged in.
+//   - FIX DB-2: restoreSession() same fallback — never returns null when
+//     there IS a valid auth session.
+//   - FIX DB-3: login() / restoreSession() log profile-query errors clearly
+//     so DB permission issues are visible in the console.
 
 import { supabase } from './supabaseClient.ts';
 import { createEmptyProjectData } from '../utils.ts';
@@ -36,29 +46,36 @@ export const storageService = {
     }
 
     if (data.user) {
-      const { data: profile } = await supabase
+      // ★ FIX DB-1: Query profile, but ALWAYS set cachedUser (even if query fails)
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', data.user.id)
         .single();
 
-      if (profile) {
-        cachedUser = {
-          id: data.user.id,
-          email: profile.email,
-          displayName: profile.display_name,
-          role: profile.role
-        };
+      if (profileError) {
+        console.warn('login: profiles query failed:', profileError.message,
+          '— falling back to auth.user metadata. Check RLS policies on profiles table.');
       }
+
+      // Always set cachedUser: prefer profile data, fall back to auth.user metadata
+      cachedUser = {
+        id: data.user.id,
+        email: profile?.email || data.user.email || email,
+        displayName: profile?.display_name
+          || data.user.user_metadata?.display_name
+          || email.split('@')[0],
+        role: profile?.role || 'user'
+      };
 
       // Pre-load settings into cache on login
       await this.loadSettings();
 
       return {
         success: true,
-        email: data.user.email,
-        displayName: profile?.display_name || email.split('@')[0],
-        role: profile?.role || 'user'
+        email: cachedUser.email,
+        displayName: cachedUser.displayName,
+        role: cachedUser.role
       };
     }
 
@@ -188,25 +205,35 @@ export const storageService = {
     const { data } = await supabase.auth.getSession();
     if (data.session?.user) {
       const userId = data.session.user.id;
-      const { data: profile } = await supabase
+      const authUser = data.session.user;
+
+      // ★ FIX DB-2: Query profile but NEVER fail silently
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (profile) {
-        cachedUser = {
-          id: userId,
-          email: profile.email,
-          displayName: profile.display_name,
-          role: profile.role
-        };
-
-        // Pre-load settings on session restore
-        await this.loadSettings();
-
-        return profile.email;
+      if (profileError) {
+        console.warn('restoreSession: profiles query failed:', profileError.message,
+          '— falling back to auth.user metadata. Check RLS policies on profiles table.');
       }
+
+      // Always build cachedUser: prefer profile, fall back to auth metadata
+      cachedUser = {
+        id: userId,
+        email: profile?.email || authUser.email || '',
+        displayName: profile?.display_name
+          || authUser.user_metadata?.display_name
+          || authUser.email?.split('@')[0]
+          || 'User',
+        role: profile?.role || 'user'
+      };
+
+      // Pre-load settings on session restore
+      await this.loadSettings();
+
+      return cachedUser.email;
     }
     return null;
   },

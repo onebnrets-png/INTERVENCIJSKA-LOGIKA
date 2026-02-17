@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../services/storageService';
+import { supabase } from '../services/supabaseClient';
 import { TEXT } from '../locales.ts';
 
 export function EnrollMFA({ onEnrolled, onCancelled, language }) {
