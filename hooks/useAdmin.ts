@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient.ts';
 import { storageService } from '../services/storageService.ts';
+import { invalidateGlobalInstructionsCache } from '../services/globalInstructionsService.ts';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -302,6 +303,9 @@ export const useAdmin = () => {
         updated_by: currentUserId,
       }));
 
+      // Invalidate cached instructions so next AI call uses new overrides
+      invalidateGlobalInstructionsCache();
+
       return { success: true };
     } catch (err: any) {
       console.error('saveGlobalInstructions exception:', err);
@@ -352,6 +356,8 @@ export const useAdmin = () => {
         updated_at: new Date().toISOString(),
         updated_by: currentUserId,
       }));
+
+      invalidateGlobalInstructionsCache();
 
       return { success: true };
     } catch (err: any) {

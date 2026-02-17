@@ -1,12 +1,22 @@
 // services/Instructions.ts
 // ═══════════════════════════════════════════════════════════════════
 // SINGLE SOURCE OF TRUTH for ALL AI content rules.
-// Version 4.5 – 2026-02-16
+// Version 4.6 – 2026-02-17
 //
 // ARCHITECTURE PRINCIPLE:
 //   This file is the ONLY place where content rules are defined.
 //   geminiService.ts reads from here — it has ZERO own rules.
 //   Anything changed here IS THE LAW — no exceptions.
+//
+// CHANGES v4.6:
+//   - NEW: Global Instructions override integration via globalInstructionsService.ts
+//   - Every exported accessor function now checks getGlobalOverrideSync() first.
+//   - If admin has set a global override for a specific key → that override is used.
+//   - If no override exists → hardcoded default from this file is used (unchanged behavior).
+//   - Key format: dot notation matching structure, e.g., "CHAPTERS.chapter1_problemAnalysis",
+//     "QUALITY_GATES.activities.en", "SECTION_TASK_INSTRUCTIONS.projectIdea.si", etc.
+//   - geminiService.ts remains UNCHANGED — zero modifications needed.
+//   - All previous v4.5 changes preserved.
 //
 // CHANGES v4.5:
 //   - NEW: projectAcronym field rule added to FIELD_RULES (EN+SI) [3A]
@@ -76,6 +86,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { storageService } from './storageService';
+import { getGlobalOverrideSync } from './globalInstructionsService.ts';
 
 // ───────────────────────────────────────────────────────────────
 // LANGUAGE DIRECTIVES
@@ -1174,24 +1185,32 @@ const TRANSLATION_RULES: Record<string, string[]> = {
 // ───────────────────────────────────────────────────────────────
 
 export const getAppInstructions = (language: 'en' | 'si' = 'en') => ({
-  GLOBAL_RULES,
-  CHAPTERS
+  GLOBAL_RULES: getGlobalOverrideSync('GLOBAL_RULES') || GLOBAL_RULES,
+  CHAPTERS: (() => {
+    const overridden: Record<string, string> = {};
+    for (const key of Object.keys(CHAPTERS)) {
+      overridden[key] = getGlobalOverrideSync(`CHAPTERS.${key}`) || CHAPTERS[key];
+    }
+    return overridden;
+  })()
 });
 
 export const getFieldRule = (fieldName: string, language: 'en' | 'si' = 'en'): string => {
-  return FIELD_RULES[fieldName]?.[language] || '';
+  return getGlobalOverrideSync(`FIELD_RULES.${fieldName}.${language}`) || FIELD_RULES[fieldName]?.[language] || '';
 };
 
 export const getTranslationRules = (language: 'en' | 'si' = 'en'): string[] => {
+  const override = getGlobalOverrideSync(`TRANSLATION_RULES.${language}`);
+  if (override) return override.split('\n').filter((line: string) => line.trim().length > 0);
   return TRANSLATION_RULES[language] || TRANSLATION_RULES.en;
 };
 
 export const getSummaryRules = (language: 'en' | 'si' = 'en'): string => {
-  return SUMMARY_RULES[language] || SUMMARY_RULES.en;
+  return getGlobalOverrideSync(`SUMMARY_RULES.${language}`) || SUMMARY_RULES[language] || SUMMARY_RULES.en;
 };
 
 export const getLanguageDirective = (language: 'en' | 'si' = 'en'): string => {
-  return LANGUAGE_DIRECTIVES[language] || LANGUAGE_DIRECTIVES.en;
+  return getGlobalOverrideSync(`LANGUAGE_DIRECTIVES.${language}`) || LANGUAGE_DIRECTIVES[language] || LANGUAGE_DIRECTIVES.en;
 };
 
 export const getLanguageMismatchNotice = (
@@ -1205,22 +1224,24 @@ export const getLanguageMismatchNotice = (
 };
 
 export const getAcademicRigorRules = (language: 'en' | 'si' = 'en'): string => {
-  return ACADEMIC_RIGOR_RULES[language] || ACADEMIC_RIGOR_RULES.en;
+  return getGlobalOverrideSync(`ACADEMIC_RIGOR_RULES.${language}`) || ACADEMIC_RIGOR_RULES[language] || ACADEMIC_RIGOR_RULES.en;
 };
 
 export const getHumanizationRules = (language: 'en' | 'si' = 'en'): string => {
-  return HUMANIZATION_RULES[language] || HUMANIZATION_RULES.en;
+  return getGlobalOverrideSync(`HUMANIZATION_RULES.${language}`) || HUMANIZATION_RULES[language] || HUMANIZATION_RULES.en;
 };
 
 export const getProjectTitleRules = (language: 'en' | 'si' = 'en'): string => {
-  return PROJECT_TITLE_RULES[language] || PROJECT_TITLE_RULES.en;
+  return getGlobalOverrideSync(`PROJECT_TITLE_RULES.${language}`) || PROJECT_TITLE_RULES[language] || PROJECT_TITLE_RULES.en;
 };
 
 export const getModeInstruction = (mode: string, language: 'en' | 'si' = 'en'): string => {
-  return MODE_INSTRUCTIONS[mode]?.[language] || MODE_INSTRUCTIONS.regenerate[language];
+  return getGlobalOverrideSync(`MODE_INSTRUCTIONS.${mode}.${language}`) || MODE_INSTRUCTIONS[mode]?.[language] || MODE_INSTRUCTIONS.regenerate[language];
 };
 
 export const getQualityGate = (sectionKey: string, language: 'en' | 'si' = 'en'): string => {
+  const fullOverride = getGlobalOverrideSync(`QUALITY_GATES.${sectionKey}.${language}`);
+  if (fullOverride) return fullOverride;
   const gates = QUALITY_GATES[sectionKey]?.[language] || QUALITY_GATES._default[language];
   const header = language === 'si' ? 'KONTROLNA LISTA KAKOVOSTI' : 'QUALITY CHECKLIST';
   return `═══ ${header} ═══\nBefore returning the JSON, verify ALL of the following:\n- ${gates.join('\n- ')}\n═══════════════════════════════════════════════════════════════════`;
@@ -1231,7 +1252,7 @@ export const getSectionTaskInstruction = (
   language: 'en' | 'si' = 'en',
   placeholders: Record<string, string> = {}
 ): string => {
-  let template = SECTION_TASK_INSTRUCTIONS[sectionKey]?.[language] || '';
+  let template = getGlobalOverrideSync(`SECTION_TASK_INSTRUCTIONS.${sectionKey}.${language}`) || SECTION_TASK_INSTRUCTIONS[sectionKey]?.[language] || '';
   for (const [key, value] of Object.entries(placeholders)) {
     template = template.replace(new RegExp(`{{${key}}}`, 'g'), value);
   }

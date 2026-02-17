@@ -23,6 +23,7 @@ import SettingsModal from './components/SettingsModal.tsx';
 import ProjectListModal from './components/ProjectListModal.tsx';
 import AdminPanel from './components/AdminPanel.tsx';
 import { useAdmin } from './hooks/useAdmin.ts';
+import { ensureGlobalInstructionsLoaded } from './services/globalInstructionsService.ts';
 import { ICONS, getSteps, getSubSteps, BRAND_ASSETS } from './constants.tsx';
 import { TEXT } from './locales.ts';
 import { isStepCompleted, isSubStepCompleted } from './utils.ts';
@@ -153,6 +154,13 @@ const App = () => {
   // return statement. React requires hooks to be called in the
   // same order on every render.
   // ═══════════════════════════════════════════════════════════════
+
+  // ─── Prime global instructions cache after auth ───────────────
+  useEffect(() => {
+    if (auth.currentUser) {
+      ensureGlobalInstructionsLoaded();
+    }
+  }, [auth.currentUser]);
 
   // ─── Show project list on login ────────────────────────────────
   useEffect(() => {
