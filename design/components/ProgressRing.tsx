@@ -62,9 +62,9 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
   const strokeDashoffset = circumference - (clampedValue / 100) * circumference;
 
   const ringColor = customColor
-    || (color ? stepColors[color].main : colors.primary[500]);
+    || (color && stepColors[color] ? stepColors[color].main : colors.primary[500]);
 
-  const bgColor = color ? stepColors[color].light : colors.primary[50];
+  const bgColor = (color && stepColors[color]) ? stepColors[color].light : colors.primary[50];
 
   const displayLabel = label || `${Math.round(value)}%`;
   const computedLabelSize = labelSize || (size <= 32 ? '0.55rem' : size <= 48 ? '0.65rem' : '0.8rem');

@@ -5,14 +5,29 @@ import React, { useState } from 'react';
 import { storageService } from '../services/storageService.ts';
 import { isValidEmail, checkPasswordStrength, isPasswordSecure, generateDisplayNameFromEmail } from '../utils.ts';
 import { TEXT } from '../locales.ts';
+import type { Language } from '../types.ts';
+
+// ─── Prop Interfaces ────────────────────────────────────────────
+interface MFAVerifyScreenProps {
+  factorId: string;
+  language: Language;
+  onVerified: () => void;
+  onCancel: () => void;
+}
+
+interface AuthScreenProps {
+  onLoginSuccess: () => void;
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  onOpenSettings: () => void;
+  needsMFAVerify?: boolean;
+  mfaFactorId?: string;
+  onMFAVerified: () => void;
+  onMFACancel: () => void;
+}
 
 // ─── MFA Verification Sub-Component ─────────────────────────────
-const MFAVerifyScreen = ({ factorId, language, onVerified, onCancel }: {
-    factorId: string;
-    language: string;
-    onVerified: () => void;
-    onCancel: () => void;
-}) => {
+const MFAVerifyScreen: React.FC<MFAVerifyScreenProps> = ({ factorId, language, onVerified, onCancel }) => {
     const [code, setCode] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -94,7 +109,7 @@ const MFAVerifyScreen = ({ factorId, language, onVerified, onCancel }: {
 
 // ─── Main AuthScreen ─────────────────────────────────────────────
 
-const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings, needsMFAVerify, mfaFactorId, onMFAVerified, onMFACancel }) => {
+const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLanguage, onOpenSettings, needsMFAVerify, mfaFactorId, onMFAVerified, onMFACancel }) => {
     const [isLogin, setIsLogin] = useState(true);
 
     const [email, setEmail] = useState('');
@@ -125,7 +140,7 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings, nee
         );
     }
 
-    const handleLoginSubmit = async (e) => {
+    const handleLoginSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setLoading(true);
@@ -142,7 +157,7 @@ const AuthScreen = ({ onLoginSuccess, language, setLanguage, onOpenSettings, nee
         }
     };
 
-    const handleRegisterSubmit = async (e) => {
+    const handleRegisterSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setSuccessMessage('');

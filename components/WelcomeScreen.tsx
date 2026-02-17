@@ -1,8 +1,18 @@
 import React from 'react';
 import { ICONS, getSteps, BRAND_ASSETS } from '../constants.tsx';
 import { TEXT } from '../locales.ts';
+import type { Language, ProjectIdea } from '../types.ts';
 
-const WelcomeScreen = ({ onStartEditing, completedSteps, projectIdea, language, setLanguage, logo }) => {
+interface WelcomeScreenProps {
+  onStartEditing: (stepId: number) => void;
+  completedSteps: boolean[];
+  projectIdea: ProjectIdea;
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  logo?: string;
+}
+
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStartEditing, completedSteps, projectIdea, language, setLanguage, logo }) => {
   const STEPS = getSteps(language);
   const t = TEXT[language];
 
@@ -83,20 +93,7 @@ const WelcomeScreen = ({ onStartEditing, completedSteps, projectIdea, language, 
             </div>
         </div>
 
-      <style>
-        {`
-          @keyframes fadeInScale {
-            from {
-              opacity: 0;
-              transform: scale(0.8);
-            }
-            to {
-              opacity: 1;
-              transform: scale(1);
-            }
-          }
-        `}
-      </style>
+      {/* fadeInScale keyframe moved to index.css */}
       
       <div className="text-center mb-16 relative z-20">
         <div className="flex flex-col items-center justify-center gap-6 mb-4">

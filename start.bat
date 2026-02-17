@@ -39,22 +39,21 @@ call node --version
 echo.
 
 REM ----------------------------------------
-REM 2. CHECK .env FILE (Supabase credentials)
+REM 2. CHECK .env FILE (Supabase credentials — optional with fallback)
 REM ----------------------------------------
 if not exist ".env" (
-    echo [ERROR] Manjka .env datoteka!
+    echo [INFO] .env datoteka ni najdena — uporabljam privzete Supabase podatke.
     echo.
-    echo         Ustvari .env v korenski mapi z vsebino:
+    echo        Za lasten Supabase projekt ustvari .env z vsebino:
     echo.
-    echo         VITE_SUPABASE_URL=https://tvoj-projekt.supabase.co
-    echo         VITE_SUPABASE_ANON_KEY=tvoj-anon-key
+    echo        VITE_SUPABASE_URL=https://tvoj-projekt.supabase.co
+    echo        VITE_SUPABASE_ANON_KEY=tvoj-anon-key
     echo.
-    echo         (Podatke najdes v Supabase Dashboard -^> Settings -^> API)
+    echo        (Podatke najdes v Supabase Dashboard -^> Settings -^> API)
     echo.
-    pause
-    exit /b 1
+) else (
+    echo [OK] .env datoteka najdena
 )
-echo [OK] .env datoteka najdena
 echo.
 
 REM ----------------------------------------

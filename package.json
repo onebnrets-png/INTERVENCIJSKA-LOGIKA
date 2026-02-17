@@ -12,7 +12,7 @@
     "@google/genai": "^1.23.0",
     "@supabase/supabase-js": "^2.49.1",
     "docx": "8.5.0",
-    "html2canvas": "latest",
+    "html2canvas": "^1.4.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
