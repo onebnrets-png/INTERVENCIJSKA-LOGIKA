@@ -29,7 +29,14 @@ import {
   saveAppInstructions,
   resetAppInstructions,
   CHAPTER_LABELS,
-  FIELD_RULE_LABELS
+  FIELD_RULE_LABELS,
+  LANGUAGE_DIRECTIVES,
+  ACADEMIC_RIGOR_RULES,
+  HUMANIZATION_RULES,
+  PROJECT_TITLE_RULES,
+  MODE_INSTRUCTIONS,
+  QUALITY_GATES,
+  SECTION_TASK_INSTRUCTIONS,
 } from '../services/Instructions.ts';
 
 // ─── Types ───────────────────────────────────────────────────
