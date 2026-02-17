@@ -319,9 +319,10 @@ const UserAvatar: React.FC<{ name: string; email: string; size?: number }> = ({
 };
 
 // ─── Build default instructions for each section ─────────────
-// ★ v5.0: EN-only — no more SI variants displayed
+// ★ v5.0: EN-only — SI variants removed from display.
+// LANGUAGE DIRECTIVES is the ONLY section showing both EN + SI.
 
-const buildDefaultInstructions = (): Record<string, string> => {
+const buildDefaultInstructionsDisplay = (): Record<string, string> => {
   const fmtGates = (gates: string[]): string =>
     gates.map((g, i) => `  ${i + 1}. ${g}`).join('\n');
 
@@ -346,8 +347,8 @@ ${LANGUAGE_DIRECTIVES.si}
 ── Language Mismatch Template ──
 ${LANGUAGE_MISMATCH_TEMPLATE}
 
-NOTE: Language Directives are the ONLY section that retains both EN and SI variants.
-This is intentional — LANGUAGE_DIRECTIVES tells the AI which language to WRITE in.`,
+NOTE: Language Directives are the ONLY section that retains both EN and SI.
+This tells the AI which language to WRITE in.`,
 
     academic: `═══ ACADEMIC RIGOR & CITATION RULES ═══
 
@@ -406,10 +407,11 @@ ${Object.entries(CHAPTERS).map(([key, val]) => {
 ${TEMPORAL_INTEGRITY_RULE.en}`,
   };
 };
+
 // ─── Placeholder text for sections without custom overrides ──
 
 const getDefaultPlaceholder = (section: string): string => {
-  const defaults = buildDefaultInstructions();
+  const defaults = buildDefaultInstructionsDisplay();
   return defaults[section] || `Enter custom ${section} instructions...`;
 };
 
