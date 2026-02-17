@@ -1106,7 +1106,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
                       <textarea
                         value={editedInstructions[activeInstructionSection] || ''}
                         onChange={(e) => handleInstructionChange(activeInstructionSection, e.target.value)}
-                        placeholder={getDefaultPlaceholder(activeInstructionSection)}
+                        placeholder="Type rules here..."
                         style={{
                           flex: 1, minHeight: '300px', padding: '16px', borderRadius: radii.xl,
                           border: `1px solid ${colors.border.light}`, fontSize: typography.fontSize.sm,
