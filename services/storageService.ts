@@ -2,18 +2,22 @@
 // Supabase-backed storage service – replaces localStorage completely
 // All data now lives in PostgreSQL via Supabase
 //
+// v2.1 — 2026-02-18
+// CHANGES:
+//   - NEW: OpenAI key support (getOpenAIKey, setOpenAIKey)
+//   - NEW: register() accepts apiProvider parameter (gemini/openai/openrouter)
+//   - FIX: getAIProvider/setAIProvider type includes 'openai'
+//   - FIX: register() saves key to correct column based on provider
+//
 // v2.0 — 2026-02-17
 // FIXES:
 //   - FIX DB-1: login() now sets cachedUser even when profiles query fails
-//     (fallback to auth.user metadata). This prevents the silent-logout bug
-//     where Supabase auth succeeds but the app thinks nobody is logged in.
-//   - FIX DB-2: restoreSession() same fallback — never returns null when
-//     there IS a valid auth session.
+//   - FIX DB-2: restoreSession() same fallback
 //   - FIX DB-3: login() / restoreSession() log profile-query errors clearly
-//     so DB permission issues are visible in the console.
 
 import { supabase } from './supabaseClient.ts';
 import { createEmptyProjectData } from '../utils.ts';
+import type { AIProviderType } from './aiProvider.ts';
 
 // ─── ID GENERATOR ────────────────────────────────────────────────
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -46,7 +50,6 @@ export const storageService = {
     }
 
     if (data.user) {
-      // ★ FIX DB-1: Query profile, but ALWAYS set cachedUser (even if query fails)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -58,7 +61,6 @@ export const storageService = {
           '— falling back to auth.user metadata. Check RLS policies on profiles table.');
       }
 
-      // Always set cachedUser: prefer profile data, fall back to auth.user metadata
       cachedUser = {
         id: data.user.id,
         email: profile?.email || data.user.email || email,
@@ -68,7 +70,6 @@ export const storageService = {
         role: profile?.role || 'user'
       };
 
-      // Pre-load settings into cache on login
       await this.loadSettings();
 
       return {
@@ -82,7 +83,8 @@ export const storageService = {
     return { success: false, message: 'Login failed' };
   },
 
-  async register(email: string, displayName: string, password: string, apiKey: string = '') {
+  // ★ v2.1: register() now accepts apiProvider parameter
+  async register(email: string, displayName: string, password: string, apiKey: string = '', apiProvider: AIProviderType = 'gemini') {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -104,25 +106,28 @@ export const storageService = {
       // Wait for the DB trigger to create profile + user_settings row
       await new Promise(r => setTimeout(r, 1500));
 
-      // ★ FIX: Use upsert instead of update, and also set ai_provider
+      // ★ v2.1: Save key to correct column based on provider
       if (apiKey && apiKey.trim() !== '') {
+        const keyColumn = apiProvider === 'openai' ? 'openai_key'
+                        : apiProvider === 'openrouter' ? 'openrouter_key'
+                        : 'gemini_key';
+
         const { error: keyError } = await supabase
           .from('user_settings')
           .upsert(
             {
               user_id: data.user.id,
-              gemini_key: apiKey.trim(),
-              ai_provider: 'gemini'
+              [keyColumn]: apiKey.trim(),
+              ai_provider: apiProvider
             },
             { onConflict: 'user_id' }
           );
 
         if (keyError) {
           console.warn('register: Failed to save API key via upsert, trying update...', keyError.message);
-          // Fallback: retry with update (in case upsert isn't allowed by RLS)
           await supabase
             .from('user_settings')
-            .update({ gemini_key: apiKey.trim(), ai_provider: 'gemini' })
+            .update({ [keyColumn]: apiKey.trim(), ai_provider: apiProvider })
             .eq('user_id', data.user.id);
         }
       }
@@ -140,15 +145,23 @@ export const storageService = {
         role: profile?.role || 'user'
       };
 
-      // ★ FIX: Load settings AFTER the key has been written
       await this.loadSettings();
 
-      // ★ FIX: If settings still don't have the key, force it into cache
-      if (apiKey && apiKey.trim() !== '' && !cachedSettings?.gemini_key) {
-        console.warn('register: API key not found in loaded settings, forcing into cache');
-        if (cachedSettings === null) cachedSettings = {};
-        cachedSettings.gemini_key = apiKey.trim();
-        cachedSettings.ai_provider = 'gemini';
+      // ★ v2.1: Force key into cache using correct column
+      if (apiKey && apiKey.trim() !== '' && cachedSettings) {
+        const keyColumn = apiProvider === 'openai' ? 'openai_key'
+                        : apiProvider === 'openrouter' ? 'openrouter_key'
+                        : 'gemini_key';
+        if (!cachedSettings[keyColumn]) {
+          console.warn('register: API key not found in loaded settings, forcing into cache');
+          cachedSettings[keyColumn] = apiKey.trim();
+          cachedSettings.ai_provider = apiProvider;
+        }
+      } else if (apiKey && apiKey.trim() !== '' && !cachedSettings) {
+        const keyColumn = apiProvider === 'openai' ? 'openai_key'
+                        : apiProvider === 'openrouter' ? 'openrouter_key'
+                        : 'gemini_key';
+        cachedSettings = { [keyColumn]: apiKey.trim(), ai_provider: apiProvider };
       }
 
       return {
@@ -207,7 +220,6 @@ export const storageService = {
       const userId = data.session.user.id;
       const authUser = data.session.user;
 
-      // ★ FIX DB-2: Query profile but NEVER fail silently
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -219,7 +231,6 @@ export const storageService = {
           '— falling back to auth.user metadata. Check RLS policies on profiles table.');
       }
 
-      // Always build cachedUser: prefer profile, fall back to auth metadata
       cachedUser = {
         id: userId,
         email: profile?.email || authUser.email || '',
@@ -230,7 +241,6 @@ export const storageService = {
         role: profile?.role || 'user'
       };
 
-      // Pre-load settings on session restore
       await this.loadSettings();
 
       return cachedUser.email;
@@ -265,7 +275,6 @@ export const storageService = {
     return data;
   },
 
-  // FIX: Ensure cache is always initialized, even if loadSettings wasn't called yet
   async ensureSettingsLoaded() {
     if (cachedSettings === null) {
       await this.loadSettings();
@@ -286,7 +295,6 @@ export const storageService = {
       return;
     }
 
-    // FIX: Always update cache, initialize if null
     if (cachedSettings === null) {
       cachedSettings = { ...updates };
     } else {
@@ -294,16 +302,16 @@ export const storageService = {
     }
   },
 
-  // --- AI Provider ---
-  getAIProvider(): 'gemini' | 'openrouter' {
-    return (cachedSettings?.ai_provider as 'gemini' | 'openrouter') || 'gemini';
+  // --- AI Provider --- ★ v2.1: includes 'openai'
+  getAIProvider(): AIProviderType {
+    return (cachedSettings?.ai_provider as AIProviderType) || 'gemini';
   },
 
-  async setAIProvider(provider: 'gemini' | 'openrouter') {
+  async setAIProvider(provider: AIProviderType) {
     await this.updateSettings({ ai_provider: provider });
   },
 
-  // --- API Keys ---
+  // --- Gemini Key ---
   getApiKey(): string | null {
     return cachedSettings?.gemini_key || null;
   },
@@ -316,12 +324,22 @@ export const storageService = {
     await this.updateSettings({ gemini_key: null });
   },
 
+  // --- OpenRouter Key ---
   getOpenRouterKey(): string | null {
     return cachedSettings?.openrouter_key || null;
   },
 
   async setOpenRouterKey(key: string) {
     await this.updateSettings({ openrouter_key: key.trim() || null });
+  },
+
+  // --- ★ v2.1: OpenAI Key ---
+  getOpenAIKey(): string | null {
+    return cachedSettings?.openai_key || null;
+  },
+
+  async setOpenAIKey(key: string) {
+    await this.updateSettings({ openai_key: key.trim() || null });
   },
 
   // --- Custom Model ---
@@ -439,7 +457,6 @@ export const storageService = {
     cachedProjectsMeta = null;
   },
 
-  // --- Current Project ID (stored locally since it's session-specific) ---
   setCurrentProjectId(projectId: string) {
     sessionStorage.setItem('current_project_id', projectId);
   },
