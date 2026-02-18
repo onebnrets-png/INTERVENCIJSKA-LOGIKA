@@ -466,7 +466,7 @@ useEffect(() => {
             />
           </div>
         </div>
-      ) : (
+         ) : (
         /* ═══ MAIN APP LAYOUT ═══ */
         <div style={{
           display: 'flex',
@@ -546,11 +546,10 @@ useEffect(() => {
               onLanguageSwitch={translation.handleLanguageSwitchRequest}
               onSubStepClick={pm.handleSubStepClick}
               isLoading={!!generation.isLoading}
-              // ★ v2.1: Pass collapse callback to Sidebar
               onCollapseChange={setSidebarCollapsed}
             />
- />
-          {/* ═══ MAIN CONTENT ═══ */}
+
+            {/* ═══ MAIN CONTENT ═══ */}
             <main style={{
               flex: 1,
               display: 'flex',
@@ -591,7 +590,6 @@ useEffect(() => {
                 }}>
                   {pm.projectData?.projectIdea?.projectAcronym?.trim() ? (
                     <>
-                      {/* Acronym badge */}
                       <span style={{
                         fontSize: '13px',
                         fontWeight: 800,
@@ -607,7 +605,6 @@ useEffect(() => {
                       }}>
                         {pm.projectData.projectIdea.projectAcronym.trim()}
                       </span>
-                      {/* Separator dot */}
                       <span style={{
                         width: 4,
                         height: 4,
@@ -615,7 +612,6 @@ useEffect(() => {
                         background: colors.border.medium,
                         flexShrink: 0,
                       }} />
-                      {/* Full project title */}
                       <span style={{
                         fontSize: '13px',
                         fontWeight: 600,
@@ -629,7 +625,6 @@ useEffect(() => {
                       </span>
                     </>
                   ) : pm.projectData?.projectIdea?.projectTitle?.trim() ? (
-                    /* Title exists but no acronym yet */
                     <span style={{
                       fontSize: '13px',
                       fontWeight: 600,
@@ -642,7 +637,6 @@ useEffect(() => {
                       {pm.projectData.projectIdea.projectTitle.trim()}
                     </span>
                   ) : (
-                    /* Placeholder — no title yet */
                     <span style={{
                       fontSize: '13px',
                       fontWeight: 500,
@@ -719,6 +713,33 @@ useEffect(() => {
                 </div>
               </div>
 
+              {/* SCROLLABLE CONTENT — ProjectDisplay */}
+              <ProjectDisplay
+                projectData={pm.projectData}
+                activeStepId={pm.currentStepId}
+                language={language}
+                onUpdateData={pm.handleUpdateData}
+                onGenerateSection={generation.handleGenerateSection}
+                onGenerateCompositeSection={generation.handleGenerateCompositeSection}
+                onGenerateField={generation.handleGenerateField}
+                onAddItem={pm.handleAddItem}
+                onRemoveItem={pm.handleRemoveItem}
+                isLoading={generation.isLoading}
+                error={generation.error}
+                missingApiKey={auth.showAiWarning}
+              />
+            </main>
+
+            {/* ═══ DASHBOARD PANEL (right side) ═══ */}
+            <DashboardPanel
+              projectData={pm.projectData}
+              language={language}
+              onCollapseChange={setDashboardCollapsed}
+            />
+
+          </div>
+        </div>
+      )}
       {/* PRINT LAYOUT */}
       <div className="hidden print:block">
         <PrintLayout projectData={pm.projectData} language={language} logo={auth.appLogo} />
