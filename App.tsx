@@ -1,14 +1,14 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v2.2 — 2026-02-18
-//   - NEW: Toolbar center — project acronym badge + full title (or placeholder)
-// v2.1 — 2026-02-17
-//   - FIX: Sidebar collapse → main content responsive marginLeft
+// v2.3 — 2026-02-18
+//   - REMOVED: WelcomeScreen — auto-starts on step 1
+//   - NEW: StepNavigationBar in second toolbar row (horizontal circles with arrows)
+//   - NEW: Auto-open ProjectListModal on login
+//   - Previous (v2.2): Toolbar center acronym + title
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo, useEffect } from 'react';
-import WelcomeScreen from './components/WelcomeScreen.tsx';
 import ProjectDisplay from './components/ProjectDisplay.tsx';
 import PrintLayout from './components/PrintLayout.tsx';
 import GanttChart from './components/GanttChart.tsx';
@@ -22,6 +22,7 @@ import ProjectDashboard from './components/ProjectDashboard.tsx';
 import DashboardPanel from './components/DashboardPanel.tsx';
 import Sidebar from './components/Sidebar.tsx';
 import SummaryModal from './components/SummaryModal.tsx';
+import StepNavigationBar from './components/StepNavigationBar.tsx';
 import { useAdmin } from './hooks/useAdmin.ts';
 import { ensureGlobalInstructionsLoaded } from './services/globalInstructionsService.ts';
 import { ICONS, getSteps, BRAND_ASSETS } from './constants.tsx';
@@ -29,11 +30,11 @@ import { TEXT } from './locales.ts';
 import { isStepCompleted } from './utils.ts';
 import { colors as lightColors, darkColors, shadows, radii, spacing, animation, typography } from './design/theme.ts';
 import { initTheme, getThemeMode, onThemeChange } from './services/themeService.ts';
+
 import { useAuth } from './hooks/useAuth.ts';
 import { useProjectManager } from './hooks/useProjectManager.ts';
 import { useTranslation } from './hooks/useTranslation.ts';
 import { useGeneration } from './hooks/useGeneration.ts';
-import StepNavigationBar from './components/StepNavigationBar.tsx';
 
 type ColorScheme = typeof lightColors | typeof darkColors;
 
@@ -153,13 +154,14 @@ const App = () => {
   useEffect(() => { if (auth.currentUser) { ensureGlobalInstructionsLoaded(); adminHook.checkAdminStatus(); } }, [auth.currentUser]);
   useEffect(() => { initTheme(); const unsub = onThemeChange((m) => setIsDark(m === 'dark')); return unsub; }, []);
   useEffect(() => { if (pm.showProjectListOnLogin) { setIsProjectListOpen(true); pm.setShowProjectListOnLogin(false); } }, [pm.showProjectListOnLogin]);
-  // ★ v2.3: Auto-start on step 1 (no more WelcomeScreen)
+
+  // ★ v2.3: Auto-start on step 1 — no more WelcomeScreen
   useEffect(() => {
-  if (auth.currentUser && pm.currentStepId === null) {
-    pm.setCurrentStepId(1);
-    setIsProjectListOpen(true);
-  }
-}, [auth.currentUser]);
+    if (auth.currentUser && pm.currentStepId === null) {
+      pm.setCurrentStepId(1);
+      setIsProjectListOpen(true);
+    }
+  }, [auth.currentUser]);
 
   const t = TEXT[language] || TEXT['en'];
   const STEPS = getSteps(language);
@@ -175,6 +177,9 @@ const App = () => {
   const handleExportDocx = async () => { try { await pm.handleExportDocx(generation.setIsLoading); } catch (e: any) { alert(e.message); } };
   const handleImportProject = async (event: React.ChangeEvent<HTMLInputElement>) => { generation.setIsLoading(true); try { await pm.handleImportProject(event); } catch (e: any) { generation.setError(`Failed to import: ${e.message}`); } finally { generation.setIsLoading(false); } };
 
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER: Not logged in
+  // ═══════════════════════════════════════════════════════════════
   if (!auth.currentUser) {
     return (
       <>
@@ -193,6 +198,9 @@ const App = () => {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER: Logged in — always shows main app layout (no WelcomeScreen)
+  // ═══════════════════════════════════════════════════════════════
   return (
     <>
       <ConfirmationModal isOpen={modalConfig.isOpen} {...modalConfig} />
@@ -211,123 +219,149 @@ const App = () => {
         language={language}
       />
 
-      {pm.currentStepId !== null && (
-
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: colors.surface.background, fontFamily: typography.fontFamily.sans, overflow: 'hidden' }} className="print:hidden">
-          {auth.shouldShowBanner && (
-            <ApiWarningBanner onDismiss={auth.dismissWarning} onOpenSettings={() => { setAdminPanelInitialTab('ai'); setIsSettingsOpen(true); }} language={language} />
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: colors.surface.background, fontFamily: typography.fontFamily.sans, overflow: 'hidden' }} className="print:hidden">
+        {auth.shouldShowBanner && (
+          <ApiWarningBanner onDismiss={auth.dismissWarning} onOpenSettings={() => { setAdminPanelInitialTab('ai'); setIsSettingsOpen(true); }} language={language} />
+        )}
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {generation.isLoading && (
+            <div style={{ position: 'fixed', inset: 0, background: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)', cursor: 'wait' }}>
+              <div style={{ background: colors.surface.card, padding: spacing['3xl'], borderRadius: radii.xl, boxShadow: shadows.xl, textAlign: 'center', border: `1px solid ${colors.border.light}` }}>
+                <div style={{ width: 32, height: 32, border: `4px solid ${colors.primary[500]}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+                <p style={{ fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: 0 }}>
+                  {typeof generation.isLoading === 'string' ? generation.isLoading : t.loading}
+                </p>
+              </div>
+            </div>
           )}
-          <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
-            {generation.isLoading && (
-              <div style={{ position: 'fixed', inset: 0, background: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)', cursor: 'wait' }}>
-                <div style={{ background: colors.surface.card, padding: spacing['3xl'], borderRadius: radii.xl, boxShadow: shadows.xl, textAlign: 'center', border: `1px solid ${colors.border.light}` }}>
-                  <div style={{ width: 32, height: 32, border: `4px solid ${colors.primary[500]}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-                  <p style={{ fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: 0 }}>
-                    {typeof generation.isLoading === 'string' ? generation.isLoading : t.loading}
-                  </p>
+
+          <Sidebar
+            language={language} projectData={pm.projectData} currentStepId={pm.currentStepId}
+            setCurrentStepId={pm.setCurrentStepId} completedStepsStatus={completedStepsStatus}
+            displayTitle={displayTitle} currentUser={auth.currentUser} appLogo={auth.appLogo}
+            isAdmin={adminHook.isAdmin} isSidebarOpen={isSidebarOpen}
+            onCloseSidebar={() => setIsSidebarOpen(false)}
+            onBackToWelcome={() => pm.setCurrentStepId(1)}
+            onOpenProjectList={() => setIsProjectListOpen(true)}
+            onOpenAdminPanel={(tab?: string) => { setAdminPanelInitialTab(tab); setIsAdminPanelOpen(true); }}
+            onLogout={handleLogout} onLanguageSwitch={translation.handleLanguageSwitchRequest}
+            onSubStepClick={pm.handleSubStepClick} isLoading={!!generation.isLoading}
+            onCollapseChange={setSidebarCollapsed}
+          />
+
+          <main style={{
+            flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            marginLeft: sidebarCollapsed ? 64 : 280, marginRight: 0,
+            transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}>
+            {/* ═══ TOOLBAR ROW 1: Acronym + Title + Action Buttons ═══ */}
+            <div style={{
+              background: colors.surface.card, borderBottom: `1px solid ${colors.border.light}`,
+              padding: `${spacing.sm} ${spacing.lg}`, display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', gap: spacing.sm, flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, flexShrink: 0 }}>
+                <div className="lg:hidden">
+                  <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
                 </div>
               </div>
-            )}
 
-            <Sidebar
-              language={language} projectData={pm.projectData} currentStepId={pm.currentStepId}
-              setCurrentStepId={pm.setCurrentStepId} completedStepsStatus={completedStepsStatus}
-              displayTitle={displayTitle} currentUser={auth.currentUser} appLogo={auth.appLogo}
-              isAdmin={adminHook.isAdmin} isSidebarOpen={isSidebarOpen}
-              onCloseSidebar={() => setIsSidebarOpen(false)} onBackToWelcome={pm.handleBackToWelcome}
-              onOpenProjectList={() => setIsProjectListOpen(true)}
-              onOpenAdminPanel={(tab?: string) => { setAdminPanelInitialTab(tab); setIsAdminPanelOpen(true); }}
-              onLogout={handleLogout} onLanguageSwitch={translation.handleLanguageSwitchRequest}
-              onSubStepClick={pm.handleSubStepClick} isLoading={!!generation.isLoading}
-              onCollapseChange={setSidebarCollapsed}
-            />
-
-            <main style={{
-              flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              marginLeft: sidebarCollapsed ? 64 : 280, marginRight: 0,
-              transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}>
-              {/* ═══ TOOLBAR ═══ */}
-              <div style={{
-                background: colors.surface.card, borderBottom: `1px solid ${colors.border.light}`,
-                padding: `${spacing.sm} ${spacing.lg}`, display: 'flex', alignItems: 'center',
-                justifyContent: 'space-between', gap: spacing.sm, flexShrink: 0,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, flexShrink: 0 }}>
-                  <div className="lg:hidden">
-                    <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
-                  </div>
-                </div>
-
-                {/* Center: Project Acronym + Title */}
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', minWidth: 0, overflow: 'hidden', padding: `0 ${spacing.md}` }}>
-                  {pm.projectData?.projectIdea?.projectAcronym?.trim() ? (
-                    <>
-                      <span style={{
-                        fontSize: '13px', fontWeight: 800, color: colors.primary[600],
-                        background: isDark ? colors.primary[900] + '40' : colors.primary[50],
-                        border: `1.5px solid ${isDark ? colors.primary[700] : colors.primary[200]}`,
-                        padding: '3px 10px', borderRadius: radii.md, letterSpacing: '0.06em',
-                        whiteSpace: 'nowrap', flexShrink: 0, textTransform: 'uppercase',
-                      }}>
-                        {pm.projectData.projectIdea.projectAcronym.trim()}
-                      </span>
-                      <span style={{ width: 4, height: 4, borderRadius: '50%', background: colors.border.medium, flexShrink: 0 }} />
-                      <span style={{
-                        fontSize: '13px', fontWeight: 600, color: colors.text.heading,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
-                      }} title={pm.projectData.projectIdea.projectTitle || ''}>
-                        {pm.projectData.projectIdea.projectTitle?.trim() || ''}
-                      </span>
-                    </>
-                  ) : pm.projectData?.projectIdea?.projectTitle?.trim() ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', minWidth: 0, overflow: 'hidden', padding: `0 ${spacing.md}` }}>
+                {pm.projectData?.projectIdea?.projectAcronym?.trim() ? (
+                  <>
+                    <span style={{
+                      fontSize: '13px', fontWeight: 800, color: colors.primary[600],
+                      background: isDark ? colors.primary[900] + '40' : colors.primary[50],
+                      border: `1.5px solid ${isDark ? colors.primary[700] : colors.primary[200]}`,
+                      padding: '3px 10px', borderRadius: radii.md, letterSpacing: '0.06em',
+                      whiteSpace: 'nowrap', flexShrink: 0, textTransform: 'uppercase',
+                    }}>
+                      {pm.projectData.projectIdea.projectAcronym.trim()}
+                    </span>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: colors.border.medium, flexShrink: 0 }} />
                     <span style={{
                       fontSize: '13px', fontWeight: 600, color: colors.text.heading,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
-                    }} title={pm.projectData.projectIdea.projectTitle}>
-                      {pm.projectData.projectIdea.projectTitle.trim()}
+                    }} title={pm.projectData.projectIdea.projectTitle || ''}>
+                      {pm.projectData.projectIdea.projectTitle?.trim() || ''}
                     </span>
-                  ) : (
-                    <span style={{
-                      fontSize: '13px', fontWeight: 500, color: colors.text.muted,
-                      fontStyle: 'italic', letterSpacing: '0.03em', opacity: 0.6, whiteSpace: 'nowrap',
-                    }}>
-                      {language === 'si' ? 'NAZIV PROJEKTA' : 'PROJECT TITLE'}
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                  <ToolbarButton colors={colors} onClick={() => setIsDashboardOpen(true)} title={language === 'si' ? 'Pregled projekta' : 'Project Dashboard'} variant="primary"
-                    icon={<svg style={{ width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>}
-                  />
-                  <ToolbarSeparator colors={colors} />
-                  <ToolbarButton colors={colors} onClick={pm.handleSaveToStorage} title={t.saveProject} variant="success" icon={<ICONS.SAVE style={{ width: 20, height: 20 }} />} />
-                  <label style={{ padding: spacing.sm, borderRadius: radii.lg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: `all ${animation.duration.fast}`, color: colors.text.body }} title={t.importProject}>
-                    <ICONS.IMPORT style={{ width: 20, height: 20 }} />
-                    <input ref={pm.importInputRef} type="file" accept=".json" onChange={handleImportProject} style={{ display: 'none' }} />
-                  </label>
-                  <ToolbarSeparator colors={colors} />
-                  <ToolbarButton colors={colors} onClick={handleExportDocx} title={t.exportDocx} icon={<ICONS.DOCX style={{ width: 20, height: 20 }} />} />
-                  <ToolbarButton colors={colors} onClick={generation.handleExportSummary} title={t.exportSummary} disabled={auth.showAiWarning} variant={auth.showAiWarning ? 'warning' : 'default'} icon={<ICONS.SUMMARY style={{ width: 20, height: 20 }} />} />
-                  <ToolbarButton colors={colors} onClick={handlePrint} title={t.print} icon={<ICONS.PRINT style={{ width: 20, height: 20 }} />} />
-                </div>
+                  </>
+                ) : pm.projectData?.projectIdea?.projectTitle?.trim() ? (
+                  <span style={{
+                    fontSize: '13px', fontWeight: 600, color: colors.text.heading,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+                  }} title={pm.projectData.projectIdea.projectTitle}>
+                    {pm.projectData.projectIdea.projectTitle.trim()}
+                  </span>
+                ) : (
+                  <span style={{
+                    fontSize: '13px', fontWeight: 500, color: colors.text.muted,
+                    fontStyle: 'italic', letterSpacing: '0.03em', opacity: 0.6, whiteSpace: 'nowrap',
+                  }}>
+                    {language === 'si' ? 'NAZIV PROJEKTA' : 'PROJECT TITLE'}
+                  </span>
+                )}
               </div>
 
-              <ProjectDisplay
-                projectData={pm.projectData} activeStepId={pm.currentStepId} language={language}
-                onUpdateData={pm.handleUpdateData} onGenerateSection={generation.handleGenerateSection}
-                onGenerateCompositeSection={generation.handleGenerateCompositeSection}
-                onGenerateField={generation.handleGenerateField} onAddItem={pm.handleAddItem}
-                onRemoveItem={pm.handleRemoveItem} isLoading={generation.isLoading}
-                error={generation.error} missingApiKey={auth.showAiWarning}
-              />
-            </main>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                <ToolbarButton colors={colors} onClick={() => setIsDashboardOpen(true)} title={language === 'si' ? 'Pregled projekta' : 'Project Dashboard'} variant="primary"
+                  icon={<svg style={{ width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>}
+                />
+                <ToolbarSeparator colors={colors} />
+                <ToolbarButton colors={colors} onClick={pm.handleSaveToStorage} title={t.saveProject} variant="success" icon={<ICONS.SAVE style={{ width: 20, height: 20 }} />} />
+                <label style={{ padding: spacing.sm, borderRadius: radii.lg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: `all ${animation.duration.fast}`, color: colors.text.body }} title={t.importProject}>
+                  <ICONS.IMPORT style={{ width: 20, height: 20 }} />
+                  <input ref={pm.importInputRef} type="file" accept=".json" onChange={handleImportProject} style={{ display: 'none' }} />
+                </label>
+                <ToolbarSeparator colors={colors} />
+                <ToolbarButton colors={colors} onClick={handleExportDocx} title={t.exportDocx} icon={<ICONS.DOCX style={{ width: 20, height: 20 }} />} />
+                <ToolbarButton colors={colors} onClick={generation.handleExportSummary} title={t.exportSummary} disabled={auth.showAiWarning} variant={auth.showAiWarning ? 'warning' : 'default'} icon={<ICONS.SUMMARY style={{ width: 20, height: 20 }} />} />
+                <ToolbarButton colors={colors} onClick={handlePrint} title={t.print} icon={<ICONS.PRINT style={{ width: 20, height: 20 }} />} />
+              </div>
+            </div>
 
-            <DashboardPanel projectData={pm.projectData} language={language} onCollapseChange={setDashboardCollapsed} />
-          </div>
+            {/* ═══ TOOLBAR ROW 2: Step Title + Navigation Circles ═══ */}
+            <div style={{
+              background: colors.surface.card, borderBottom: `1px solid ${colors.border.light}`,
+              padding: `6px ${spacing.lg}`, display: 'flex', alignItems: 'center',
+              gap: spacing.md, flexShrink: 0, minHeight: 52,
+            }}>
+              <div style={{ flexShrink: 0, maxWidth: '200px' }}>
+                <h2 style={{
+                  fontSize: '14px', fontWeight: 700, color: colors.text.heading,
+                  margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {STEPS.find(s => s.id === (pm.currentStepId || 1))?.title || ''}
+                </h2>
+              </div>
+
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
+                <StepNavigationBar
+                  language={language}
+                  currentStepId={pm.currentStepId || 1}
+                  completedStepsStatus={completedStepsStatus}
+                  onStepClick={(id) => pm.setCurrentStepId(id)}
+                  isProblemAnalysisComplete={completedStepsStatus[0]}
+                />
+              </div>
+
+              <div style={{ width: '200px', flexShrink: 0 }} />
+            </div>
+
+            {/* ═══ SCROLLABLE CONTENT ═══ */}
+            <ProjectDisplay
+              projectData={pm.projectData} activeStepId={pm.currentStepId || 1} language={language}
+              onUpdateData={pm.handleUpdateData} onGenerateSection={generation.handleGenerateSection}
+              onGenerateCompositeSection={generation.handleGenerateCompositeSection}
+              onGenerateField={generation.handleGenerateField} onAddItem={pm.handleAddItem}
+              onRemoveItem={pm.handleRemoveItem} isLoading={generation.isLoading}
+              error={generation.error} missingApiKey={auth.showAiWarning}
+            />
+          </main>
+
+          <DashboardPanel projectData={pm.projectData} language={language} onCollapseChange={setDashboardCollapsed} />
         </div>
-      )}
+      </div>
 
       <div className="hidden print:block">
         <PrintLayout projectData={pm.projectData} language={language} logo={auth.appLogo} />
