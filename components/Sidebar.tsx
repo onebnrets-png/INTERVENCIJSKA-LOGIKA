@@ -1,14 +1,16 @@
 // components/Sidebar.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Sidebar — Design System Edition
+// v1.8 — 2026-02-18
+//   ★ v1.8: Superadmin support
+//     - 👑 icon + "Super Admin / Settings" label in footer
+//     - Imports storageService for isSuperAdmin() check
 // v1.7 — 2026-02-18
-//   ★ v1.7: Dark-mode sub-step & step text colors — use stepColor.main
-//     instead of stepColor.text in dark mode for legibility.
-//     Active step background also adapted for dark mode.
+//   - Dark-mode sub-step & step text colors
 // v1.6 — 2026-02-18
-//   - FIX: arrayHasContent helper — empty skeleton arrays no longer count as "filled"
+//   - arrayHasContent helper fix
 // v1.5 — 2026-02-17
-//   - FIX: onCollapseChange prop
+//   - onCollapseChange prop
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo } from 'react';
@@ -18,6 +20,7 @@ import { ICONS, getSteps, getSubSteps } from '../constants.tsx';
 import { TEXT } from '../locales.ts';
 import { isSubStepCompleted } from '../utils.ts';
 import { getThemeMode, toggleTheme, onThemeChange } from '../services/themeService.ts';
+import { storageService } from '../services/storageService.ts';
 import type { ProjectData } from '../types.ts';
 
 // ─── Step Icons (SVG for collapsed mode) ─────────────────────
@@ -55,7 +58,7 @@ const STEP_ICONS: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> = {
   ),
 };
 
-// ─── Step completion percentage calculation ──────────────────
+// ─── Step completion helpers ─────────────────────────────────
 
 const STEP_KEYS: StepColorKey[] = ['problemAnalysis', 'projectIdea', 'generalObjectives', 'specificObjectives', 'activities', 'expectedResults'];
 
@@ -73,8 +76,7 @@ function arrayHasContent(arr: any[] | undefined | null): boolean {
 
 function getStepCompletionPercent(projectData: ProjectData, stepKey: string): number {
   if (stepKey === 'problemAnalysis') {
-    let filled = 0;
-    const total = 3;
+    let filled = 0; const total = 3;
     const pa = projectData.problemAnalysis;
     if (pa?.coreProblem?.title && pa.coreProblem.title.trim()) filled++;
     if (arrayHasContent(pa?.causes)) filled++;
@@ -82,8 +84,7 @@ function getStepCompletionPercent(projectData: ProjectData, stepKey: string): nu
     return Math.round((filled / total) * 100);
   }
   if (stepKey === 'projectIdea') {
-    let filled = 0;
-    const total = 5;
+    let filled = 0; const total = 5;
     const pi = projectData.projectIdea;
     if (pi?.mainAim?.trim()) filled++;
     if (pi?.stateOfTheArt?.trim()) filled++;
@@ -107,8 +108,7 @@ function getStepCompletionPercent(projectData: ProjectData, stepKey: string): nu
     return Math.round((Math.min(withContent, 5) / 5) * 100);
   }
   if (stepKey === 'activities') {
-    let filled = 0;
-    const total = 3;
+    let filled = 0; const total = 3;
     if (projectData.activities && projectData.activities.some((wp: any) =>
       (wp.title && wp.title.trim()) ||
       (wp.tasks && wp.tasks.some((t: any) => t.title && t.title.trim()))
@@ -118,8 +118,7 @@ function getStepCompletionPercent(projectData: ProjectData, stepKey: string): nu
     return Math.round((filled / total) * 100);
   }
   if (stepKey === 'expectedResults') {
-    let filled = 0;
-    const total = 4;
+    let filled = 0; const total = 4;
     if (arrayHasContent(projectData.outputs)) filled++;
     if (arrayHasContent(projectData.outcomes)) filled++;
     if (arrayHasContent(projectData.impacts)) filled++;
@@ -134,15 +133,13 @@ function getOverallCompletion(projectData: ProjectData): number {
   return Math.round(percentages.reduce((sum, v) => sum + v, 0) / percentages.length);
 }
 
-// ─── Dark-aware step color helper ★ v1.7 ─────────────────────
+// ─── Dark-aware color helpers ────────────────────────────────
 
 function getStepTextColor(stepColor: typeof stepColors[StepColorKey], isDark: boolean): string {
-  // In dark mode, use the brighter 'main' color instead of the dark 'text' variant
   return isDark ? stepColor.main : stepColor.text;
 }
 
 function getStepActiveBg(stepColor: typeof stepColors[StepColorKey], isDark: boolean): string {
-  // In dark mode, use a subtle transparent version of the main color
   return isDark ? `${stepColor.main}18` : stepColor.light;
 }
 
@@ -203,6 +200,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const SUB_STEPS = getSubSteps(language);
   const overallCompletion = useMemo(() => getOverallCompletion(projectData), [projectData]);
 
+  // ★ v1.8: Superadmin detection
+  const isSuperAdmin = storageService.isSuperAdmin();
+
   const collapsedWidth = 64;
   const expandedWidth = 280;
   const sidebarWidth = isCollapsed ? collapsedWidth : expandedWidth;
@@ -227,6 +227,14 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const mobileTransform = isDesktop || isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)';
   const responsiveStyle: React.CSSProperties = { ...sidebarStyle, transform: mobileTransform };
+
+  // ★ v1.8: Footer icon and label based on role
+  const footerIcon = isSuperAdmin ? '👑' : isAdmin ? '🛡️' : '⚙️';
+  const footerLabel = isSuperAdmin
+    ? (language === 'si' ? 'Super Admin / Nastavitve' : 'Super Admin / Settings')
+    : isAdmin
+      ? (language === 'si' ? 'Admin / Nastavitve' : 'Admin / Settings')
+      : (language === 'si' ? 'Nastavitve' : 'Settings');
 
   return (
     <>
@@ -311,7 +319,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                       width: '100%', textAlign: 'left',
                       padding: isCollapsed ? `${spacing.sm} 0` : `${spacing.md} ${spacing.lg}`,
                       borderRadius: radii.lg,
-                      // ★ v1.7: dark-aware active border & background
                       border: isActive ? `1.5px solid ${getStepActiveBorder(stepColor, isDark)}` : '1.5px solid transparent',
                       background: isActive ? getStepActiveBg(stepColor, isDark) : 'transparent',
                       cursor: isClickable ? 'pointer' : 'not-allowed',
@@ -340,7 +347,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                       <span style={{
                         flex: 1, fontSize: typography.fontSize.sm,
                         fontWeight: isActive ? typography.fontWeight.semibold : typography.fontWeight.medium,
-                        // ★ v1.7: dark-aware step title color
                         color: isActive ? getStepTextColor(stepColor, isDark) : activeColors.text.body,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         transition: `color ${animation.duration.fast}`,
@@ -353,7 +359,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     )}
                   </button>
 
-                  {/* ★ v1.7: Sub-steps with dark-aware colors */}
+                  {/* Sub-steps */}
                   {!isCollapsed && isActive && SUB_STEPS[step.key as keyof typeof SUB_STEPS] && (SUB_STEPS[step.key as keyof typeof SUB_STEPS] as any[]).length > 0 && (
                     <div style={{
                       paddingLeft: spacing['2xl'], marginTop: '2px', marginBottom: spacing.sm,
@@ -372,7 +378,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                               borderRadius: radii.md, border: 'none', background: 'transparent',
                               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: spacing.sm,
                               fontSize: typography.fontSize.xs,
-                              // ★ v1.7: KEY FIX — use main (bright) color in dark mode
                               color: subCompleted ? getStepTextColor(stepColor, isDark) : activeColors.text.muted,
                               fontFamily: 'inherit',
                               transition: `all ${animation.duration.fast}`,
@@ -397,25 +402,30 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* ═══ FOOTER ═══ */}
         <div style={{ padding: isCollapsed ? `${spacing.md} ${spacing.sm}` : spacing.lg, borderTop: `1px solid ${activeColors.border.light}`, flexShrink: 0 }}>
+          {/* ★ v1.8: Admin/SuperAdmin button — expanded */}
           {!isCollapsed && (
             <button onClick={() => onOpenAdminPanel()} style={{
               width: '100%', textAlign: 'left', padding: `${spacing.sm} ${spacing.lg}`, borderRadius: radii.lg,
               border: 'none', background: 'transparent', cursor: 'pointer', fontSize: typography.fontSize.sm,
-              color: isDark ? '#A5B4FC' : activeColors.primary[600], fontWeight: typography.fontWeight.medium,
+              color: isSuperAdmin ? '#D97706' : isDark ? '#A5B4FC' : activeColors.primary[600],
+              fontWeight: typography.fontWeight.medium,
               display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: '2px', fontFamily: 'inherit',
             }}>
-              <span>{isAdmin ? '🛡️' : '⚙️'}</span>
-              {isAdmin ? (language === 'si' ? 'Admin / Nastavitve' : 'Admin / Settings') : (language === 'si' ? 'Nastavitve' : 'Settings')}
+              <span>{footerIcon}</span>
+              {footerLabel}
             </button>
           )}
+          {/* ★ v1.8: Admin/SuperAdmin button — collapsed */}
           {isCollapsed && (
             <button onClick={() => onOpenAdminPanel()} style={{
               width: '100%', display: 'flex', justifyContent: 'center', padding: `${spacing.sm} 0`,
               borderRadius: radii.lg, border: 'none', background: 'transparent', cursor: 'pointer', marginBottom: '2px',
-            }} title={isAdmin ? 'Admin / Settings' : 'Settings'}>
-              <span style={{ fontSize: '18px' }}>{isAdmin ? '🛡️' : '⚙️'}</span>
+            }} title={footerLabel}>
+              <span style={{ fontSize: '18px' }}>{footerIcon}</span>
             </button>
           )}
+
+          {/* Theme toggle — expanded */}
           {!isCollapsed && (
             <button onClick={() => { toggleTheme(); }} style={{
               width: '100%', textAlign: 'left', padding: `${spacing.sm} ${spacing.lg}`, borderRadius: radii.lg,
@@ -430,6 +440,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               <span>{isDark ? (language === 'si' ? 'Svetli način' : 'Light Mode') : (language === 'si' ? 'Temni način' : 'Dark Mode')}</span>
             </button>
           )}
+          {/* Theme toggle — collapsed */}
           {isCollapsed && (
             <button onClick={() => { toggleTheme(); }} style={{
               width: '100%', display: 'flex', justifyContent: 'center', padding: `${spacing.sm} 0`,
@@ -442,6 +453,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               )}
             </button>
           )}
+
+          {/* Logout */}
           <button onClick={onLogout} style={{
             width: '100%', textAlign: isCollapsed ? 'center' : 'left',
             padding: `${spacing.sm} ${isCollapsed ? '0' : spacing.lg}`, borderRadius: radii.lg, border: 'none',
@@ -452,12 +465,15 @@ const Sidebar: React.FC<SidebarProps> = ({
             <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             {!isCollapsed && <span>{t.auth.logout}</span>}
           </button>
+
+          {/* Copyright */}
           {!isCollapsed && (
             <p style={{ fontSize: '10px', color: activeColors.text.muted, textAlign: 'center', marginTop: spacing.sm, opacity: 0.6 }}>© 2026 INFINITA d.o.o.</p>
           )}
         </div>
       </aside>
 
+      {/* Collapse/Expand button */}
       {(isDesktop || isSidebarOpen) && (
         <button
           onClick={() => { const next = !isCollapsed; setIsCollapsed(next); onCollapseChange?.(next); }}
@@ -478,4 +494,5 @@ const Sidebar: React.FC<SidebarProps> = ({
     </>
   );
 };
+
 export default Sidebar;
