@@ -57,6 +57,7 @@ import Organigram from './Organigram.tsx';
 import { recalculateProjectSchedule } from '../utils.ts';
 import InlineChart from './InlineChart.tsx';
 import { stepColors } from '../design/theme.ts';
+import StepNavigationBar from './StepNavigationBar.tsx';
 
 const FieldHeader = ({ title, description, id = '', accentColor = '' }) => (
     <div className="mb-3 pt-5 animate-fadeIn" id={id}>
