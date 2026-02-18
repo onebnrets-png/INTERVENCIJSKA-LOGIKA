@@ -1,11 +1,9 @@
 // components/AuthScreen.tsx
 // Supabase Auth - Email/Password login & registration + MFA verification
-// v3.0 - 2026-02-18
+// v3.1 — 2026-02-18
+//   ★ v3.1: Hardcoded EURO-OFFICE logo on Auth screen
 //   ★ v3.0: Multi-provider API key on registration
-//     - Dropdown to select provider (Gemini / OpenAI / OpenRouter)
-//     - Dynamic placeholder and description per provider
-//     - register() passes apiProvider to storageService
-//   v2.0 - 2026-02-17  Dark-mode: isDark + colors pattern
+//   v2.0 — 2026-02-17  Dark-mode: isDark + colors pattern
 
 import React, { useState, useEffect } from 'react';
 import { storageService } from '../services/storageService.ts';
@@ -15,6 +13,7 @@ import type { Language } from '../types.ts';
 import type { AIProviderType } from '../services/aiProvider.ts';
 import { lightColors, darkColors, spacing, radii, shadows, typography } from '../design/theme.ts';
 import { getThemeMode, onThemeChange } from '../services/themeService.ts';
+import { BRAND_ASSETS } from '../constants.tsx';
 
 // --- Prop Interfaces ---
 interface MFAVerifyScreenProps {
@@ -109,6 +108,8 @@ const MFAVerifyScreen: React.FC<MFAVerifyScreenProps> = ({ factorId, language, o
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 4, background: colors.primary.gradient }}></div>
 
                 <div style={{ textAlign: 'center', marginBottom: spacing['3xl'] }}>
+                    {/* ★ v3.1: Logo on MFA screen too */}
+                    <img src={BRAND_ASSETS.logoText} alt="EURO-OFFICE" style={{ height: 40, width: 'auto', objectFit: 'contain', marginBottom: spacing.lg }} />
                     <div style={{ margin: '0 auto', width: 64, height: 64, background: isDark ? 'rgba(99,102,241,0.15)' : '#E0F2FE', borderRadius: radii.full, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg }}>
                         <svg style={{ width: 32, height: 32, color: colors.primary[500] }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -177,7 +178,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [apiKey, setApiKey] = useState('');
-    const [apiProvider, setApiProvider] = useState<AIProviderType>('gemini');  // ★ v3.0
+    const [apiProvider, setApiProvider] = useState<AIProviderType>('gemini');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [error, setError] = useState('');
@@ -187,7 +188,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
     const t = TEXT[language].auth;
     const pwStrength = checkPasswordStrength(password);
 
-    // ★ v3.0: Get current provider config
     const currentProviderConfig = PROVIDER_OPTIONS.find(p => p.id === apiProvider) || PROVIDER_OPTIONS[0];
 
     if (needsMFAVerify && mfaFactorId) {
@@ -218,7 +218,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
         if (password !== confirmPassword) { setError(t.errorMatch); return; }
         setLoading(true);
         const finalDisplayName = displayName.trim() || generateDisplayNameFromEmail(email);
-        // ★ v3.0: Pass apiProvider to register
         const result = await storageService.register(email, finalDisplayName, password, apiKey, apiProvider);
         setLoading(false);
         if (result.success) {
@@ -282,7 +281,18 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
             <div style={{ background: colors.surface.card, borderRadius: radii.lg, boxShadow: shadows['2xl'], width: '100%', maxWidth: 480, padding: spacing['3xl'], position: 'relative', overflow: 'hidden', border: `1px solid ${colors.border.light}` }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 4, background: colors.primary.gradient }}></div>
 
+                {/* ★ v3.1: Hardcoded EURO-OFFICE logo + heading */}
                 <div style={{ textAlign: 'center', marginBottom: spacing['3xl'] }}>
+                    <img
+                      src={BRAND_ASSETS.logoText}
+                      alt="EURO-OFFICE"
+                      style={{
+                        height: 48,
+                        width: 'auto',
+                        objectFit: 'contain',
+                        marginBottom: spacing.lg,
+                      }}
+                    />
                     <h1 style={{ fontSize: typography.fontSize['3xl'], fontWeight: typography.fontWeight.bold, color: colors.text.heading, marginBottom: spacing.sm }}>
                         {isLogin ? t.loginTitle : t.registerTitle}
                     </h1>
@@ -338,7 +348,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                     {!isLogin && (
                         <div style={{ background: colors.surface.sidebar, padding: spacing.md, borderRadius: radii.md, border: `1px solid ${colors.border.light}`, marginTop: spacing.sm }}>
 
-                            {/* Provider selector dropdown */}
                             <label style={{ display: 'block', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.bold as any, color: colors.primary[isDark ? 300 : 700], marginBottom: spacing.sm }}>
                                 {language === 'si' ? 'AI Ponudnik & API Ključ' : 'AI Provider & API Key'}
                                 <span style={{ fontWeight: typography.fontWeight.normal as any, color: colors.text.muted, fontSize: typography.fontSize.xs, marginLeft: spacing.sm }}>
@@ -346,7 +355,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                                 </span>
                             </label>
 
-                            {/* Provider dropdown */}
                             <div style={{ marginBottom: spacing.sm }}>
                                 <select
                                     value={apiProvider}
@@ -376,7 +384,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                                 </select>
                             </div>
 
-                            {/* API Key input */}
                             <input
                                 type="password"
                                 value={apiKey}
@@ -385,7 +392,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                                 placeholder={currentProviderConfig.placeholder}
                             />
 
-                            {/* Description + link */}
                             <div style={{ marginTop: spacing.sm, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm }}>
                                 <p style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, margin: 0, flex: 1 }}>
                                     {language === 'si' ? currentProviderConfig.descSi : currentProviderConfig.desc}
