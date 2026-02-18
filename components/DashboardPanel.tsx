@@ -1,13 +1,11 @@
 // components/DashboardPanel.tsx
 // ═══════════════════════════════════════════════════════════════
 // Persistent right-side dashboard panel
-// v2.2 — 2026-02-18
-//   - FIX: Empty projects now correctly show 0% completeness
-//   - FIX: Skeleton data no longer inflates percentages
-//   - FIX: Default enum fields (category, likelihood, impact) skipped
-//   - FIX: Removed duplicate objectHasRealContent declaration
-//   - FIX: Chart overflow fixed, proper widths set
-//   - FEAT: Full stats grid with drag-and-drop reordering
+// v2.3 — 2026-02-18
+//   - FIX: Collapse button now works! Internal state management
+//   - FIX: Toggle button styled as matching pill (same as Sidebar)
+//   - FIX: Props simplified — panel manages its own isCollapsed state
+//   - Previous (v2.2): completeness fix, SKIP_KEYS, drag-and-drop
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
@@ -16,14 +14,14 @@ import ChartRenderer from './ChartRenderer.tsx';
 import { theme } from '../design/theme.ts';
 import { getThemeMode, onThemeChange } from '../services/themeService.ts';
 import { ProgressRing } from '../design/index.ts';
+import { colors as lightColors, darkColors, shadows, radii, spacing, animation, typography, zIndex } from '../design/theme.ts';
 
 // ─── Props ───────────────────────────────────────────────────
 
 interface DashboardPanelProps {
   projectData: any;
   language: 'en' | 'si';
-  isCollapsed: boolean;
-  onToggleCollapse: () => void;
+  onCollapseChange?: (collapsed: boolean) => void;
 }
 
 // ─── SVG Icons ───────────────────────────────────────────────
@@ -152,7 +150,9 @@ const calculateCompleteness = (projectData: any): number => {
       check: (d) => {
         if (!Array.isArray(d)) return false;
         return d.some((r: any) =>
-          hasRealStringContent(r.title) || hasRealStringContent(r.description) || hasRealStringContent(r.mitigation)
+          hasRealStringContent(r.title) ||
+          hasRealStringContent(r.description) ||
+          hasRealStringContent(r.mitigation)
         );
       },
     },
@@ -197,16 +197,34 @@ const STAT_DEFINITIONS: StatItem[] = [
 
 const STORAGE_KEY = 'dashboard_stat_order';
 
+// ─── Constants ───────────────────────────────────────────────
+
+const COLLAPSED_WIDTH = 52;
+const EXPANDED_WIDTH = 300;
+
 // ─── Component ───────────────────────────────────────────────
 
 const DashboardPanel: React.FC<DashboardPanelProps> = ({
-  projectData, language, isCollapsed, onToggleCollapse,
+  projectData, language, onCollapseChange,
 }) => {
+  // ★ v2.3: Internal collapse state — panel manages itself
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
+
   useEffect(() => {
     const unsub = onThemeChange((m) => setIsDark(m === 'dark'));
     return unsub;
   }, []);
+
+  const activeColors = isDark ? darkColors : lightColors;
+  const panelWidth = isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
+
+  // ★ v2.3: Toggle handler — updates internal state + notifies parent
+  const handleToggle = useCallback(() => {
+    const next = !isCollapsed;
+    setIsCollapsed(next);
+    onCollapseChange?.(next);
+  }, [isCollapsed, onCollapseChange]);
 
   // Drag-and-drop stat order
   const [statOrder, setStatOrder] = useState<string[]>(() => {
@@ -253,156 +271,218 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({
 
   if (isCollapsed) {
     return (
-      <div style={{
-        width: 52,
-        height: '100%',
-        backgroundColor: isDark ? '#1e1e2e' : '#ffffff',
-        borderLeft: `1px solid ${isDark ? '#2d2d3f' : theme.colors.border.light}`,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: 16,
-        gap: 12,
-        position: 'relative',
-      }}>
-        <button onClick={onToggleCollapse} style={{
-          background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-          color: isDark ? '#a0a0b8' : theme.colors.text.muted, display: 'flex',
+      <>
+        <div style={{
+          width: COLLAPSED_WIDTH,
+          height: '100%',
+          backgroundColor: isDark ? '#1e1e2e' : '#ffffff',
+          borderLeft: `1px solid ${isDark ? '#2d2d3f' : theme.colors.border.light}`,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          paddingTop: 16,
+          gap: 12,
+          position: 'relative',
+          flexShrink: 0,
         }}>
-          {icons.chevronLeft}
+          <ProgressRing value={completeness} size={36} strokeWidth={4} showLabel={true} labelSize="0.55rem" />
+          <div style={{ width: 24, height: 1, backgroundColor: isDark ? '#2d2d3f' : theme.colors.border.light, margin: '4px 0' }} />
+          {orderedStats.slice(0, 6).map(stat => (
+            <div key={stat.id} title={t ? stat.labelSi : stat.labelEn} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+              color: stat.color, fontSize: '10px', fontWeight: 700,
+            }}>
+              {stat.icon}
+              <span>{stat.getValue(projectData)}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* ★ v2.3: External toggle pill — same style as Sidebar */}
+        <button
+          onClick={handleToggle}
+          style={{
+            position: 'fixed',
+            top: 12,
+            right: COLLAPSED_WIDTH - 12,
+            width: 24,
+            height: 24,
+            borderRadius: radii.full,
+            background: activeColors.primary[500],
+            border: `2px solid ${activeColors.surface.card}`,
+            color: activeColors.text.inverse,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: zIndex.sidebar + 1,
+            boxShadow: shadows.md,
+            transition: `right ${animation.duration.normal} ${animation.easing.default}, transform ${animation.duration.fast} ${animation.easing.default}`,
+          }}
+          title="Expand"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path
+              d="M8 2L4 6L8 10"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
-        <ProgressRing value={completeness} size={36} strokeWidth={4} showLabel={true} labelSize="0.55rem" />
-        <div style={{ width: 1, height: 1, backgroundColor: isDark ? '#2d2d3f' : theme.colors.border.light, margin: '4px 0' }} />
-        {orderedStats.slice(0, 6).map(stat => (
-          <div key={stat.id} title={t ? stat.labelSi : stat.labelEn} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-            color: stat.color, fontSize: '10px', fontWeight: 700,
-          }}>
-            {stat.icon}
-            <span>{stat.getValue(projectData)}</span>
-          </div>
-        ))}
-      </div>
+      </>
     );
   }
 
   // ─── Expanded view ──────────────────────────────────────
 
   return (
-    <div style={{
-      width: 300,
-      height: '100%',
-      backgroundColor: isDark ? '#1e1e2e' : '#ffffff',
-      borderLeft: `1px solid ${isDark ? '#2d2d3f' : theme.colors.border.light}`,
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
+    <>
       <div style={{
-        padding: '14px 16px',
-        borderBottom: `1px solid ${isDark ? '#2d2d3f' : theme.colors.border.light}`,
+        width: EXPANDED_WIDTH,
+        height: '100%',
+        backgroundColor: isDark ? '#1e1e2e' : '#ffffff',
+        borderLeft: `1px solid ${isDark ? '#2d2d3f' : theme.colors.border.light}`,
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: isDark ? '#a0a0b8' : theme.colors.text.muted }}>{icons.dashboard}</span>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: isDark ? '#e0e0f0' : theme.colors.text.heading }}>
-            {t ? 'Nadzorna plošča' : 'Dashboard'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ProgressRing value={completeness} size={32} strokeWidth={4} showLabel={true} labelSize="0.5rem" />
-          <button onClick={onToggleCollapse} style={{
-            background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-            color: isDark ? '#a0a0b8' : theme.colors.text.muted, display: 'flex',
-          }}>
-            {icons.chevronRight}
-          </button>
-        </div>
-      </div>
-
-      {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
-        {/* Project meta */}
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: '11px', fontWeight: 600, color: isDark ? '#8080a0' : theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>
-            {t ? 'Projekt' : 'Project'}
-          </p>
-          <p style={{ fontSize: '14px', fontWeight: 700, color: isDark ? '#e0e0f0' : theme.colors.text.heading, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {pi?.projectTitle || '—'}
-          </p>
-          <div style={{ display: 'flex', gap: 12, fontSize: '11px', color: isDark ? '#8080a0' : theme.colors.text.muted, marginTop: 4 }}>
-            {pi?.projectAcronym && <span>{pi.projectAcronym}</span>}
-            {pi?.durationMonths && <span>{pi.durationMonths} {t ? 'mes.' : 'mo.'}</span>}
-            {pi?.startDate && <span>{pi.startDate}</span>}
+        {/* Header */}
+        <div style={{
+          padding: '14px 16px',
+          borderBottom: `1px solid ${isDark ? '#2d2d3f' : theme.colors.border.light}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ color: isDark ? '#a0a0b8' : theme.colors.text.muted }}>{icons.dashboard}</span>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: isDark ? '#e0e0f0' : theme.colors.text.heading }}>
+              {t ? 'Nadzorna plošča' : 'Dashboard'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ProgressRing value={completeness} size={32} strokeWidth={4} showLabel={true} labelSize="0.5rem" />
           </div>
         </div>
 
-        {/* Stats grid — draggable */}
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: '11px', fontWeight: 600, color: isDark ? '#8080a0' : theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>
-            {t ? 'Statistika' : 'Statistics'}
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {orderedStats.map((stat, idx) => {
-              const val = stat.getValue(projectData);
-              return (
-                <div
-                  key={stat.id}
-                  draggable
-                  onDragStart={() => handleDragStart(idx)}
-                  onDragOver={(e) => handleDragOver(e, idx)}
-                  onDrop={() => handleDrop(idx)}
-                  onDragEnd={handleDragEnd}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '6px 8px',
-                    borderRadius: theme.radii.md,
-                    backgroundColor: dragOverIdx === idx
-                      ? (isDark ? '#2d2d4f' : '#f0f0ff')
-                      : 'transparent',
-                    opacity: dragIdx === idx ? 0.4 : 1,
-                    cursor: 'grab',
-                    transition: 'background-color 0.15s',
-                  }}
-                >
-                  <span style={{ color: isDark ? '#606078' : '#c0c0d0', flexShrink: 0 }}>{icons.grip}</span>
-                  <span style={{ color: stat.color, flexShrink: 0 }}>{stat.icon}</span>
-                  <span style={{ flex: 1, fontSize: '12px', color: isDark ? '#c0c0d8' : theme.colors.text.body }}>
-                    {t ? stat.labelSi : stat.labelEn}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: isDark ? '#e0e0f0' : theme.colors.text.heading, minWidth: 20, textAlign: 'right' }}>
-                    {val}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Charts */}
-        {structuralCharts.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontSize: '11px', fontWeight: 600, color: isDark ? '#8080a0' : theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
-              {t ? 'Grafi' : 'Charts'}
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+          {/* Project meta */}
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: '11px', fontWeight: 600, color: isDark ? '#8080a0' : theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>
+              {t ? 'Projekt' : 'Project'}
             </p>
-            {structuralCharts.map(chart => (
-              <ChartRenderer
-                key={chart.id}
-                data={chart}
-                height={160}
-                showTitle={true}
-                showSource={false}
-              />
-            ))}
+            <p style={{ fontSize: '14px', fontWeight: 700, color: isDark ? '#e0e0f0' : theme.colors.text.heading, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {pi?.projectTitle || '—'}
+            </p>
+            <div style={{ display: 'flex', gap: 12, fontSize: '11px', color: isDark ? '#8080a0' : theme.colors.text.muted, marginTop: 4 }}>
+              {pi?.projectAcronym && <span>{pi.projectAcronym}</span>}
+              {pi?.durationMonths && <span>{pi.durationMonths} {t ? 'mes.' : 'mo.'}</span>}
+              {pi?.startDate && <span>{pi.startDate}</span>}
+            </div>
           </div>
-        )}
+
+          {/* Stats grid — draggable */}
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: '11px', fontWeight: 600, color: isDark ? '#8080a0' : theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>
+              {t ? 'Statistika' : 'Statistics'}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {orderedStats.map((stat, idx) => {
+                const val = stat.getValue(projectData);
+                return (
+                  <div
+                    key={stat.id}
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDrop={() => handleDrop(idx)}
+                    onDragEnd={handleDragEnd}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 8px',
+                      borderRadius: theme.radii.md,
+                      backgroundColor: dragOverIdx === idx
+                        ? (isDark ? '#2d2d4f' : '#f0f0ff')
+                        : 'transparent',
+                      opacity: dragIdx === idx ? 0.4 : 1,
+                      cursor: 'grab',
+                      transition: 'background-color 0.15s',
+                    }}
+                  >
+                    <span style={{ color: isDark ? '#606078' : '#c0c0d0', flexShrink: 0 }}>{icons.grip}</span>
+                    <span style={{ color: stat.color, flexShrink: 0 }}>{stat.icon}</span>
+                    <span style={{ flex: 1, fontSize: '12px', color: isDark ? '#c0c0d8' : theme.colors.text.body }}>
+                      {t ? stat.labelSi : stat.labelEn}
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: isDark ? '#e0e0f0' : theme.colors.text.heading, minWidth: 20, textAlign: 'right' }}>
+                      {val}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Charts */}
+          {structuralCharts.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <p style={{ fontSize: '11px', fontWeight: 600, color: isDark ? '#8080a0' : theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                {t ? 'Grafi' : 'Charts'}
+              </p>
+              {structuralCharts.map(chart => (
+                <ChartRenderer
+                  key={chart.id}
+                  data={chart}
+                  height={160}
+                  showTitle={true}
+                  showSource={false}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* ★ v2.3: External toggle pill — same style as Sidebar */}
+      <button
+        onClick={handleToggle}
+        style={{
+          position: 'fixed',
+          top: 12,
+          right: EXPANDED_WIDTH - 12,
+          width: 24,
+          height: 24,
+          borderRadius: radii.full,
+          background: activeColors.primary[500],
+          border: `2px solid ${activeColors.surface.card}`,
+          color: activeColors.text.inverse,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: zIndex.sidebar + 1,
+          boxShadow: shadows.md,
+          transition: `right ${animation.duration.normal} ${animation.easing.default}, transform ${animation.duration.fast} ${animation.easing.default}`,
+        }}
+        title="Collapse"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path
+            d="M4 2L8 6L4 10"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    </>
   );
 };
 
