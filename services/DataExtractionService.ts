@@ -4,11 +4,15 @@
 // Identifies numbers, percentages, statistics, comparisons,
 // and returns structured data suitable for visualization.
 //
-// v1.1 — 2026-02-18
+// v1.2 — 2026-02-18
 //   - FIX: extractStructuralData() completeness calculation now correctly
 //     handles empty/skeleton project data (default values like startDate,
 //     durationMonths, empty readinessLevels, skeleton arrays no longer
 //     inflate completeness percentages)
+//   - FIX: arrayHasRealContent now skips default enum fields
+//     (category, likelihood, impact, type, dependencies)
+//   - FIX: Numbers no longer count as "real content" (prevents
+//     durationMonths:24 from inflating percentages)
 //
 // ARCHITECTURE:
 //   - Input: raw text string (from any project field)
@@ -203,8 +207,16 @@ export const extractEmpiricalData = async (
 };
 
 // ─── Helpers for structural extraction ───────────────────────
-// v1.1 FIX: These helpers ensure skeleton/default data is not
+// v1.2 FIX: These helpers ensure skeleton/default data is not
 // counted as real user-entered content.
+// - Skip enum defaults: category, likelihood, impact, type
+// - Skip id-like fields: id, project_id, created_at, updated_at
+// - Do NOT count numbers as real content (durationMonths:24, etc.)
+
+const SKIP_KEYS = new Set([
+  'id', 'project_id', 'created_at', 'updated_at',
+  'category', 'likelihood', 'impact', 'type', 'dependencies',
+]);
 
 const hasRealString = (v: any): boolean =>
   typeof v === 'string' && v.trim().length > 0;
@@ -215,7 +227,7 @@ const arrayHasRealContent = (arr: any[]): boolean => {
     if (typeof item === 'string') return item.trim().length > 0;
     if (typeof item !== 'object' || item === null) return false;
     return Object.entries(item).some(([k, v]) => {
-      if (['id', 'project_id', 'created_at', 'updated_at'].includes(k)) return false;
+      if (SKIP_KEYS.has(k)) return false;
       if (typeof v === 'string') return v.trim().length > 0;
       if (Array.isArray(v)) return arrayHasRealContent(v);
       return false;
@@ -224,7 +236,7 @@ const arrayHasRealContent = (arr: any[]): boolean => {
 };
 
 // ─── Per-section completeness calculator for chart ───────────
-// v1.1 — Explicit checks per section, immune to default values
+// v1.2 — Explicit checks per section, immune to default values
 
 const getSectionCompleteness = (projectData: any, sectionKey: string): number => {
   const data = projectData?.[sectionKey];
@@ -232,7 +244,6 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
 
   switch (sectionKey) {
     case 'problemAnalysis': {
-      // Object: check coreProblem, causes, consequences
       let score = 0, total = 3;
       if (hasRealString(data.coreProblem?.title) || hasRealString(data.coreProblem?.description)) score++;
       if (arrayHasRealContent(data.causes)) score++;
@@ -241,26 +252,26 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
     }
 
     case 'projectIdea': {
-      // Object: check only user-entered fields, NOT startDate/durationMonths/readinessLevels defaults
       let score = 0, total = 5;
       if (hasRealString(data.projectTitle)) score++;
       if (hasRealString(data.projectAcronym)) score++;
       if (hasRealString(data.mainAim)) score++;
       if (hasRealString(data.stateOfTheArt)) score++;
       if (hasRealString(data.proposedSolution)) score++;
-      // Bonus: policies with real content
       if (arrayHasRealContent(data.policies)) { score++; total++; }
-      // Bonus: readiness levels actually set (not null)
       const rl = data.readinessLevels;
       if (rl && (rl.TRL?.level !== null || rl.SRL?.level !== null || rl.ORL?.level !== null || rl.LRL?.level !== null)) {
-        score++; total++;
+        // Only count if at least one level is a real number > 0
+        const hasAnyLevel = [rl.TRL, rl.SRL, rl.ORL, rl.LRL].some(
+          (r: any) => typeof r?.level === 'number' && r.level > 0
+        );
+        if (hasAnyLevel) { score++; total++; }
       }
       return total === 0 ? 0 : Math.round((score / total) * 100);
     }
 
     case 'generalObjectives':
     case 'specificObjectives': {
-      // Array: count items with real title or description
       if (!Array.isArray(data) || data.length === 0) return 0;
       const filled = data.filter((item: any) =>
         hasRealString(item.title) || hasRealString(item.description)
@@ -269,7 +280,6 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
     }
 
     case 'activities': {
-      // Array of WPs: check if any WP has real title or tasks with real content
       if (!Array.isArray(data) || data.length === 0) return 0;
       const filled = data.filter((wp: any) =>
         hasRealString(wp.title) ||
@@ -284,7 +294,6 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
     case 'outcomes':
     case 'impacts':
     case 'kers': {
-      // Array: count items with real title or description
       if (!Array.isArray(data) || data.length === 0) return 0;
       const filled = data.filter((item: any) =>
         hasRealString(item.title) || hasRealString(item.description)
@@ -293,7 +302,6 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
     }
 
     case 'risks': {
-      // Array: count risks with real title or description
       if (!Array.isArray(data) || data.length === 0) return 0;
       const filled = data.filter((item: any) =>
         hasRealString(item.title) || hasRealString(item.description) || hasRealString(item.mitigation)
@@ -349,7 +357,6 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
   // 2. Risk Matrix Summary
   const risks = projectData?.risks;
   if (risks && Array.isArray(risks) && risks.length >= 2) {
-    // Only process if risks have real content
     const realRisks = risks.filter((r: any) =>
       hasRealString(r.title) || hasRealString(r.description)
     );
@@ -409,7 +416,7 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
   }
 
   // 3. Project Completeness (per section)
-  // v1.1 FIX: Uses explicit per-section checks instead of generic field counting
+  // v1.2 FIX: Uses explicit per-section checks instead of generic field counting
   const sections = [
     { key: 'problemAnalysis', label: 'Problem Analysis' },
     { key: 'projectIdea', label: 'Project Idea' },
