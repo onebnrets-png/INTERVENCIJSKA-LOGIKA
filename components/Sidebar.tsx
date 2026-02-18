@@ -290,7 +290,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             marginBottom: isCollapsed ? spacing.sm : spacing.lg,
           }}>
             <button
-              onClick={onBackToWelcome}
+              onBackToWelcome={() => pm.setCurrentStepId(1)}
               style={{
                 border: 'none',
                 background: 'none',
