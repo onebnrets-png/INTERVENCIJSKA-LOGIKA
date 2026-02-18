@@ -281,18 +281,21 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
             <div style={{ background: colors.surface.card, borderRadius: radii.lg, boxShadow: shadows['2xl'], width: '100%', maxWidth: 480, padding: spacing['3xl'], position: 'relative', overflow: 'hidden', border: `1px solid ${colors.border.light}` }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 4, background: colors.primary.gradient }}></div>
 
-                {/* ★ v3.1: Hardcoded EURO-OFFICE logo + heading */}
-                <div style={{ textAlign: 'center', marginBottom: spacing['3xl'] }}>
-                    <img
-                      src={BRAND_ASSETS.logoText}
-                      alt="EURO-OFFICE"
-                      style={{
-                        height: 48,
-                        width: 'auto',
-                        objectFit: 'contain',
-                        marginBottom: spacing.lg,
-                      }}
-                    />
+               {/* ★ v3.1: Hardcoded EURO-OFFICE logo + heading */}
+<div style={{ textAlign: 'center', marginBottom: spacing['3xl'] }}>
+    <img
+      src={BRAND_ASSETS.logoText}
+      alt="EURO-OFFICE"
+      style={{
+        height: 48,
+        width: 'auto',
+        objectFit: 'contain',
+        marginBottom: spacing.lg,
+        display: 'block',
+        marginLeft: 'auto',
+        marginRight: 'auto',
+      }}
+    />
                     <h1 style={{ fontSize: typography.fontSize['3xl'], fontWeight: typography.fontWeight.bold, color: colors.text.heading, marginBottom: spacing.sm }}>
                         {isLogin ? t.loginTitle : t.registerTitle}
                     </h1>
