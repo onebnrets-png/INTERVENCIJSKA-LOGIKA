@@ -1,12 +1,15 @@
 // design/components/ProgressRing.tsx
 // ═══════════════════════════════════════════════════════════════
 // Animated SVG progress ring — EURO-OFFICE Design System
+// v1.1 — 2026-02-18
+//   - FIX: Background circle uses dark-aware color
+//   - FIX: Label color adapts to dark mode
 // v1.0 — 2026-02-17
-// Used for step completion, project overview dashboard
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from 'react';
-import { colors, animation, stepColors, type StepColorKey } from '../theme.ts';
+import { colors, darkColors, animation, stepColors, type StepColorKey } from '../theme.ts';
+import { getThemeMode, onThemeChange } from '../../services/themeService.ts';
 
 interface ProgressRingProps {
   /** Progress value 0-100 */
@@ -41,6 +44,12 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
   animated = true,
 }) => {
   const [animatedValue, setAnimatedValue] = useState(animated ? 0 : value);
+  const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
+
+  useEffect(() => {
+    const unsub = onThemeChange((m) => setIsDark(m === 'dark'));
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!animated) {
@@ -48,10 +57,9 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
       return;
     }
 
-    // Animate from current to target
     const timeout = setTimeout(() => {
       setAnimatedValue(value);
-    }, 100); // Small delay for mount animation
+    }, 100);
 
     return () => clearTimeout(timeout);
   }, [value, animated]);
@@ -64,7 +72,10 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
   const ringColor = customColor
     || (color && stepColors[color] ? stepColors[color].main : colors.primary[500]);
 
-  const bgColor = (color && stepColors[color]) ? stepColors[color].light : colors.primary[50];
+  // ★ v1.1: Dark-aware background
+  const bgColor = isDark
+    ? (color && stepColors[color] ? stepColors[color].main + '20' : '#334155')
+    : (color && stepColors[color] ? stepColors[color].light : colors.primary[50]);
 
   const displayLabel = label || `${Math.round(value)}%`;
   const computedLabelSize = labelSize || (size <= 32 ? '0.55rem' : size <= 48 ? '0.65rem' : '0.8rem');
