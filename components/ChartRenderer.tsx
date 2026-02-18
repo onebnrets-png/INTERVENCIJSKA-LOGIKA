@@ -1,5 +1,5 @@
 // components/ChartRenderer.tsx
-// v1.2 — 2026-02-18 — FIX: Donut BIGGER, label lines SHORTER, labels percent-only in small mode
+// v1.3 — 2026-02-18 — FIX: Donut size back to 30/48, label lines SHORTER (8px)
 import React, { useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -64,22 +64,21 @@ const ComparisonBar: React.FC<{ data: ExtractedChartData; height: number }> = ({
   );
 };
 
-/* ─── DONUT — v1.2: BIGGER ring, SHORTER label lines ────── */
+/* ─── DONUT — v1.3: radii 30/48 (as before), SHORT label lines ── */
 
 const DonutChart: React.FC<{ data: ExtractedChartData; height: number }> = ({ data, height }) => {
   const chartData = data.dataPoints.map(dp => ({ name: dp.label, value: dp.value, unit: dp.unit || '' }));
   const isSmall = height <= 180;
 
-  // BIGGER donut: radii increased significantly
-  const innerRadius = isSmall ? Math.min(height * 0.24, 40) : Math.min(height * 0.25, 60);
-  const outerRadius = isSmall ? Math.min(height * 0.40, 65) : Math.min(height * 0.38, 90);
+  // Original size — unchanged from v1.1
+  const innerRadius = isSmall ? Math.min(height * 0.18, 30) : Math.min(height * 0.25, 60);
+  const outerRadius = isSmall ? Math.min(height * 0.30, 48) : Math.min(height * 0.38, 90);
 
   const labelFontSize = isSmall ? 9 : 12;
 
-  // Custom label renderer — positions text CLOSE to the donut (short "arrows")
+  // Custom label: positioned only 8px from donut edge = SHORT arrows
   const renderLabel = ({ name, percent, midAngle, outerRadius: oR, cx, cy }: any) => {
     const RADIAN = Math.PI / 180;
-    // SHORT label line: only 8px beyond outer edge (was implicitly ~20+)
     const radius = oR + (isSmall ? 8 : 14);
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
@@ -107,7 +106,7 @@ const DonutChart: React.FC<{ data: ExtractedChartData; height: number }> = ({ da
         <Pie
           data={chartData}
           cx="50%"
-          cy={isSmall ? '44%' : '50%'}
+          cy={isSmall ? '42%' : '50%'}
           innerRadius={innerRadius}
           outerRadius={outerRadius}
           paddingAngle={2}
