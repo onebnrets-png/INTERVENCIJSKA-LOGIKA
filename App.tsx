@@ -319,14 +319,17 @@ const App = () => {
             </div>
 
            {/* ═══ SCROLLABLE CONTENT ═══ */}
-            <ProjectDisplay
-              projectData={pm.projectData} activeStepId={pm.currentStepId || 1} language={language}
-              onUpdateData={pm.handleUpdateData} onGenerateSection={generation.handleGenerateSection}
-              onGenerateCompositeSection={generation.handleGenerateCompositeSection}
-              onGenerateField={generation.handleGenerateField} onAddItem={pm.handleAddItem}
-              onRemoveItem={pm.handleRemoveItem} isLoading={generation.isLoading}
-              error={generation.error} missingApiKey={auth.showAiWarning}
-            />
+             <ProjectDisplay
+                projectData={pm.projectData} activeStepId={pm.currentStepId || 1} language={language}
+                onUpdateData={pm.handleUpdateData} onGenerateSection={generation.handleGenerateSection}
+                onGenerateCompositeSection={generation.handleGenerateCompositeSection}
+                onGenerateField={generation.handleGenerateField} onAddItem={pm.handleAddItem}
+                onRemoveItem={pm.handleRemoveItem} isLoading={generation.isLoading}
+                error={generation.error} missingApiKey={auth.showAiWarning}
+                completedStepsStatus={completedStepsStatus}
+                onStepClick={(id: number) => pm.setCurrentStepId(id)}
+              />
+
           </main>
 
           <DashboardPanel projectData={pm.projectData} language={language} onCollapseChange={setDashboardCollapsed} />
