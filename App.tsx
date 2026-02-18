@@ -29,11 +29,11 @@ import { TEXT } from './locales.ts';
 import { isStepCompleted } from './utils.ts';
 import { colors as lightColors, darkColors, shadows, radii, spacing, animation, typography } from './design/theme.ts';
 import { initTheme, getThemeMode, onThemeChange } from './services/themeService.ts';
-
 import { useAuth } from './hooks/useAuth.ts';
 import { useProjectManager } from './hooks/useProjectManager.ts';
 import { useTranslation } from './hooks/useTranslation.ts';
 import { useGeneration } from './hooks/useGeneration.ts';
+import StepNavigationBar from './components/StepNavigationBar.tsx';
 
 type ColorScheme = typeof lightColors | typeof darkColors;
 
