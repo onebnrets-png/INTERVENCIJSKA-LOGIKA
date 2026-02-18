@@ -549,8 +549,18 @@ useEffect(() => {
               // ★ v2.1: Pass collapse callback to Sidebar
               onCollapseChange={setSidebarCollapsed}
             />
-
-                    {/* ═══ TOOLBAR ═══ */}
+ />
+          {/* ═══ MAIN CONTENT ═══ */}
+            <main style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              marginLeft: sidebarCollapsed ? 64 : 280,
+              marginRight: 0,
+              transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}>
+              {/* ═══ TOOLBAR ═══ */}
               <div style={{
                 background: colors.surface.card,
                 borderBottom: `1px solid ${colors.border.light}`,
