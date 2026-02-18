@@ -140,9 +140,13 @@ const Icons = {
 };
 
 // ─── Helper: Check if a value represents real user-entered content ──
-// Skeleton arrays like [{title:'', description:''}] → false
-// Default values like durationMonths:24, startDate:'2026-...' → skipped
-// Empty readinessLevels {level:null, justification:''} → false
+// v2.2 FIX: Skip default enum fields (category, likelihood, impact, type)
+// and id-like fields — these are skeleton defaults, not user content
+
+const SKIP_KEYS = new Set([
+  'id', 'project_id', 'created_at', 'updated_at',
+  'category', 'likelihood', 'impact', 'type', 'dependencies',
+]);
 
 const hasRealStringContent = (v: any): boolean =>
   typeof v === 'string' && v.trim().length > 0;
@@ -151,15 +155,25 @@ const arrayHasRealContent = (arr: any[]): boolean => {
   if (!Array.isArray(arr) || arr.length === 0) return false;
   return arr.some((item: any) => {
     if (typeof item === 'string') return item.trim().length > 0;
-    if (typeof item === 'number') return true;
     if (typeof item !== 'object' || item === null) return false;
     return Object.entries(item).some(([k, v]) => {
-      if (['id', 'project_id', 'created_at', 'updated_at'].includes(k)) return false;
+      if (SKIP_KEYS.has(k)) return false;
       if (typeof v === 'string') return v.trim().length > 0;
-      if (typeof v === 'number') return true;
+      // DO NOT count numbers as real content (durationMonths:24, etc.)
       if (Array.isArray(v)) return arrayHasRealContent(v);
       return false;
     });
+  });
+};
+
+const objectHasRealContent = (obj: any, skipKeys: Set<string>): boolean => {
+  if (!obj || typeof obj !== 'object') return false;
+  return Object.entries(obj).some(([k, v]) => {
+    if (skipKeys.has(k) || SKIP_KEYS.has(k)) return false;
+    if (typeof v === 'string') return v.trim().length > 0;
+    if (Array.isArray(v)) return arrayHasRealContent(v);
+    if (typeof v === 'object' && v !== null) return objectHasRealContent(v, skipKeys);
+    return false;
   });
 };
 
