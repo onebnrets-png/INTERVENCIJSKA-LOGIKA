@@ -4,7 +4,11 @@
 // Identifies numbers, percentages, statistics, comparisons,
 // and returns structured data suitable for visualization.
 //
-// v1.0 — 2026-02-17
+// v1.1 — 2026-02-18
+//   - FIX: extractStructuralData() completeness calculation now correctly
+//     handles empty/skeleton project data (default values like startDate,
+//     durationMonths, empty readinessLevels, skeleton arrays no longer
+//     inflate completeness percentages)
 //
 // ARCHITECTURE:
 //   - Input: raw text string (from any project field)
@@ -28,10 +32,10 @@ import { Type } from '@google/genai';
 export interface ExtractedDataPoint {
   label: string;
   value: number;
-  unit?: string;       // '%', 'EUR', 'million', etc.
-  category?: string;   // grouping key for multi-series charts
-  source?: string;     // citation if found in text
-  year?: number;       // year if mentioned
+  unit?: string;
+  category?: string;
+  source?: string;
+  year?: number;
 }
 
 export type ChartType =
@@ -51,9 +55,9 @@ export interface ExtractedChartData {
   title: string;
   subtitle?: string;
   dataPoints: ExtractedDataPoint[];
-  source?: string;     // overall source attribution
-  textSnippet: string; // original text that generated this data
-  confidence: number;  // 0-1 how confident the extraction is
+  source?: string;
+  textSnippet: string;
+  confidence: number;
 }
 
 // ─── JSON Schema for AI extraction ──────────────────────────
@@ -132,7 +136,6 @@ export const extractEmpiricalData = async (
   text: string,
   fieldContext?: string
 ): Promise<ExtractedChartData[]> => {
-  // Guard: no text or no API key
   if (!text || text.trim().length < 20) return [];
   if (!hasValidProviderKey()) return [];
 
@@ -155,7 +158,6 @@ export const extractEmpiricalData = async (
 
     if (!result || !result.text) return [];
 
-    // Parse response
     let parsed: any[];
     const cleaned = result.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     try {
@@ -166,7 +168,6 @@ export const extractEmpiricalData = async (
 
     if (!Array.isArray(parsed)) return [];
 
-    // Map to typed output with generated IDs
     const extracted: ExtractedChartData[] = parsed
       .filter((item: any) =>
         item.dataPoints &&
@@ -198,6 +199,110 @@ export const extractEmpiricalData = async (
   } catch (err: any) {
     console.warn('[DataExtraction] Extraction failed:', err.message);
     return [];
+  }
+};
+
+// ─── Helpers for structural extraction ───────────────────────
+// v1.1 FIX: These helpers ensure skeleton/default data is not
+// counted as real user-entered content.
+
+const hasRealString = (v: any): boolean =>
+  typeof v === 'string' && v.trim().length > 0;
+
+const arrayHasRealContent = (arr: any[]): boolean => {
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  return arr.some((item: any) => {
+    if (typeof item === 'string') return item.trim().length > 0;
+    if (typeof item !== 'object' || item === null) return false;
+    return Object.entries(item).some(([k, v]) => {
+      if (['id', 'project_id', 'created_at', 'updated_at'].includes(k)) return false;
+      if (typeof v === 'string') return v.trim().length > 0;
+      if (Array.isArray(v)) return arrayHasRealContent(v);
+      return false;
+    });
+  });
+};
+
+// ─── Per-section completeness calculator for chart ───────────
+// v1.1 — Explicit checks per section, immune to default values
+
+const getSectionCompleteness = (projectData: any, sectionKey: string): number => {
+  const data = projectData?.[sectionKey];
+  if (!data) return 0;
+
+  switch (sectionKey) {
+    case 'problemAnalysis': {
+      // Object: check coreProblem, causes, consequences
+      let score = 0, total = 3;
+      if (hasRealString(data.coreProblem?.title) || hasRealString(data.coreProblem?.description)) score++;
+      if (arrayHasRealContent(data.causes)) score++;
+      if (arrayHasRealContent(data.consequences)) score++;
+      return Math.round((score / total) * 100);
+    }
+
+    case 'projectIdea': {
+      // Object: check only user-entered fields, NOT startDate/durationMonths/readinessLevels defaults
+      let score = 0, total = 5;
+      if (hasRealString(data.projectTitle)) score++;
+      if (hasRealString(data.projectAcronym)) score++;
+      if (hasRealString(data.mainAim)) score++;
+      if (hasRealString(data.stateOfTheArt)) score++;
+      if (hasRealString(data.proposedSolution)) score++;
+      // Bonus: policies with real content
+      if (arrayHasRealContent(data.policies)) { score++; total++; }
+      // Bonus: readiness levels actually set (not null)
+      const rl = data.readinessLevels;
+      if (rl && (rl.TRL?.level !== null || rl.SRL?.level !== null || rl.ORL?.level !== null || rl.LRL?.level !== null)) {
+        score++; total++;
+      }
+      return total === 0 ? 0 : Math.round((score / total) * 100);
+    }
+
+    case 'generalObjectives':
+    case 'specificObjectives': {
+      // Array: count items with real title or description
+      if (!Array.isArray(data) || data.length === 0) return 0;
+      const filled = data.filter((item: any) =>
+        hasRealString(item.title) || hasRealString(item.description)
+      );
+      return filled.length === 0 ? 0 : Math.round((filled.length / data.length) * 100);
+    }
+
+    case 'activities': {
+      // Array of WPs: check if any WP has real title or tasks with real content
+      if (!Array.isArray(data) || data.length === 0) return 0;
+      const filled = data.filter((wp: any) =>
+        hasRealString(wp.title) ||
+        arrayHasRealContent(wp.tasks) ||
+        arrayHasRealContent(wp.milestones) ||
+        arrayHasRealContent(wp.deliverables)
+      );
+      return filled.length === 0 ? 0 : Math.round((filled.length / data.length) * 100);
+    }
+
+    case 'outputs':
+    case 'outcomes':
+    case 'impacts':
+    case 'kers': {
+      // Array: count items with real title or description
+      if (!Array.isArray(data) || data.length === 0) return 0;
+      const filled = data.filter((item: any) =>
+        hasRealString(item.title) || hasRealString(item.description)
+      );
+      return filled.length === 0 ? 0 : Math.round((filled.length / data.length) * 100);
+    }
+
+    case 'risks': {
+      // Array: count risks with real title or description
+      if (!Array.isArray(data) || data.length === 0) return 0;
+      const filled = data.filter((item: any) =>
+        hasRealString(item.title) || hasRealString(item.description) || hasRealString(item.mitigation)
+      );
+      return filled.length === 0 ? 0 : Math.round((filled.length / data.length) * 100);
+    }
+
+    default:
+      return 0;
   }
 };
 
@@ -244,67 +349,72 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
   // 2. Risk Matrix Summary
   const risks = projectData?.risks;
   if (risks && Array.isArray(risks) && risks.length >= 2) {
-    // Count by likelihood
-    const likelihoodCounts: Record<string, number> = { low: 0, medium: 0, high: 0 };
-    const impactCounts: Record<string, number> = { low: 0, medium: 0, high: 0 };
-    const categoryCounts: Record<string, number> = {};
+    // Only process if risks have real content
+    const realRisks = risks.filter((r: any) =>
+      hasRealString(r.title) || hasRealString(r.description)
+    );
 
-    risks.forEach((r: any) => {
-      if (r.likelihood) likelihoodCounts[r.likelihood] = (likelihoodCounts[r.likelihood] || 0) + 1;
-      if (r.impact) impactCounts[r.impact] = (impactCounts[r.impact] || 0) + 1;
-      if (r.category) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
-    });
+    if (realRisks.length >= 2) {
+      const categoryCounts: Record<string, number> = {};
+      const likelihoodCounts: Record<string, number> = { low: 0, medium: 0, high: 0 };
+      const impactCounts: Record<string, number> = { low: 0, medium: 0, high: 0 };
 
-    // Risk by category donut
-    const catPoints: ExtractedDataPoint[] = Object.entries(categoryCounts)
-      .filter(([, count]) => count > 0)
-      .map(([cat, count]) => ({
-        label: cat.charAt(0).toUpperCase() + cat.slice(1),
-        value: count,
-        unit: 'risks',
-        category: 'risk_category',
-      }));
-
-    if (catPoints.length >= 2) {
-      results.push({
-        id: 'structural-risk-categories',
-        chartType: 'donut',
-        title: 'Risks by Category',
-        dataPoints: catPoints,
-        textSnippet: 'Project risk register distribution',
-        confidence: 1.0,
+      realRisks.forEach((r: any) => {
+        if (r.likelihood) likelihoodCounts[r.likelihood] = (likelihoodCounts[r.likelihood] || 0) + 1;
+        if (r.impact) impactCounts[r.impact] = (impactCounts[r.impact] || 0) + 1;
+        if (r.category) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
       });
-    }
 
-    // Risk severity distribution
-    const severityPoints: ExtractedDataPoint[] = [
-      { label: 'High Likelihood', value: likelihoodCounts.high || 0, category: 'likelihood' },
-      { label: 'Medium Likelihood', value: likelihoodCounts.medium || 0, category: 'likelihood' },
-      { label: 'Low Likelihood', value: likelihoodCounts.low || 0, category: 'likelihood' },
-      { label: 'High Impact', value: impactCounts.high || 0, category: 'impact' },
-      { label: 'Medium Impact', value: impactCounts.medium || 0, category: 'impact' },
-      { label: 'Low Impact', value: impactCounts.low || 0, category: 'impact' },
-    ].filter(p => p.value > 0);
+      const catPoints: ExtractedDataPoint[] = Object.entries(categoryCounts)
+        .filter(([, count]) => count > 0)
+        .map(([cat, count]) => ({
+          label: cat.charAt(0).toUpperCase() + cat.slice(1),
+          value: count,
+          unit: 'risks',
+          category: 'risk_category',
+        }));
 
-    if (severityPoints.length >= 3) {
-      results.push({
-        id: 'structural-risk-severity',
-        chartType: 'stacked_bar',
-        title: 'Risk Severity Distribution',
-        subtitle: 'Likelihood vs Impact',
-        dataPoints: severityPoints,
-        textSnippet: 'Risk likelihood and impact analysis',
-        confidence: 1.0,
-      });
+      if (catPoints.length >= 2) {
+        results.push({
+          id: 'structural-risk-categories',
+          chartType: 'donut',
+          title: 'Risks by Category',
+          dataPoints: catPoints,
+          textSnippet: 'Project risk register distribution',
+          confidence: 1.0,
+        });
+      }
+
+      const severityPoints: ExtractedDataPoint[] = [
+        { label: 'High Likelihood', value: likelihoodCounts.high || 0, category: 'likelihood' },
+        { label: 'Medium Likelihood', value: likelihoodCounts.medium || 0, category: 'likelihood' },
+        { label: 'Low Likelihood', value: likelihoodCounts.low || 0, category: 'likelihood' },
+        { label: 'High Impact', value: impactCounts.high || 0, category: 'impact' },
+        { label: 'Medium Impact', value: impactCounts.medium || 0, category: 'impact' },
+        { label: 'Low Impact', value: impactCounts.low || 0, category: 'impact' },
+      ].filter(p => p.value > 0);
+
+      if (severityPoints.length >= 3) {
+        results.push({
+          id: 'structural-risk-severity',
+          chartType: 'stacked_bar',
+          title: 'Risk Severity Distribution',
+          subtitle: 'Likelihood vs Impact',
+          dataPoints: severityPoints,
+          textSnippet: 'Risk likelihood and impact analysis',
+          confidence: 1.0,
+        });
+      }
     }
   }
 
   // 3. Project Completeness (per section)
+  // v1.1 FIX: Uses explicit per-section checks instead of generic field counting
   const sections = [
     { key: 'problemAnalysis', label: 'Problem Analysis' },
     { key: 'projectIdea', label: 'Project Idea' },
-    { key: 'generalObjectives', label: 'General Objectives' },
-    { key: 'specificObjectives', label: 'Specific Objectives' },
+    { key: 'generalObjectives', label: 'General Obj.' },
+    { key: 'specificObjectives', label: 'Specific Obj.' },
     { key: 'activities', label: 'Activities' },
     { key: 'outputs', label: 'Expected Results' },
   ];
@@ -312,43 +422,7 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
   const completenessPoints: ExtractedDataPoint[] = [];
 
   for (const section of sections) {
-    const data = projectData?.[section.key];
-    let completeness = 0;
-
-    if (!data) {
-      completeness = 0;
-    } else if (Array.isArray(data)) {
-      if (data.length === 0) {
-        completeness = 0;
-      } else {
-        // Check how many items have non-empty titles/descriptions
-        const filled = data.filter((item: any) => {
-          const hasTitle = item.title && item.title.trim().length > 0;
-          const hasDesc = item.description && item.description.trim().length > 0;
-          return hasTitle || hasDesc;
-        });
-        completeness = Math.round((filled.length / data.length) * 100);
-      }
-    } else if (typeof data === 'object') {
-      const values = Object.values(data);
-      const total = values.length;
-      if (total === 0) {
-        completeness = 0;
-      } else {
-        const filled = values.filter((v: any) => {
-          if (typeof v === 'string') return v.trim().length > 0;
-          if (Array.isArray(v)) return v.length > 0;
-          if (typeof v === 'object' && v !== null) {
-            return Object.values(v).some((sv: any) =>
-              typeof sv === 'string' ? sv.trim().length > 0 : sv !== null && sv !== undefined
-            );
-          }
-          return v !== null && v !== undefined;
-        });
-        completeness = Math.round((filled.length / total) * 100);
-      }
-    }
-
+    const completeness = getSectionCompleteness(projectData, section.key);
     completenessPoints.push({
       label: section.label,
       value: completeness,
@@ -356,6 +430,7 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
     });
   }
 
+  // Only show chart if at least one section has real content
   if (completenessPoints.some(p => p.value > 0)) {
     results.push({
       id: 'structural-completeness',
