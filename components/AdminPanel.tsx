@@ -1,7 +1,14 @@
 // components/AdminPanel.tsx
 // ═══════════════════════════════════════════════════════════════
 // Unified Admin / Settings Panel
-// v2.3 — 2026-02-18
+// v2.4 — 2026-02-18
+//   ★ v2.4: Superadmin support
+//     - Header shows 👑 for superadmin, 🛡️ for admin, ⚙️ for user
+//     - Users tab: gold superadmin badge, protected label on role change
+//     - Users tab: added "Super Admins" counter badge
+//     - Profile tab: logo upload visible ONLY for superadmin
+//     - Non-superadmin sees White-Label info notice instead of logo upload
+//
 //   ★ v2.3: OpenAI (ChatGPT) provider support in AI tab
 //     - Third provider card for OpenAI
 //     - openaiKey state + save/load logic
@@ -104,8 +111,12 @@ const ADMIN_TEXT = {
   en: {
     title: 'Admin / Settings',
     titleRegular: 'Settings',
+    // ★ v2.4: Superadmin title
+    titleSuperAdmin: 'Super Admin / Settings',
     subtitle: 'Manage users, AI settings, instructions, and view audit log',
     subtitleRegular: 'Configure AI provider, profile and security',
+    // ★ v2.4: Superadmin subtitle
+    subtitleSuperAdmin: 'Full system control — users, AI, instructions, branding & audit',
     tabs: {
       users: 'Users',
       instructions: 'Instructions',
@@ -134,6 +145,9 @@ const ADMIN_TEXT = {
       noUsers: 'No users found.',
       totalUsers: 'Total users',
       totalAdmins: 'Admins',
+      // ★ v2.4
+      totalSuperAdmins: 'Super Admins',
+      protected: 'Protected',
       never: 'Never',
     },
     instructions: {
@@ -181,13 +195,22 @@ const ADMIN_TEXT = {
         user_block: 'User Blocked',
       },
     },
+    // ★ v2.4: White-label notice
+    whiteLabel: {
+      logoTitle: 'Custom Logo',
+      logoNotice: 'Logo customization is available only in the White-Label version. Contact us for more information.',
+    },
     close: 'Close',
   },
   si: {
     title: 'Admin / Nastavitve',
     titleRegular: 'Nastavitve',
+    // ★ v2.4: Superadmin title
+    titleSuperAdmin: 'Super Admin / Nastavitve',
     subtitle: 'Upravljanje uporabnikov, AI nastavitev, pravil in pregled dnevnika',
     subtitleRegular: 'Nastavi AI ponudnika, profil in varnost',
+    // ★ v2.4: Superadmin subtitle
+    subtitleSuperAdmin: 'Polni nadzor sistema — uporabniki, AI, pravila, blagovna znamka & dnevnik',
     tabs: {
       users: 'Uporabniki',
       instructions: 'Pravila',
@@ -216,6 +239,9 @@ const ADMIN_TEXT = {
       noUsers: 'Ni najdenih uporabnikov.',
       totalUsers: 'Skupaj uporabnikov',
       totalAdmins: 'Adminov',
+      // ★ v2.4
+      totalSuperAdmins: 'Super Adminov',
+      protected: 'Zaščiteno',
       never: 'Nikoli',
     },
     instructions: {
@@ -262,6 +288,11 @@ const ADMIN_TEXT = {
         instructions_reset: 'Pravila ponastavljena',
         user_block: 'Uporabnik blokiran',
       },
+    },
+    // ★ v2.4: White-label notice
+    whiteLabel: {
+      logoTitle: 'Logotip',
+      logoNotice: 'Prilagoditev logotipa je na voljo samo v White-Label verziji. Kontaktirajte nas za več informacij.',
     },
     close: 'Zapri',
   },
@@ -325,7 +356,6 @@ const getDefaultPlaceholder = (section: string): string => {
   const defaults = buildDefaultInstructionsDisplay();
   return defaults[section] || `Enter custom ${section} instructions...`;
 };
-
 // ═══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
@@ -340,6 +370,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   const colors = isDark ? darkColors : lightColors;
 
   const isUserAdmin = admin.isAdmin;
+  // ★ v2.4: Superadmin detection
+  const isUserSuperAdmin = admin.isSuperAdmin;
   const adminTabs: TabId[] = ['users', 'instructions', 'ai', 'profile', 'audit'];
   const regularTabs: TabId[] = ['ai', 'profile'];
   const availableTabs = isUserAdmin ? adminTabs : regularTabs;
@@ -416,6 +448,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   };
 
   const handleRoleChange = useCallback((user: AdminUser) => {
+    // ★ v2.4: Block role changes on superadmin users
+    if (user.role === 'superadmin') return;
     const newRole = user.role === 'admin' ? 'user' : 'admin';
     const confirmMsg = user.role === 'admin' ? `${t.users.confirmRoleChange} "${user.email}" ${t.users.confirmToUser}` : `${t.users.confirmRoleChange} "${user.email}" ${t.users.confirmToAdmin}`;
     setConfirmModal({ isOpen: true, title: t.users.changeRole, message: confirmMsg, onConfirm: async () => { setConfirmModal(null); const result = await admin.updateUserRole(user.id, newRole); if (result.success) { setToast({ message: t.users.roleUpdated, type: 'success' }); } else { setToast({ message: `${t.users.roleUpdateFailed} ${result.message}`, type: 'error' }); } } });
@@ -467,6 +501,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     else { setIsError(true); setMessage(result.message || tAuth.incorrectPassword || "Password change failed."); }
   };
 
+  // ★ v2.4: Logo upload guarded to superadmin in storageService.saveCustomLogo()
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) { const reader = new FileReader(); reader.onloadend = async () => { const b64 = reader.result as string; setCustomLogo(b64); await storageService.saveCustomLogo(b64); setMessage(tAuth.logoUpdated || "Logo updated!"); }; reader.readAsDataURL(file); }
@@ -515,6 +550,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
 
   const totalUsers = admin.users.length;
   const totalAdmins = admin.users.filter(u => u.role === 'admin').length;
+  // ★ v2.4: Superadmin counter
+  const totalSuperAdmins = admin.users.filter(u => u.role === 'superadmin').length;
   const instructionSections = Object.keys(t.instructions.sections) as (keyof typeof t.instructions.sections)[];
   const TAB_ICONS: Record<TabId, string> = { users: '👥', instructions: '📋', ai: '🤖', profile: '👤', audit: '📜' };
   // ★ v2.3: Model list switches per provider
@@ -554,6 +591,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   const rowDefaultBg = isDark ? '#162032' : 'transparent';
   const tabActiveColor = isDark ? '#A5B4FC' : lightColors.primary[600];
   const tabActiveBorder = isDark ? '#818CF8' : lightColors.primary[500];
+
+  // ★ v2.4: Superadmin gold style helpers
+  const superadminBadgeBg = isDark ? 'rgba(251,191,36,0.15)' : '#FEF3C7';
+  const superadminBadgeBorder = isDark ? 'rgba(251,191,36,0.35)' : '#FDE68A';
+  const superadminBadgeText = isDark ? '#FDE68A' : '#92400E';
+
   // ═══════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════
@@ -569,12 +612,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
       }}>
 
         {/* ─── Header ─── */}
+        {/* ★ v2.4: Superadmin-aware header icon and title */}
         <div style={{ background: colors.primary.gradient, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <h2 style={{ color: colors.text.inverse, fontSize: typography.fontSize['xl'], fontWeight: typography.fontWeight.bold, margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {isUserAdmin ? '🛡️' : '⚙️'} {isUserAdmin ? t.title : t.titleRegular}
+              {isUserSuperAdmin ? '👑' : isUserAdmin ? '🛡️' : '⚙️'}{' '}
+              {isUserSuperAdmin ? t.titleSuperAdmin : isUserAdmin ? t.title : t.titleRegular}
             </h2>
-            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: typography.fontSize.sm, margin: '4px 0 0' }}>{isUserAdmin ? t.subtitle : t.subtitleRegular}</p>
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: typography.fontSize.sm, margin: '4px 0 0' }}>
+              {isUserSuperAdmin ? t.subtitleSuperAdmin : isUserAdmin ? t.subtitle : t.subtitleRegular}
+            </p>
           </div>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: radii.lg, padding: '8px', cursor: 'pointer', color: colors.text.inverse, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `background ${animation.duration.fast}` }}
             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
@@ -614,7 +661,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
           {/* ═══ USERS TAB ═══ */}
           {activeTab === 'users' && isUserAdmin && (
             <div>
-              <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
+              {/* ★ v2.4: Added superadmin counter badge */}
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' }}>
                 <div style={{ background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, borderRadius: radii.xl, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: primaryBadgeText }}>{totalUsers}</span>
                   <span style={{ fontSize: typography.fontSize.sm, color: colors.text.muted }}>{t.users.totalUsers}</span>
@@ -622,6 +670,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
                 <div style={{ background: warningBadgeBg, border: `1px solid ${warningBadgeBorder}`, borderRadius: radii.xl, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: warningBadgeText }}>{totalAdmins}</span>
                   <span style={{ fontSize: typography.fontSize.sm, color: colors.text.muted }}>{t.users.totalAdmins}</span>
+                </div>
+                {/* ★ v2.4: Superadmin counter — gold */}
+                <div style={{ background: superadminBadgeBg, border: `1px solid ${superadminBadgeBorder}`, borderRadius: radii.xl, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: superadminBadgeText }}>{totalSuperAdmins}</span>
+                  <span style={{ fontSize: typography.fontSize.sm, color: colors.text.muted }}>{t.users.totalSuperAdmins}</span>
                 </div>
               </div>
 
@@ -653,21 +706,48 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
                             </div>
                           </td>
                           <td style={{ padding: '12px 16px', fontSize: typography.fontSize.sm, color: colors.text.body }}>{user.display_name || '—'}</td>
-                          <td style={{ padding: '12px 16px' }}><RoleBadge role={user.role as 'admin' | 'user'} /></td>
+                          {/* ★ v2.4: Superadmin-aware role badge */}
+                          <td style={{ padding: '12px 16px' }}>
+                            {user.role === 'superadmin' ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                padding: '2px 10px', borderRadius: radii.full, fontSize: typography.fontSize.xs,
+                                fontWeight: typography.fontWeight.semibold,
+                                background: superadminBadgeBg, color: superadminBadgeText,
+                                border: `1px solid ${superadminBadgeBorder}`,
+                              }}>
+                                👑 Super Admin
+                              </span>
+                            ) : (
+                              <RoleBadge role={user.role as 'admin' | 'user'} />
+                            )}
+                          </td>
                           <td style={{ padding: '12px 16px', fontSize: typography.fontSize.xs, color: colors.text.muted }}>{formatDate(user.created_at, true)}</td>
+                          {/* ★ v2.4: Protect superadmin role from being changed */}
                           <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                            <button
-                              onClick={() => handleRoleChange(user)}
-                              style={{
+                            {user.role === 'superadmin' ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '4px',
                                 padding: '4px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md,
-                                border: `1px solid ${colors.border.light}`, background: 'transparent',
-                                color: colors.text.body, cursor: 'pointer', transition: `all ${animation.duration.fast}`,
-                              }}
-                              onMouseEnter={e => { e.currentTarget.style.background = primaryBadgeBg; e.currentTarget.style.color = primaryBadgeText; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = colors.text.body; }}
-                            >
-                              {user.role === 'admin' ? t.users.makeUser : t.users.makeAdmin}
-                            </button>
+                                background: superadminBadgeBg, color: superadminBadgeText,
+                                border: `1px solid ${superadminBadgeBorder}`,
+                              }}>
+                                🔒 {t.users.protected}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleRoleChange(user)}
+                                style={{
+                                  padding: '4px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md,
+                                  border: `1px solid ${colors.border.light}`, background: 'transparent',
+                                  color: colors.text.body, cursor: 'pointer', transition: `all ${animation.duration.fast}`,
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = primaryBadgeBg; e.currentTarget.style.color = primaryBadgeText; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = colors.text.body; }}
+                              >
+                                {user.role === 'admin' ? t.users.makeUser : t.users.makeAdmin}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -919,38 +999,58 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
           {activeTab === 'profile' && (
             <div style={{ maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-              {/* Custom Logo */}
-              <div>
-                <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
-                  {language === 'si' ? 'Logotip' : 'Custom Logo'}
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  {customLogo && (
-                    <img src={customLogo} alt="Logo" style={{ height: 48, width: 'auto', borderRadius: radii.md, border: `1px solid ${colors.border.light}` }} />
-                  )}
-                  <label style={{
-                    padding: '8px 16px', fontSize: typography.fontSize.sm, borderRadius: radii.md,
-                    border: `1px solid ${colors.border.light}`, background: 'transparent',
-                    color: colors.text.body, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  }}>
-                    <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    {language === 'si' ? 'Naloži logo' : 'Upload Logo'}
-                    <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
-                  </label>
-                  {customLogo && (
-                    <button
-                      onClick={handleRemoveLogo}
-                      style={{
-                        padding: '8px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md,
-                        border: `1px solid ${errorBorder}`, background: errorBg,
-                        color: errorText, cursor: 'pointer',
-                      }}
-                    >
-                      {language === 'si' ? 'Odstrani' : 'Remove'}
-                    </button>
-                  )}
+              {/* ★ v2.4: Custom Logo — SUPERADMIN ONLY or White-Label notice */}
+              {storageService.isSuperAdmin() ? (
+                /* Superadmin sees full logo upload UI */
+                <div>
+                  <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
+                    {t.whiteLabel.logoTitle}
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    {customLogo && (
+                      <img src={customLogo} alt="Logo" style={{ height: 48, width: 'auto', borderRadius: radii.md, border: `1px solid ${colors.border.light}` }} />
+                    )}
+                    <label style={{
+                      padding: '8px 16px', fontSize: typography.fontSize.sm, borderRadius: radii.md,
+                      border: `1px solid ${colors.border.light}`, background: 'transparent',
+                      color: colors.text.body, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    }}>
+                      <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      {language === 'si' ? 'Naloži logo' : 'Upload Logo'}
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
+                    </label>
+                    {customLogo && (
+                      <button
+                        onClick={handleRemoveLogo}
+                        style={{
+                          padding: '8px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md,
+                          border: `1px solid ${errorBorder}`, background: errorBg,
+                          color: errorText, cursor: 'pointer',
+                        }}
+                      >
+                        {language === 'si' ? 'Odstrani' : 'Remove'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* ★ v2.4: Non-superadmin sees White-Label notice */
+                <div>
+                  <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
+                    {t.whiteLabel.logoTitle}
+                  </h3>
+                  <div style={{
+                    background: isDark ? 'rgba(251,191,36,0.08)' : '#FFFBEB',
+                    border: `1px solid ${isDark ? 'rgba(251,191,36,0.2)' : '#FDE68A'}`,
+                    borderRadius: radii.lg, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px',
+                  }}>
+                    <span style={{ fontSize: '20px', flexShrink: 0 }}>🏷️</span>
+                    <p style={{ fontSize: typography.fontSize.sm, color: isDark ? '#FDE68A' : '#92400E', margin: 0, lineHeight: typography.lineHeight.relaxed }}>
+                      {t.whiteLabel.logoNotice}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Change Password */}
               <div>
