@@ -1,5 +1,5 @@
 // components/ChartRenderer.tsx
-// v1.3 — 2026-02-18 — FIX: Donut size back to 30/48, label lines SHORTER (8px)
+// v1.4 — 2026-02-18 — FIX: Donut radii 30/48 always, SHORT label lines, percent-only labels
 import React, { useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -64,28 +64,25 @@ const ComparisonBar: React.FC<{ data: ExtractedChartData; height: number }> = ({
   );
 };
 
-/* ─── DONUT — v1.3: radii 30/48 (as before), SHORT label lines ── */
+/* ─── DONUT — v1.4: Compact radii ALWAYS, short labels ───── */
 
 const DonutChart: React.FC<{ data: ExtractedChartData; height: number }> = ({ data, height }) => {
   const chartData = data.dataPoints.map(dp => ({ name: dp.label, value: dp.value, unit: dp.unit || '' }));
-  const isSmall = height <= 180;
 
-  // Original size — unchanged from v1.1
-  const innerRadius = isSmall ? Math.min(height * 0.18, 30) : Math.min(height * 0.25, 60);
-  const outerRadius = isSmall ? Math.min(height * 0.30, 48) : Math.min(height * 0.38, 90);
+  // Use the proven 30/48 radii that Beno confirmed as excellent.
+  // Scale up slightly for large containers (height > 300) but cap it.
+  const isLarge = height > 300;
+  const innerRadius = isLarge ? 38 : 30;
+  const outerRadius = isLarge ? 62 : 48;
+  const labelFontSize = isLarge ? 11 : 9;
 
-  const labelFontSize = isSmall ? 9 : 12;
-
-  // Custom label: positioned only 8px from donut edge = SHORT arrows
-  const renderLabel = ({ name, percent, midAngle, outerRadius: oR, cx, cy }: any) => {
+  // Custom label: positioned CLOSE to donut edge = SHORT arrows
+  const renderLabel = ({ percent, midAngle, outerRadius: oR, cx, cy }: any) => {
     const RADIAN = Math.PI / 180;
-    const radius = oR + (isSmall ? 8 : 14);
+    const radius = oR + 8;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
     const textAnchor = x > cx ? 'start' : 'end';
-    const displayText = isSmall
-      ? `${(percent * 100).toFixed(0)}%`
-      : `${name} (${(percent * 100).toFixed(0)}%)`;
     return (
       <text
         x={x} y={y}
@@ -95,7 +92,7 @@ const DonutChart: React.FC<{ data: ExtractedChartData; height: number }> = ({ da
         fontSize={labelFontSize}
         fontWeight={600}
       >
-        {displayText}
+        {`${(percent * 100).toFixed(0)}%`}
       </text>
     );
   };
@@ -106,16 +103,13 @@ const DonutChart: React.FC<{ data: ExtractedChartData; height: number }> = ({ da
         <Pie
           data={chartData}
           cx="50%"
-          cy={isSmall ? '42%' : '50%'}
+          cy="45%"
           innerRadius={innerRadius}
           outerRadius={outerRadius}
           paddingAngle={2}
           dataKey="value"
           label={renderLabel}
-          labelLine={isSmall
-            ? { strokeWidth: 1, stroke: theme.colors.border.medium, type: 'straight' as any }
-            : { strokeWidth: 1 }
-          }
+          labelLine={{ strokeWidth: 1, stroke: theme.colors.border.medium }}
         >
           {chartData.map((_, index) => (
             <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -124,11 +118,11 @@ const DonutChart: React.FC<{ data: ExtractedChartData; height: number }> = ({ da
         <Tooltip content={<CustomTooltip />} />
         <Legend
           wrapperStyle={{
-            fontSize: isSmall ? '9px' : '11px',
-            lineHeight: isSmall ? '14px' : '18px',
+            fontSize: isLarge ? '11px' : '9px',
+            lineHeight: isLarge ? '18px' : '14px',
           }}
           iconType="circle"
-          iconSize={isSmall ? 6 : 8}
+          iconSize={isLarge ? 8 : 6}
         />
       </PieChart>
     </ResponsiveContainer>
