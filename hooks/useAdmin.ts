@@ -2,6 +2,12 @@
 // ═══════════════════════════════════════════════════════════════
 // Admin hook — user management, role changes, instructions,
 // audit log. All admin operations go through this hook.
+// v1.1 — 2026-02-18
+//   ★ v1.1: Superadmin support
+//     - checkAdminStatus() recognizes 'superadmin' role
+//     - New: isSuperAdmin state exposed
+//     - AdminUser.role type includes 'superadmin'
+//     - updateUserRole() guards against non-superadmin modifying superadmin
 // v1.0 — 2026-02-17
 // ═══════════════════════════════════════════════════════════════
 
@@ -16,7 +22,7 @@ export interface AdminUser {
   id: string;
   email: string;
   displayName: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'superadmin';
   createdAt: string;
   lastSignIn: string | null;
 }
@@ -42,6 +48,7 @@ export interface GlobalInstructions {
 
 export const useAdmin = () => {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [adminLog, setAdminLog] = useState<AdminLogEntry[]>([]);
   const [globalInstructions, setGlobalInstructions] = useState<GlobalInstructions | null>(null);
@@ -55,8 +62,11 @@ export const useAdmin = () => {
 
   const checkAdminStatus = useCallback(() => {
     const role = storageService.getUserRole();
-    setIsAdmin(role === 'admin');
-    return role === 'admin';
+    const isAdminRole = role === 'admin' || role === 'superadmin';
+    const isSuperRole = role === 'superadmin';
+    setIsAdmin(isAdminRole);
+    setIsSuperAdmin(isSuperRole);
+    return isAdminRole;
   }, []);
 
   useEffect(() => {
@@ -105,21 +115,25 @@ export const useAdmin = () => {
 
   const updateUserRole = useCallback(async (
     targetUserId: string,
-    newRole: 'admin' | 'user'
+    newRole: 'admin' | 'user' | 'superadmin'
   ): Promise<{ success: boolean; message?: string }> => {
     if (!checkAdminStatus()) {
       return { success: false, message: 'Not authorized' };
     }
 
-    // Safety: admin cannot remove their own admin role
+    // Cannot change own role
     const currentUserId = await storageService.getCurrentUserId();
-    if (targetUserId === currentUserId && newRole === 'user') {
-      return { success: false, message: 'You cannot remove your own admin role' };
+    if (targetUserId === currentUserId) {
+      return { success: false, message: 'You cannot change your own role' };
+    }
+
+    // ★ v1.1: Only superadmin can assign/remove superadmin role
+    const targetUser = users.find(u => u.id === targetUserId);
+    if ((newRole === 'superadmin' || targetUser?.role === 'superadmin') && !storageService.isSuperAdmin()) {
+      return { success: false, message: 'Only Super Admin can modify Super Admin roles' };
     }
 
     try {
-      // Get the old role for audit log
-      const targetUser = users.find(u => u.id === targetUserId);
       const oldRole = targetUser?.role || 'user';
 
       if (oldRole === newRole) {
@@ -137,7 +151,7 @@ export const useAdmin = () => {
         return { success: false, message: updateError.message };
       }
 
-      // Write audit log
+      // Audit log
       const { error: logError } = await supabase
         .from('admin_log')
         .insert({
@@ -153,7 +167,6 @@ export const useAdmin = () => {
 
       if (logError) {
         console.warn('Audit log write failed:', logError.message);
-        // Don't fail the whole operation for a log write failure
       }
 
       // Update local state
@@ -179,7 +192,6 @@ export const useAdmin = () => {
     setError(null);
 
     try {
-      // Fetch log entries
       const { data: logData, error: logError } = await supabase
         .from('admin_log')
         .select('*')
@@ -192,7 +204,6 @@ export const useAdmin = () => {
         return;
       }
 
-      // Enrich with emails from profiles (we already have users loaded)
       const entries: AdminLogEntry[] = (logData || []).map((entry: any) => {
         const adminUser = users.find(u => u.id === entry.admin_id);
         const targetUser = users.find(u => u.id === entry.target_user_id);
@@ -278,7 +289,6 @@ export const useAdmin = () => {
         return { success: false, message: updateError.message };
       }
 
-      // Write audit log
       const { error: logError } = await supabase
         .from('admin_log')
         .insert({
@@ -295,7 +305,6 @@ export const useAdmin = () => {
         console.warn('Audit log write failed:', logError.message);
       }
 
-      // Update local state
       setGlobalInstructions(prev => ({
         ...prev!,
         custom_instructions: instructions,
@@ -303,7 +312,6 @@ export const useAdmin = () => {
         updated_by: currentUserId,
       }));
 
-      // Invalidate cached instructions so next AI call uses new overrides
       invalidateGlobalInstructionsCache();
 
       return { success: true };
@@ -330,7 +338,7 @@ export const useAdmin = () => {
       const { error: updateError } = await supabase
         .from('global_settings')
         .update({
-          custom_instructions: null, // null = use hardcoded defaults from Instructions.ts
+          custom_instructions: null,
           updated_at: new Date().toISOString(),
           updated_by: currentUserId,
         })
@@ -340,7 +348,6 @@ export const useAdmin = () => {
         return { success: false, message: updateError.message };
       }
 
-      // Audit log
       await supabase
         .from('admin_log')
         .insert({
@@ -372,6 +379,7 @@ export const useAdmin = () => {
   return {
     // State
     isAdmin,
+    isSuperAdmin,
     users,
     adminLog,
     globalInstructions,
