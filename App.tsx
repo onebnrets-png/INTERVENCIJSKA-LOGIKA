@@ -548,18 +548,7 @@ useEffect(() => {
               onCollapseChange={setSidebarCollapsed}
             />
 
-          {/* ═══ MAIN CONTENT ═══ */}
-            {/* ★ v2.2: Reactive margins follow both sidebar and dashboard collapse */}
-            <main style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              marginLeft: sidebarCollapsed ? 64 : 280,
-              marginRight: 0, // dashboard is in flex flow, no margin needed
-              transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}>
-              {/* ═══ TOOLBAR ═══ */}
+                        {/* ═══ TOOLBAR ═══ */}
               <div style={{
                 background: colors.surface.card,
                 borderBottom: `1px solid ${colors.border.light}`,
@@ -571,14 +560,93 @@ useEffect(() => {
                 flexShrink: 0,
               }}>
                 {/* Left: hamburger (mobile) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, flexShrink: 0 }}>
                   <div className="lg:hidden">
                     <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
                   </div>
                 </div>
 
+                {/* Center: Project Acronym + Title */}
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  padding: `0 ${spacing.md}`,
+                }}>
+                  {pm.projectData?.projectIdea?.projectAcronym?.trim() ? (
+                    <>
+                      {/* Acronym badge */}
+                      <span style={{
+                        fontSize: '13px',
+                        fontWeight: 800,
+                        color: colors.primary[600],
+                        background: isDark ? colors.primary[900] + '40' : colors.primary[50],
+                        border: `1.5px solid ${isDark ? colors.primary[700] : colors.primary[200]}`,
+                        padding: '3px 10px',
+                        borderRadius: radii.md,
+                        letterSpacing: '0.06em',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        textTransform: 'uppercase',
+                      }}>
+                        {pm.projectData.projectIdea.projectAcronym.trim()}
+                      </span>
+                      {/* Separator dot */}
+                      <span style={{
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        background: colors.border.medium,
+                        flexShrink: 0,
+                      }} />
+                      {/* Full project title */}
+                      <span style={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: colors.text.heading,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        minWidth: 0,
+                      }} title={pm.projectData.projectIdea.projectTitle || ''}>
+                        {pm.projectData.projectIdea.projectTitle?.trim() || ''}
+                      </span>
+                    </>
+                  ) : pm.projectData?.projectIdea?.projectTitle?.trim() ? (
+                    /* Title exists but no acronym yet */
+                    <span style={{
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: colors.text.heading,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      minWidth: 0,
+                    }} title={pm.projectData.projectIdea.projectTitle}>
+                      {pm.projectData.projectIdea.projectTitle.trim()}
+                    </span>
+                  ) : (
+                    /* Placeholder — no title yet */
+                    <span style={{
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: colors.text.muted,
+                      fontStyle: 'italic',
+                      letterSpacing: '0.03em',
+                      opacity: 0.6,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {language === 'si' ? 'NAZIV PROJEKTA' : 'PROJECT TITLE'}
+                    </span>
+                  )}
+                </div>
+
                 {/* Right: Action buttons */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
                   <ToolbarButton
                     colors={colors}
                     onClick={() => setIsDashboardOpen(true)}
