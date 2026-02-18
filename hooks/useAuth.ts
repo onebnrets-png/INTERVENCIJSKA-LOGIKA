@@ -1,6 +1,11 @@
 // hooks/useAuth.ts
 // ═══════════════════════════════════════════════════════════════
 // Authentication hook — login, logout, session restoration, MFA check.
+// v1.1 — 2026-02-18
+//   ★ v1.1: Use getEffectiveLogo() for hardcoded EURO-OFFICE logo
+//     - Only superadmin sees custom logo if set
+//     - All other users always see hardcoded logo
+// v1.0 — 2026-02-17
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
@@ -18,10 +23,10 @@ export const useAuth = () => {
   const [needsMFAVerify, setNeedsMFAVerify] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
 
-  // ─── Load custom logo from settings cache ──────────────────────
+  // ─── Load logo — ★ v1.1: use getEffectiveLogo() ───────────────
   const loadCustomLogo = useCallback(() => {
-    const custom = storageService.getCustomLogo();
-    setAppLogo(custom || BRAND_ASSETS.logoText);
+    const effectiveLogo = storageService.getEffectiveLogo();
+    setAppLogo(effectiveLogo);
   }, []);
 
   // ─── Check AAL level (MFA required?) ──────────────────────────
@@ -60,9 +65,7 @@ export const useAuth = () => {
     restoreSession();
   }, [loadCustomLogo, checkMFA]);
 
-  // ─── Check API key (uses ensureSettingsLoaded instead of loadSettings) ─
-  // ★ FIX: Use ensureSettingsLoaded() instead of loadSettings()
-  // This prevents overwriting the cache that register() just populated.
+  // ─── Check API key ────────────────────────────────────────────
   const checkApiKey = useCallback(async () => {
     await storageService.ensureSettingsLoaded();
     if (!hasValidApiKey()) {
@@ -90,12 +93,10 @@ export const useAuth = () => {
     }, 100);
   }, [loadCustomLogo, checkMFA]);
 
-   // ─── MFA Verified ──────────────────────────────────────────────
+  // ─── MFA Verified ──────────────────────────────────────────────
   const handleMFAVerified = useCallback(async () => {
     setNeedsMFAVerify(false);
     setMfaFactorId(null);
-    // After MFA verify, Supabase refreshes the session token.
-    // We must restore session to reload cachedUser from the new token.
     const email = await storageService.restoreSession();
     if (email) {
       setCurrentUser(email);
@@ -121,7 +122,7 @@ export const useAuth = () => {
   // ─── Computed ──────────────────────────────────────────────────
   const shouldShowBanner = showAiWarning && !isWarningDismissed;
 
-  // ─── Ensure API key (returns boolean, caller opens settings) ───
+  // ─── Ensure API key ────────────────────────────────────────────
   const ensureApiKey = useCallback((): boolean => {
     if (showAiWarning || !hasValidApiKey()) {
       return false;
@@ -146,4 +147,3 @@ export const useAuth = () => {
     handleMFAVerified,
   };
 };
-
