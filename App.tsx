@@ -550,7 +550,7 @@ useEffect(() => {
               onCollapseChange={setSidebarCollapsed}
             />
 
-                        {/* ═══ TOOLBAR ═══ */}
+                    {/* ═══ TOOLBAR ═══ */}
               <div style={{
                 background: colors.surface.card,
                 borderBottom: `1px solid ${colors.border.light}`,
@@ -708,34 +708,6 @@ useEffect(() => {
                   />
                 </div>
               </div>
-
-              {/* SCROLLABLE CONTENT — ProjectDisplay */}
-              <ProjectDisplay
-                projectData={pm.projectData}
-                activeStepId={pm.currentStepId}
-                language={language}
-                onUpdateData={pm.handleUpdateData}
-                onGenerateSection={generation.handleGenerateSection}
-                onGenerateCompositeSection={generation.handleGenerateCompositeSection}
-                onGenerateField={generation.handleGenerateField}
-                onAddItem={pm.handleAddItem}
-                onRemoveItem={pm.handleRemoveItem}
-                isLoading={generation.isLoading}
-                error={generation.error}
-                missingApiKey={auth.showAiWarning}
-              />
-            </main>
-
-            {/* ═══ DASHBOARD PANEL (right side) ═══ */}
-            <DashboardPanel
-              projectData={pm.projectData}
-              language={language}
-              onCollapseChange={setDashboardCollapsed}
-            />
-            
-           </div>
-        </div>
-      )}
 
       {/* PRINT LAYOUT */}
       <div className="hidden print:block">
