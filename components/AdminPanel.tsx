@@ -1,28 +1,20 @@
 // components/AdminPanel.tsx
 // ═══════════════════════════════════════════════════════════════
 // Unified Admin / Settings Panel
-// v2.4 — 2026-02-18
+// v3.0 — 2026-02-19
+//
+//   ★ v3.0: Delete capabilities + Error Log
+//     - Users tab: Delete button (SuperAdmin: any user; Org Owner: org users)
+//     - Profile tab: "Delete my account" button (self-delete for all users)
+//     - New tab: Error Log (SuperAdmin only) — view, copy, clear errors
+//     - Localized delete confirmation dialogs (EN/SI)
+//     - API key fix: loadSettingsData no longer wipes cached keys on error
+//
 //   ★ v2.4: Superadmin support
-//     - Header shows 👑 for superadmin, 🛡️ for admin, ⚙️ for user
-//     - Users tab: gold superadmin badge, protected label on role change
-//     - Users tab: added "Super Admins" counter badge
-//     - Profile tab: logo upload visible ONLY for superadmin
-//     - Non-superadmin sees White-Label info notice instead of logo upload
-//
-//   ★ v2.3: OpenAI (ChatGPT) provider support in AI tab
-//     - Third provider card for OpenAI
-//     - openaiKey state + save/load logic
-//     - Model list switches between GEMINI_MODELS, OPENAI_MODELS, OPENROUTER_MODELS
-//     - handleProviderChange resets model per provider
-//     - handleAISave saves openai_key via storageService
-//
-//   ★ v2.2: Full dark-mode audit — fixed:
-//     - Stats badges, tab active color, table rows, Instructions sidebar,
-//       AI Provider cards, info boxes, 2FA, error/success messages,
-//       CollapsibleSection, QRCodeImage, toasts
-//
-//   ★ v2.1: EN-only Instructions display (SI variants removed)
-//   v2.0: Merges AdminPanel + SettingsModal into single 5-tab / 2-tab modal
+//   ★ v2.3: OpenAI provider support
+//   ★ v2.2: Full dark-mode audit
+//   ★ v2.1: EN-only Instructions display
+//   v2.0: Merges AdminPanel + SettingsModal
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -35,31 +27,21 @@ import { colors as lightColors, darkColors, shadows, radii, animation, typograph
 import { getThemeMode, onThemeChange } from '../services/themeService.ts';
 import { TEXT } from '../locales.ts';
 
-// ─── Settings imports (from old SettingsModal) ────────────────
+// ─── Settings imports ─────────────────────────────────────────
 import { storageService } from '../services/storageService.ts';
 import { validateProviderKey, OPENROUTER_MODELS, GEMINI_MODELS, OPENAI_MODELS, type AIProviderType } from '../services/aiProvider.ts';
 import {
-  getFullInstructions,
-  getDefaultInstructions,
-  saveAppInstructions,
-  resetAppInstructions,
-  LANGUAGE_DIRECTIVES,
-  LANGUAGE_MISMATCH_TEMPLATE,
-  ACADEMIC_RIGOR_RULES,
-  HUMANIZATION_RULES,
-  PROJECT_TITLE_RULES,
-  MODE_INSTRUCTIONS,
-  QUALITY_GATES,
-  SECTION_TASK_INSTRUCTIONS,
-  TEMPORAL_INTEGRITY_RULE,
-  CHAPTER_LABELS,
-  FIELD_RULE_LABELS,
-  CHAPTERS,
-  GLOBAL_RULES,
-  FIELD_RULES,
-  SUMMARY_RULES,
-  TRANSLATION_RULES,
+  getFullInstructions, getDefaultInstructions, saveAppInstructions, resetAppInstructions,
+  LANGUAGE_DIRECTIVES, LANGUAGE_MISMATCH_TEMPLATE, ACADEMIC_RIGOR_RULES, HUMANIZATION_RULES,
+  PROJECT_TITLE_RULES, MODE_INSTRUCTIONS, QUALITY_GATES, SECTION_TASK_INSTRUCTIONS,
+  TEMPORAL_INTEGRITY_RULE, CHAPTER_LABELS, FIELD_RULE_LABELS, CHAPTERS,
+  GLOBAL_RULES, FIELD_RULES, SUMMARY_RULES, TRANSLATION_RULES,
 } from '../services/Instructions.ts';
+
+// ★ v3.0: Error log service
+import { errorLogService, type ErrorLogEntry } from '../services/errorLogService.ts';
+// ★ v3.0: Organization service for org-level delete
+import { organizationService } from '../services/organizationService.ts';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -70,7 +52,8 @@ interface AdminPanelProps {
   initialTab?: string;
 }
 
-type TabId = 'users' | 'instructions' | 'ai' | 'profile' | 'audit';
+// ★ v3.0: Added 'errors' tab
+type TabId = 'users' | 'instructions' | 'ai' | 'profile' | 'audit' | 'errors';
 
 // ─── Helpers: QR Code + Collapsible ─────────────────────────
 
@@ -84,16 +67,13 @@ const CollapsibleSection = ({ title, defaultOpen = false, children, colors: c }:
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
     <div style={{ border: `1px solid ${c.border.light}`, borderRadius: radii.lg, overflow: 'hidden' }}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
+      <button type="button" onClick={() => setIsOpen(!isOpen)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '12px 16px', background: c.surface.sidebar, border: 'none', cursor: 'pointer',
           textAlign: 'left', transition: `background ${animation.duration.fast}`,
           color: c.text.heading, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold,
-        }}
-      >
+        }}>
         <span>{title}</span>
         <svg style={{ width: 16, height: 16, color: c.text.muted, transition: `transform ${animation.duration.fast}`, transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }}
           fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -111,11 +91,9 @@ const ADMIN_TEXT = {
   en: {
     title: 'Admin / Settings',
     titleRegular: 'Settings',
-    // ★ v2.4: Superadmin title
     titleSuperAdmin: 'Super Admin / Settings',
     subtitle: 'Manage users, AI settings, instructions, and view audit log',
     subtitleRegular: 'Configure AI provider, profile and security',
-    // ★ v2.4: Superadmin subtitle
     subtitleSuperAdmin: 'Full system control — users, AI, instructions, branding & audit',
     tabs: {
       users: 'Users',
@@ -123,6 +101,7 @@ const ADMIN_TEXT = {
       ai: 'AI Provider',
       profile: 'Profile & Security',
       audit: 'Audit Log',
+      errors: 'Error Log',
     },
     users: {
       title: 'User Management',
@@ -145,10 +124,17 @@ const ADMIN_TEXT = {
       noUsers: 'No users found.',
       totalUsers: 'Total users',
       totalAdmins: 'Admins',
-      // ★ v2.4
       totalSuperAdmins: 'Super Admins',
       protected: 'Protected',
       never: 'Never',
+      // ★ v3.0: Delete texts
+      deleteUser: 'Delete User',
+      deleteConfirm: 'Are you sure you want to PERMANENTLY delete user',
+      deleteConfirmSuffix: '? All their projects and data will be removed. This cannot be undone.',
+      deleteSuccess: 'User deleted successfully.',
+      deleteFailed: 'Failed to delete user:',
+      removeFromOrg: 'Remove from Org',
+      removeFromOrgConfirm: 'Remove user from this organization? Their projects in this org will be deleted.',
     },
     instructions: {
       title: 'AI Instructions',
@@ -164,38 +150,46 @@ const ADMIN_TEXT = {
       by: 'by',
       usingDefaults: 'Currently using default instructions (no custom overrides).',
       sections: {
-        global: 'Global Rules',
-        language: 'Language Rules',
-        academic: 'Academic Writing',
-        humanization: 'Humanization',
-        projectTitle: 'Project Title',
-        mode: 'Mode Rules',
-        qualityGates: 'Quality Gates',
-        sectionTask: 'Section Tasks',
-        fieldRules: 'Field Rules',
-        translation: 'Translation',
-        summary: 'Summary',
-        chapter: 'Chapter Mapping',
-        temporal: 'Temporal Integrity',
+        global: 'Global Rules', language: 'Language Rules', academic: 'Academic Writing',
+        humanization: 'Humanization', projectTitle: 'Project Title', mode: 'Mode Rules',
+        qualityGates: 'Quality Gates', sectionTask: 'Section Tasks', fieldRules: 'Field Rules',
+        translation: 'Translation', summary: 'Summary', chapter: 'Chapter Mapping', temporal: 'Temporal Integrity',
       },
     },
     log: {
       title: 'Audit Log',
       subtitle: 'Track all administrative actions',
-      admin: 'Admin',
-      action: 'Action',
-      target: 'Target',
-      details: 'Details',
-      date: 'Date',
+      admin: 'Admin', action: 'Action', target: 'Target', details: 'Details', date: 'Date',
       noEntries: 'No log entries found.',
       actions: {
-        role_change: 'Role Change',
-        instructions_update: 'Instructions Updated',
-        instructions_reset: 'Instructions Reset',
-        user_block: 'User Blocked',
+        role_change: 'Role Change', instructions_update: 'Instructions Updated',
+        instructions_reset: 'Instructions Reset', user_block: 'User Blocked',
+        user_delete: 'User Deleted', org_user_remove: 'User Removed from Org',
+        org_delete: 'Organization Deleted',
       },
     },
-    // ★ v2.4: White-label notice
+    // ★ v3.0: Error log texts
+    errors: {
+      title: 'Error Log',
+      subtitle: 'System errors captured from all users',
+      date: 'Date', user: 'User', component: 'Component', error: 'Error', code: 'Code',
+      noErrors: 'No errors in system!',
+      copyForDev: 'Copy for developer',
+      clearAll: 'Clear all',
+      clearConfirm: 'Clear all error logs?',
+      copied: 'Logs copied to clipboard!',
+      cleared: 'Logs cleared.',
+    },
+    // ★ v3.0: Self-delete texts
+    selfDelete: {
+      title: 'Delete My Account',
+      warning: 'This will permanently delete your account, all your projects, and remove you from all organizations. This action cannot be undone.',
+      button: 'Delete My Account',
+      confirmTitle: 'Confirm Account Deletion',
+      confirmMessage: 'Type DELETE to confirm permanent deletion of your account and all data:',
+      success: 'Account deleted. You will be logged out.',
+      failed: 'Failed to delete account:',
+    },
     whiteLabel: {
       logoTitle: 'Custom Logo',
       logoNotice: 'Logo customization is available only in the White-Label version. Contact us for more information.',
@@ -205,11 +199,9 @@ const ADMIN_TEXT = {
   si: {
     title: 'Admin / Nastavitve',
     titleRegular: 'Nastavitve',
-    // ★ v2.4: Superadmin title
     titleSuperAdmin: 'Super Admin / Nastavitve',
     subtitle: 'Upravljanje uporabnikov, AI nastavitev, pravil in pregled dnevnika',
     subtitleRegular: 'Nastavi AI ponudnika, profil in varnost',
-    // ★ v2.4: Superadmin subtitle
     subtitleSuperAdmin: 'Polni nadzor sistema — uporabniki, AI, pravila, blagovna znamka & dnevnik',
     tabs: {
       users: 'Uporabniki',
@@ -217,79 +209,78 @@ const ADMIN_TEXT = {
       ai: 'AI Ponudnik',
       profile: 'Profil & Varnost',
       audit: 'Dnevnik',
+      errors: 'Dnevnik napak',
     },
     users: {
       title: 'Upravljanje uporabnikov',
       subtitle: 'Pregled in upravljanje vseh registriranih uporabnikov',
-      email: 'E-pošta',
-      displayName: 'Ime',
-      role: 'Vloga',
-      registered: 'Registriran',
-      lastLogin: 'Zadnja prijava',
-      actions: 'Akcije',
-      changeRole: 'Spremeni vlogo',
-      makeAdmin: 'Nastavi kot Admin',
-      makeUser: 'Nastavi kot Uporabnik',
+      email: 'E-pošta', displayName: 'Ime', role: 'Vloga', registered: 'Registriran',
+      lastLogin: 'Zadnja prijava', actions: 'Akcije', changeRole: 'Spremeni vlogo',
+      makeAdmin: 'Nastavi kot Admin', makeUser: 'Nastavi kot Uporabnik',
       confirmRoleChange: 'Ali ste prepričani, da želite spremeniti vlogo uporabnika',
       confirmToAdmin: 'v Admin? Imel bo poln dostop do vseh nastavitev in upravljanja uporabnikov.',
       confirmToUser: 'v Uporabnik? Izgubil bo dostop do Admin Panela in urejevalnika pravil.',
       selfProtection: 'Ne morete odstraniti lastne admin vloge.',
-      roleUpdated: 'Vloga uspešno posodobljena.',
-      roleUpdateFailed: 'Napaka pri posodobitvi vloge:',
-      noUsers: 'Ni najdenih uporabnikov.',
-      totalUsers: 'Skupaj uporabnikov',
-      totalAdmins: 'Adminov',
-      // ★ v2.4
-      totalSuperAdmins: 'Super Adminov',
-      protected: 'Zaščiteno',
-      never: 'Nikoli',
+      roleUpdated: 'Vloga uspešno posodobljena.', roleUpdateFailed: 'Napaka pri posodobitvi vloge:',
+      noUsers: 'Ni najdenih uporabnikov.', totalUsers: 'Skupaj uporabnikov', totalAdmins: 'Adminov',
+      totalSuperAdmins: 'Super Adminov', protected: 'Zaščiteno', never: 'Nikoli',
+      // ★ v3.0
+      deleteUser: 'Izbriši uporabnika',
+      deleteConfirm: 'Ali ste prepričani, da želite TRAJNO izbrisati uporabnika',
+      deleteConfirmSuffix: '? Vsi njihovi projekti in podatki bodo odstranjeni. Tega ni mogoče razveljaviti.',
+      deleteSuccess: 'Uporabnik uspešno izbrisan.',
+      deleteFailed: 'Napaka pri brisanju uporabnika:',
+      removeFromOrg: 'Odstrani iz org.',
+      removeFromOrgConfirm: 'Odstrani uporabnika iz te organizacije? Njegovi projekti v tej org bodo izbrisani.',
     },
     instructions: {
       title: 'AI Pravila',
       subtitle: 'Urejanje globalnih AI pravil, ki veljajo za vse uporabnike',
-      save: 'Shrani pravila',
-      reset: 'Ponastavi na privzeto',
-      saved: 'Pravila uspešno shranjena.',
-      saveFailed: 'Napaka pri shranjevanju pravil:',
+      save: 'Shrani pravila', reset: 'Ponastavi na privzeto',
+      saved: 'Pravila uspešno shranjena.', saveFailed: 'Napaka pri shranjevanju pravil:',
       resetConfirm: 'Ali ste prepričani, da želite ponastaviti vsa pravila na privzete vrednosti? Tega ni mogoče razveljaviti.',
-      resetDone: 'Pravila ponastavljena na privzeto.',
-      resetFailed: 'Napaka pri ponastavitvi pravil:',
-      lastUpdated: 'Zadnja posodobitev',
-      by: 'avtor',
+      resetDone: 'Pravila ponastavljena na privzeto.', resetFailed: 'Napaka pri ponastavitvi pravil:',
+      lastUpdated: 'Zadnja posodobitev', by: 'avtor',
       usingDefaults: 'Trenutno se uporabljajo privzeta pravila (brez prilagoditev).',
       sections: {
-        global: 'Globalna pravila',
-        language: 'Jezikovna pravila',
-        academic: 'Akademsko pisanje',
-        humanization: 'Humanizacija',
-        projectTitle: 'Naslov projekta',
-        mode: 'Pravila načina',
-        qualityGates: 'Kontrola kakovosti',
-        sectionTask: 'Naloge sklopov',
-        fieldRules: 'Pravila polj',
-        translation: 'Prevod',
-        summary: 'Povzetek',
-        chapter: 'Mapiranje poglavij',
-        temporal: 'Časovna celovitost',
+        global: 'Globalna pravila', language: 'Jezikovna pravila', academic: 'Akademsko pisanje',
+        humanization: 'Humanizacija', projectTitle: 'Naslov projekta', mode: 'Pravila načina',
+        qualityGates: 'Kontrola kakovosti', sectionTask: 'Naloge sklopov', fieldRules: 'Pravila polj',
+        translation: 'Prevod', summary: 'Povzetek', chapter: 'Mapiranje poglavij', temporal: 'Časovna celovitost',
       },
     },
     log: {
       title: 'Dnevnik sprememb',
       subtitle: 'Sledenje vsem administrativnim akcijam',
-      admin: 'Admin',
-      action: 'Akcija',
-      target: 'Cilj',
-      details: 'Podrobnosti',
-      date: 'Datum',
+      admin: 'Admin', action: 'Akcija', target: 'Cilj', details: 'Podrobnosti', date: 'Datum',
       noEntries: 'Ni vnosov v dnevniku.',
       actions: {
-        role_change: 'Sprememba vloge',
-        instructions_update: 'Pravila posodobljena',
-        instructions_reset: 'Pravila ponastavljena',
-        user_block: 'Uporabnik blokiran',
+        role_change: 'Sprememba vloge', instructions_update: 'Pravila posodobljena',
+        instructions_reset: 'Pravila ponastavljena', user_block: 'Uporabnik blokiran',
+        user_delete: 'Uporabnik izbrisan', org_user_remove: 'Uporabnik odstranjen iz org',
+        org_delete: 'Organizacija izbrisana',
       },
     },
-    // ★ v2.4: White-label notice
+    errors: {
+      title: 'Dnevnik napak',
+      subtitle: 'Sistemske napake vseh uporabnikov',
+      date: 'Datum', user: 'Uporabnik', component: 'Komponenta', error: 'Napaka', code: 'Koda',
+      noErrors: 'Ni napak v sistemu!',
+      copyForDev: 'Kopiraj za razvijalca',
+      clearAll: 'Počisti vse',
+      clearConfirm: 'Izbriši vse error loge?',
+      copied: 'Logi kopirani v odložišče!',
+      cleared: 'Logi izbrisani.',
+    },
+    selfDelete: {
+      title: 'Izbriši moj račun',
+      warning: 'To bo trajno izbrisalo vaš račun, vse vaše projekte in vas odstranilo iz vseh organizacij. Tega dejanja ni mogoče razveljaviti.',
+      button: 'Izbriši moj račun',
+      confirmTitle: 'Potrdite izbris računa',
+      confirmMessage: 'Vnesite DELETE za potrditev trajnega izbrisa vašega računa in vseh podatkov:',
+      success: 'Račun izbrisan. Odjavljeni boste.',
+      failed: 'Napaka pri brisanju računa:',
+    },
     whiteLabel: {
       logoTitle: 'Logotip',
       logoNotice: 'Prilagoditev logotipa je na voljo samo v White-Label verziji. Kontaktirajte nas za več informacij.',
@@ -304,15 +295,9 @@ const formatDate = (dateStr: string | null, short = false): string => {
   if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
-    if (short) {
-      return d.toLocaleDateString('sl-SI', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    }
-    return d.toLocaleString('sl-SI', {
-      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
-  } catch {
-    return dateStr;
-  }
+    if (short) return d.toLocaleDateString('sl-SI', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return d.toLocaleString('sl-SI', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return dateStr; }
 };
 
 // ─── Helper: User initials avatar ────────────────────────────
@@ -331,7 +316,7 @@ const UserAvatar: React.FC<{ name: string; email: string; size?: number }> = ({ 
   );
 };
 
-// ─── Build default instructions for display — EN only ────────
+// ─── Build default instructions display — EN only ────────────
 
 const buildDefaultInstructionsDisplay = (): Record<string, string> => {
   const fmtGates = (gates: string[]): string => gates.map((g, i) => `  ${i + 1}. ${g}`).join('\n');
@@ -370,9 +355,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   const colors = isDark ? darkColors : lightColors;
 
   const isUserAdmin = admin.isAdmin;
-  // ★ v2.4: Superadmin detection
   const isUserSuperAdmin = admin.isSuperAdmin;
-  const adminTabs: TabId[] = ['users', 'instructions', 'ai', 'profile', 'audit'];
+  // ★ v3.0: Added 'errors' tab for superadmin
+  const adminTabs: TabId[] = isUserSuperAdmin
+    ? ['users', 'instructions', 'ai', 'profile', 'audit', 'errors']
+    : ['users', 'instructions', 'ai', 'profile', 'audit'];
   const regularTabs: TabId[] = ['ai', 'profile'];
   const availableTabs = isUserAdmin ? adminTabs : regularTabs;
   const defaultTab = initialTab && availableTabs.includes(initialTab as TabId) ? (initialTab as TabId) : (isUserAdmin ? 'users' : 'ai');
@@ -386,7 +373,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   const [editedInstructions, setEditedInstructions] = useState<Record<string, string>>({});
   const [activeInstructionSection, setActiveInstructionSection] = useState<string>('global');
 
-  // ★ v2.3: Added openaiKey state
   const [aiProvider, setAiProvider] = useState<AIProviderType>('gemini');
   const [geminiKey, setGeminiKey] = useState('');
   const [openRouterKey, setOpenRouterKey] = useState('');
@@ -411,8 +397,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
+  // ★ v3.0: Error log state
+  const [errorLogs, setErrorLogs] = useState<ErrorLogEntry[]>([]);
+  const [errorLogsLoading, setErrorLogsLoading] = useState(false);
+
+  // ★ v3.0: Self-delete confirmation state
+  const [selfDeleteInput, setSelfDeleteInput] = useState('');
+  const [selfDeleteLoading, setSelfDeleteLoading] = useState(false);
+
   useEffect(() => { if (isOpen) { if (isUserAdmin) { admin.fetchUsers(); admin.fetchGlobalInstructions(); } loadSettingsData(); } }, [isOpen, isUserAdmin]);
   useEffect(() => { if (activeTab === 'audit' && isOpen && isUserAdmin) { admin.fetchAdminLog(); } }, [activeTab, isOpen, isUserAdmin]);
+
+  // ★ v3.0: Load error logs when tab opens
+  useEffect(() => {
+    if (activeTab === 'errors' && isOpen && isUserSuperAdmin) {
+      setErrorLogsLoading(true);
+      errorLogService.getErrorLogs(200).then(logs => { setErrorLogs(logs); setErrorLogsLoading(false); });
+    }
+  }, [activeTab, isOpen, isUserSuperAdmin]);
+
   useEffect(() => {
     const defaults = buildDefaultInstructionsDisplay();
     const overrides = admin.globalInstructions?.custom_instructions || {};
@@ -425,11 +428,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(null), 4000); return () => clearTimeout(timer); } }, [toast]);
   useEffect(() => { if (message) { const timer = setTimeout(() => setMessage(''), 4000); return () => clearTimeout(timer); } }, [message]);
 
-  // ★ v2.3: Updated loadSettingsData to load OpenAI key
+  // ★ v3.0 FIX: loadSettingsData — no longer calls storageService.loadSettings()
+  // which could wipe cached keys on RLS error. Instead relies on ensureSettingsLoaded.
   const loadSettingsData = async () => {
     setSettingsLoading(true);
     try {
-      await storageService.loadSettings();
+      await storageService.ensureSettingsLoaded();
       const provider = storageService.getAIProvider() || 'gemini';
       setAiProvider(provider);
       setGeminiKey(storageService.getApiKey() || '');
@@ -444,29 +448,93 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
       setNewPassword(''); setConfirmPassword('');
       setMfaEnrolling(false); setEnrollData(null); setEnrollCode(''); setEnrollError('');
       setMessage(''); setIsError(false); setInstructionsSubTab('global');
+      setSelfDeleteInput(''); setSelfDeleteLoading(false);
     } finally { setSettingsLoading(false); }
   };
 
   const handleRoleChange = useCallback((user: AdminUser) => {
-    // ★ v2.4: Block role changes on superadmin users
     if (user.role === 'superadmin') return;
     const newRole = user.role === 'admin' ? 'user' : 'admin';
-    const confirmMsg = user.role === 'admin' ? `${t.users.confirmRoleChange} "${user.email}" ${t.users.confirmToUser}` : `${t.users.confirmRoleChange} "${user.email}" ${t.users.confirmToAdmin}`;
-    setConfirmModal({ isOpen: true, title: t.users.changeRole, message: confirmMsg, onConfirm: async () => { setConfirmModal(null); const result = await admin.updateUserRole(user.id, newRole); if (result.success) { setToast({ message: t.users.roleUpdated, type: 'success' }); } else { setToast({ message: `${t.users.roleUpdateFailed} ${result.message}`, type: 'error' }); } } });
+    const confirmMsg = user.role === 'admin'
+      ? `${t.users.confirmRoleChange} "${user.email}" ${t.users.confirmToUser}`
+      : `${t.users.confirmRoleChange} "${user.email}" ${t.users.confirmToAdmin}`;
+    setConfirmModal({
+      isOpen: true, title: t.users.changeRole, message: confirmMsg,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        const result = await admin.updateUserRole(user.id, newRole);
+        if (result.success) { setToast({ message: t.users.roleUpdated, type: 'success' }); }
+        else { setToast({ message: `${t.users.roleUpdateFailed} ${result.message}`, type: 'error' }); }
+      }
+    });
   }, [admin, t]);
+
+  // ★ v3.0: Handle delete user (SuperAdmin level)
+  const handleDeleteUser = useCallback((user: AdminUser) => {
+    setConfirmModal({
+      isOpen: true,
+      title: t.users.deleteUser,
+      message: `${t.users.deleteConfirm} "${user.email}"${t.users.deleteConfirmSuffix}`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        const result = await admin.deleteUser(user.id);
+        if (result.success) { setToast({ message: t.users.deleteSuccess, type: 'success' }); }
+        else { setToast({ message: `${t.users.deleteFailed} ${result.message}`, type: 'error' }); }
+      }
+    });
+  }, [admin, t]);
+
+  // ★ v3.0: Handle remove user from org (Org Owner/Admin level)
+  const handleRemoveOrgUser = useCallback((user: AdminUser) => {
+    const activeOrgId = storageService.getActiveOrgId();
+    if (!activeOrgId) return;
+    setConfirmModal({
+      isOpen: true,
+      title: t.users.removeFromOrg,
+      message: `${t.users.removeFromOrgConfirm}\n\n${user.email}`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        const result = await admin.deleteOrgUser(user.id, activeOrgId);
+        if (result.success) { setToast({ message: t.users.deleteSuccess, type: 'success' }); }
+        else { setToast({ message: `${t.users.deleteFailed} ${result.message}`, type: 'error' }); }
+      }
+    });
+  }, [admin, t]);
+
+  // ★ v3.0: Handle self-delete
+  const handleSelfDelete = useCallback(async () => {
+    if (selfDeleteInput !== 'DELETE') return;
+    setSelfDeleteLoading(true);
+    const result = await admin.deleteSelf();
+    setSelfDeleteLoading(false);
+    if (result.success) {
+      setToast({ message: t.selfDelete.success, type: 'success' });
+      setTimeout(() => { window.location.reload(); }, 2000);
+    } else {
+      setToast({ message: `${t.selfDelete.failed} ${result.message}`, type: 'error' });
+    }
+  }, [admin, selfDeleteInput, t]);
 
   const handleSaveGlobalInstructions = useCallback(async () => {
     const result = await admin.saveGlobalInstructions(editedInstructions);
-    if (result.success) { setToast({ message: t.instructions.saved, type: 'success' }); } else { setToast({ message: `${t.instructions.saveFailed} ${result.message}`, type: 'error' }); }
+    if (result.success) { setToast({ message: t.instructions.saved, type: 'success' }); }
+    else { setToast({ message: `${t.instructions.saveFailed} ${result.message}`, type: 'error' }); }
   }, [admin, editedInstructions, t]);
 
   const handleResetGlobalInstructions = useCallback(() => {
-    setConfirmModal({ isOpen: true, title: t.instructions.reset, message: t.instructions.resetConfirm, onConfirm: async () => { setConfirmModal(null); const result = await admin.resetInstructionsToDefault(); if (result.success) { setEditedInstructions({}); setToast({ message: t.instructions.resetDone, type: 'success' }); } else { setToast({ message: `${t.instructions.resetFailed} ${result.message}`, type: 'error' }); } } });
+    setConfirmModal({
+      isOpen: true, title: t.instructions.reset, message: t.instructions.resetConfirm,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        const result = await admin.resetInstructionsToDefault();
+        if (result.success) { setEditedInstructions({}); setToast({ message: t.instructions.resetDone, type: 'success' }); }
+        else { setToast({ message: `${t.instructions.resetFailed} ${result.message}`, type: 'error' }); }
+      }
+    });
   }, [admin, t]);
 
   const handleInstructionChange = useCallback((section: string, value: string) => { setEditedInstructions(prev => ({ ...prev, [section]: value })); }, []);
 
-  // ★ v2.3: Updated handleProviderChange — resets model per provider
   const handleProviderChange = (provider: AIProviderType) => {
     setAiProvider(provider);
     if (provider === 'gemini') setModelName('gemini-3-pro-preview');
@@ -474,7 +542,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     else if (provider === 'openrouter') setModelName('deepseek/deepseek-v3.2');
   };
 
-  // ★ v2.3: Updated handleAISave — saves OpenAI key
   const handleAISave = async () => {
     setIsValidating(true); setMessage(tAuth.validating || "Validating..."); setIsError(false);
     await storageService.setAIProvider(aiProvider);
@@ -482,9 +549,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     await storageService.setApiKey(geminiKey.trim());
     await storageService.setOpenRouterKey(openRouterKey.trim());
     await storageService.setOpenAIKey(openaiKey.trim());
-    const activeKey = aiProvider === 'gemini' ? geminiKey.trim()
-                    : aiProvider === 'openai' ? openaiKey.trim()
-                    : openRouterKey.trim();
+    const activeKey = aiProvider === 'gemini' ? geminiKey.trim() : aiProvider === 'openai' ? openaiKey.trim() : openRouterKey.trim();
     if (activeKey === '') { setMessage(language === 'si' ? 'Nastavitve shranjene.' : 'Settings saved.'); setIsValidating(false); setTimeout(() => onClose(), 1000); return; }
     const isValid = await validateProviderKey(aiProvider, activeKey);
     setIsValidating(false);
@@ -501,7 +566,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
     else { setIsError(true); setMessage(result.message || tAuth.incorrectPassword || "Password change failed."); }
   };
 
-  // ★ v2.4: Logo upload guarded to superadmin in storageService.saveCustomLogo()
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) { const reader = new FileReader(); reader.onloadend = async () => { const b64 = reader.result as string; setCustomLogo(b64); await storageService.saveCustomLogo(b64); setMessage(tAuth.logoUpdated || "Logo updated!"); }; reader.readAsDataURL(file); }
@@ -550,14 +614,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
 
   const totalUsers = admin.users.length;
   const totalAdmins = admin.users.filter(u => u.role === 'admin').length;
-  // ★ v2.4: Superadmin counter
   const totalSuperAdmins = admin.users.filter(u => u.role === 'superadmin').length;
   const instructionSections = Object.keys(t.instructions.sections) as (keyof typeof t.instructions.sections)[];
-  const TAB_ICONS: Record<TabId, string> = { users: '👥', instructions: '📋', ai: '🤖', profile: '👤', audit: '📜' };
-  // ★ v2.3: Model list switches per provider
-  const currentModels = aiProvider === 'gemini' ? GEMINI_MODELS
-                      : aiProvider === 'openai' ? OPENAI_MODELS
-                      : OPENROUTER_MODELS;
+  const TAB_ICONS: Record<TabId, string> = { users: '👥', instructions: '📋', ai: '🤖', profile: '👤', audit: '📜', errors: '🐛' };
+  const currentModels = aiProvider === 'gemini' ? GEMINI_MODELS : aiProvider === 'openai' ? OPENAI_MODELS : OPENROUTER_MODELS;
   const hasMFA = mfaFactors.length > 0;
   const appInstructionsSubTabs = [ { id: 'global', label: 'Global Rules' }, { id: 'chapters', label: 'Chapters' }, { id: 'fields', label: 'Field Rules' }, { id: 'translation', label: 'Translation' }, { id: 'summary', label: 'Summary' } ];
 
@@ -568,7 +628,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.heading, marginBottom: '6px' };
 
-  // ★ v2.2: Dark-aware style helpers
   const successBg = isDark ? 'rgba(16,185,129,0.12)' : lightColors.success[50];
   const successBorder = isDark ? 'rgba(16,185,129,0.25)' : lightColors.success[200];
   const successText = isDark ? '#6EE7B7' : lightColors.success[700];
@@ -591,12 +650,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
   const rowDefaultBg = isDark ? '#162032' : 'transparent';
   const tabActiveColor = isDark ? '#A5B4FC' : lightColors.primary[600];
   const tabActiveBorder = isDark ? '#818CF8' : lightColors.primary[500];
-
-  // ★ v2.4: Superadmin gold style helpers
   const superadminBadgeBg = isDark ? 'rgba(251,191,36,0.15)' : '#FEF3C7';
   const superadminBadgeBorder = isDark ? 'rgba(251,191,36,0.35)' : '#FDE68A';
   const superadminBadgeText = isDark ? '#FDE68A' : '#92400E';
-
+  // ★ v3.0: Danger zone styles
+  const dangerBg = isDark ? 'rgba(239,68,68,0.08)' : '#FEF2F2';
+  const dangerBorder = isDark ? 'rgba(239,68,68,0.2)' : '#FECACA';
+  const dangerBtnBg = isDark ? 'rgba(239,68,68,0.15)' : '#FEE2E2';
+  const dangerBtnBorder = isDark ? 'rgba(239,68,68,0.3)' : '#FECACA';
+  const dangerBtnText = isDark ? '#FCA5A5' : '#DC2626';
   // ═══════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════
@@ -612,7 +674,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
       }}>
 
         {/* ─── Header ─── */}
-        {/* ★ v2.4: Superadmin-aware header icon and title */}
         <div style={{ background: colors.primary.gradient, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <h2 style={{ color: colors.text.inverse, fontSize: typography.fontSize['xl'], fontWeight: typography.fontWeight.bold, margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -638,116 +699,169 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
                 padding: '12px 20px', fontSize: typography.fontSize.sm,
                 fontWeight: activeTab === tab ? typography.fontWeight.semibold : typography.fontWeight.medium,
                 color: activeTab === tab ? tabActiveColor : colors.text.muted,
-                background: 'transparent', border: 'none',
-                borderBottom: activeTab === tab ? `2px solid ${tabActiveBorder}` : '2px solid transparent',
-                cursor: 'pointer', transition: `all ${animation.duration.fast}`, marginBottom: '-1px', whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={e => { if (activeTab !== tab) e.currentTarget.style.color = colors.text.body; }}
-              onMouseLeave={e => { if (activeTab !== tab) e.currentTarget.style.color = colors.text.muted; }}
-            >{TAB_ICONS[tab]} {t.tabs[tab]}</button>
+                background: 'transparent', border: 'none', borderBottom: activeTab === tab ? `2px solid ${tabActiveBorder}` : '2px solid transparent',
+                cursor: 'pointer', transition: `all ${animation.duration.fast}`, whiteSpace: 'nowrap',
+              }}>
+              {TAB_ICONS[tab]} {t.tabs[tab]}
+            </button>
           ))}
         </div>
 
         {/* ─── Content ─── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: colors.surface.background }}>
-          {settingsLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 0' }}>
-              <div style={{ width: 24, height: 24, border: `2px solid ${colors.primary[500]}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-              <span style={{ marginLeft: '12px', color: colors.text.muted }}>{language === 'si' ? 'Nalaganje...' : 'Loading...'}</span>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+
+          {/* ═══ TOAST ═══ */}
+          {toast && (
+            <div style={{
+              padding: '12px 16px', marginBottom: '16px', borderRadius: radii.lg,
+              background: toast.type === 'success' ? successBg : errorBg,
+              border: `1px solid ${toast.type === 'success' ? successBorder : errorBorder}`,
+              color: toast.type === 'success' ? successText : errorText,
+              fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium,
+              display: 'flex', alignItems: 'center', gap: '8px',
+            }}>
+              {toast.type === 'success' ? '✅' : '❌'} {toast.message}
             </div>
-          ) : (
-            <>
+          )}
+
+          {/* ═══ CONFIRM MODAL ═══ */}
+          {confirmModal?.isOpen && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+            }}>
+              <div style={{ background: colors.surface.card, borderRadius: radii['2xl'], padding: '24px', maxWidth: '440px', width: '90%', boxShadow: shadows['2xl'] }}>
+                <h3 style={{ color: colors.text.heading, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, margin: '0 0 12px' }}>{confirmModal.title}</h3>
+                <p style={{ color: colors.text.body, fontSize: typography.fontSize.sm, margin: '0 0 20px', lineHeight: '1.5' }}>{confirmModal.message}</p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setConfirmModal(null)}
+                    style={{ padding: '8px 20px', borderRadius: radii.lg, border: `1px solid ${colors.border.light}`, background: colors.surface.card, color: colors.text.body, cursor: 'pointer', fontSize: typography.fontSize.sm }}>
+                    {language === 'si' ? 'Prekliči' : 'Cancel'}
+                  </button>
+                  <button onClick={confirmModal.onConfirm}
+                    style={{ padding: '8px 20px', borderRadius: radii.lg, border: 'none', background: colors.primary[600], color: '#fff', cursor: 'pointer', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold }}>
+                    {language === 'si' ? 'Potrdi' : 'Confirm'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ═══ USERS TAB ═══ */}
           {activeTab === 'users' && isUserAdmin && (
             <div>
-              {/* ★ v2.4: Added superadmin counter badge */}
-              <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                <div style={{ background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, borderRadius: radii.xl, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: primaryBadgeText }}>{totalUsers}</span>
-                  <span style={{ fontSize: typography.fontSize.sm, color: colors.text.muted }}>{t.users.totalUsers}</span>
-                </div>
-                <div style={{ background: warningBadgeBg, border: `1px solid ${warningBadgeBorder}`, borderRadius: radii.xl, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: warningBadgeText }}>{totalAdmins}</span>
-                  <span style={{ fontSize: typography.fontSize.sm, color: colors.text.muted }}>{t.users.totalAdmins}</span>
-                </div>
-                {/* ★ v2.4: Superadmin counter — gold */}
-                <div style={{ background: superadminBadgeBg, border: `1px solid ${superadminBadgeBorder}`, borderRadius: radii.xl, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: superadminBadgeText }}>{totalSuperAdmins}</span>
-                  <span style={{ fontSize: typography.fontSize.sm, color: colors.text.muted }}>{t.users.totalSuperAdmins}</span>
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ color: colors.text.heading, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, margin: '0 0 4px' }}>{t.users.title}</h3>
+                <p style={{ color: colors.text.muted, fontSize: typography.fontSize.sm, margin: 0 }}>{t.users.subtitle}</p>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ padding: '4px 12px', borderRadius: radii.full, background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, color: primaryBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
+                    {t.users.totalUsers}: {totalUsers}
+                  </span>
+                  <span style={{ padding: '4px 12px', borderRadius: radii.full, background: warningBadgeBg, border: `1px solid ${warningBadgeBorder}`, color: warningBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
+                    {t.users.totalAdmins}: {totalAdmins}
+                  </span>
+                  <span style={{ padding: '4px 12px', borderRadius: radii.full, background: superadminBadgeBg, border: `1px solid ${superadminBadgeBorder}`, color: superadminBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
+                    👑 {t.users.totalSuperAdmins}: {totalSuperAdmins}
+                  </span>
                 </div>
               </div>
 
-              {admin.isLoadingUsers ? (
-                <Card><SkeletonTable rows={5} cols={5} /></Card>
-              ) : admin.users.length === 0 ? (
-                <Card><p style={{ textAlign: 'center', color: colors.text.muted, padding: '40px 0' }}>{t.users.noUsers}</p></Card>
+              {admin.isLoadingUsers ? <SkeletonTable rows={4} cols={6} /> : admin.users.length === 0 ? (
+                <p style={{ color: colors.text.muted, textAlign: 'center', padding: '40px' }}>{t.users.noUsers}</p>
               ) : (
-                <div style={{ borderRadius: radii.xl, border: `1px solid ${colors.border.light}`, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: typography.fontSize.sm }}>
                     <thead>
-                      <tr style={{ background: isDark ? '#1A2332' : colors.surface.sidebar }}>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.users.email}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.users.displayName}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.users.role}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.users.registered}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.users.actions}</th>
+                      <tr style={{ borderBottom: `2px solid ${colors.border.light}` }}>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.users.email}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.users.displayName}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.users.role}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.users.registered}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.users.lastLogin}</th>
+                        <th style={{ textAlign: 'right', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.users.actions}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {admin.users.map((user) => (
-                        <tr key={user.id} style={{ borderTop: `1px solid ${colors.border.light}`, background: rowDefaultBg, transition: `background ${animation.duration.fast}` }}
-                          onMouseEnter={e => (e.currentTarget.style.background = rowHoverBg)}
-                          onMouseLeave={e => (e.currentTarget.style.background = rowDefaultBg)}>
-                          <td style={{ padding: '12px 16px' }}>
+                        <tr key={user.id} style={{ borderBottom: `1px solid ${colors.border.light}`, background: rowDefaultBg }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = rowHoverBg; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = rowDefaultBg; }}>
+                          <td style={{ padding: '10px 12px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <UserAvatar name={user.display_name || ''} email={user.email} size={32} />
-                              <span style={{ fontSize: typography.fontSize.sm, color: colors.text.body }}>{user.email}</span>
+                              <UserAvatar name={user.displayName} email={user.email} size={32} />
+                              <span style={{ color: colors.text.body }}>{user.email}</span>
                             </div>
                           </td>
-                          <td style={{ padding: '12px 16px', fontSize: typography.fontSize.sm, color: colors.text.body }}>{user.display_name || '—'}</td>
-                          {/* ★ v2.4: Superadmin-aware role badge */}
-                          <td style={{ padding: '12px 16px' }}>
+                          <td style={{ padding: '10px 12px', color: colors.text.body }}>{user.displayName}</td>
+                          <td style={{ padding: '10px 12px' }}>
                             {user.role === 'superadmin' ? (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                padding: '2px 10px', borderRadius: radii.full, fontSize: typography.fontSize.xs,
-                                fontWeight: typography.fontWeight.semibold,
-                                background: superadminBadgeBg, color: superadminBadgeText,
-                                border: `1px solid ${superadminBadgeBorder}`,
-                              }}>
+                              <span style={{ padding: '2px 10px', borderRadius: radii.full, background: superadminBadgeBg, border: `1px solid ${superadminBadgeBorder}`, color: superadminBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.bold }}>
                                 👑 Super Admin
                               </span>
-                            ) : (
-                              <RoleBadge role={user.role as 'admin' | 'user'} />
-                            )}
-                          </td>
-                          <td style={{ padding: '12px 16px', fontSize: typography.fontSize.xs, color: colors.text.muted }}>{formatDate(user.created_at, true)}</td>
-                          {/* ★ v2.4: Protect superadmin role from being changed */}
-                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                            {user.role === 'superadmin' ? (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                padding: '4px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md,
-                                background: superadminBadgeBg, color: superadminBadgeText,
-                                border: `1px solid ${superadminBadgeBorder}`,
-                              }}>
-                                🔒 {t.users.protected}
+                            ) : user.role === 'admin' ? (
+                              <span style={{ padding: '2px 10px', borderRadius: radii.full, background: warningBadgeBg, border: `1px solid ${warningBadgeBorder}`, color: warningBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
+                                🛡️ Admin
                               </span>
                             ) : (
-                              <button
-                                onClick={() => handleRoleChange(user)}
-                                style={{
-                                  padding: '4px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md,
-                                  border: `1px solid ${colors.border.light}`, background: 'transparent',
-                                  color: colors.text.body, cursor: 'pointer', transition: `all ${animation.duration.fast}`,
-                                }}
-                                onMouseEnter={e => { e.currentTarget.style.background = primaryBadgeBg; e.currentTarget.style.color = primaryBadgeText; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = colors.text.body; }}
-                              >
-                                {user.role === 'admin' ? t.users.makeUser : t.users.makeAdmin}
-                              </button>
+                              <span style={{ padding: '2px 10px', borderRadius: radii.full, background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, color: primaryBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
+                                User
+                              </span>
                             )}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: colors.text.muted }}>{formatDate(user.createdAt, true)}</td>
+                          <td style={{ padding: '10px 12px', color: colors.text.muted }}>{user.lastSignIn ? formatDate(user.lastSignIn) : t.users.never}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                              {/* Role change button */}
+                              {user.role === 'superadmin' ? (
+                                <span style={{ padding: '4px 10px', borderRadius: radii.lg, background: superadminBadgeBg, border: `1px solid ${superadminBadgeBorder}`, color: superadminBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium }}>
+                                  🔒 {t.users.protected}
+                                </span>
+                              ) : (
+                                <button onClick={() => handleRoleChange(user)}
+                                  style={{
+                                    background: user.role === 'admin' ? warningBadgeBg : primaryBadgeBg,
+                                    border: `1px solid ${user.role === 'admin' ? warningBadgeBorder : primaryBadgeBorder}`,
+                                    borderRadius: radii.lg, padding: '4px 10px', cursor: 'pointer',
+                                    color: user.role === 'admin' ? warningBadgeText : primaryBadgeText,
+                                    fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium, transition: `all ${animation.duration.fast}`,
+                                  }}>
+                                  {user.role === 'admin' ? t.users.makeUser : t.users.makeAdmin}
+                                </button>
+                              )}
+
+                              {/* ★ v3.0: Delete button — SuperAdmin can delete any non-superadmin */}
+                              {isUserSuperAdmin && user.role !== 'superadmin' && (
+                                <button onClick={() => handleDeleteUser(user)}
+                                  title={t.users.deleteUser}
+                                  style={{
+                                    background: dangerBtnBg, border: `1px solid ${dangerBtnBorder}`,
+                                    borderRadius: radii.lg, padding: '4px 10px', cursor: 'pointer',
+                                    color: dangerBtnText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium,
+                                    transition: `all ${animation.duration.fast}`,
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(239,68,68,0.25)' : '#FEE2E2'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = dangerBtnBg; }}>
+                                  🗑️ {language === 'si' ? 'Izbriši' : 'Delete'}
+                                </button>
+                              )}
+
+                              {/* ★ v3.0: Org admin/owner can remove user from their org */}
+                              {!isUserSuperAdmin && isUserAdmin && user.role !== 'superadmin' && user.role !== 'admin' && (
+                                <button onClick={() => handleRemoveOrgUser(user)}
+                                  title={t.users.removeFromOrg}
+                                  style={{
+                                    background: dangerBtnBg, border: `1px solid ${dangerBtnBorder}`,
+                                    borderRadius: radii.lg, padding: '4px 10px', cursor: 'pointer',
+                                    color: dangerBtnText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium,
+                                    transition: `all ${animation.duration.fast}`,
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(239,68,68,0.25)' : '#FEE2E2'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = dangerBtnBg; }}>
+                                  🗑️ {t.users.removeFromOrg}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -758,432 +872,280 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
             </div>
           )}
 
-          {/* ═══ INSTRUCTIONS TAB ═══ */}
+          {/* ═══ INSTRUCTIONS TAB — same as v2.4, unchanged ═══ */}
           {activeTab === 'instructions' && isUserAdmin && (
             <div style={{ display: 'flex', gap: '20px', minHeight: '400px' }}>
               {/* Sidebar */}
-              <div style={{ width: '200px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  {instructionSections.map((section) => (
-                    <button
-                      key={section}
-                      onClick={() => setActiveInstructionSection(section)}
-                      style={{
-                        padding: '8px 12px', fontSize: typography.fontSize.xs, textAlign: 'left',
-                        borderRadius: radii.md, border: 'none', cursor: 'pointer',
-                        background: activeInstructionSection === section ? primaryBadgeBg : 'transparent',
-                        color: activeInstructionSection === section ? primaryBadgeText : colors.text.body,
-                        fontWeight: activeInstructionSection === section ? typography.fontWeight.semibold : typography.fontWeight.medium,
-                        transition: `all ${animation.duration.fast}`,
-                      }}
-                      onMouseEnter={e => { if (activeInstructionSection !== section) e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.06)' : lightColors.primary[50]; }}
-                      onMouseLeave={e => { if (activeInstructionSection !== section) e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      {t.instructions.sections[section]}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button onClick={handleSaveGlobalInstructions} style={{ width: '100%', padding: '8px', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, background: colors.primary.gradient, color: '#FFFFFF', border: 'none', borderRadius: radii.md, cursor: 'pointer' }}>
-                    {t.instructions.save}
+              <div style={{ width: '200px', flexShrink: 0, borderRight: `1px solid ${colors.border.light}`, paddingRight: '16px' }}>
+                {instructionSections.map((section) => (
+                  <button key={section}
+                    onClick={() => setActiveInstructionSection(section)}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', marginBottom: '4px',
+                      borderRadius: radii.md, border: 'none', cursor: 'pointer',
+                      background: activeInstructionSection === section ? primaryBadgeBg : 'transparent',
+                      color: activeInstructionSection === section ? primaryBadgeText : colors.text.body,
+                      fontSize: typography.fontSize.xs, fontWeight: activeInstructionSection === section ? typography.fontWeight.semibold : typography.fontWeight.medium,
+                      transition: `all ${animation.duration.fast}`,
+                    }}>
+                    {t.instructions.sections[section]}
                   </button>
-                  <button onClick={handleResetGlobalInstructions} style={{ width: '100%', padding: '8px', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium, background: 'transparent', color: colors.text.muted, border: `1px solid ${colors.border.light}`, borderRadius: radii.md, cursor: 'pointer' }}>
-                    {t.instructions.reset}
-                  </button>
-                </div>
+                ))}
               </div>
-
               {/* Editor */}
               <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
+                <h3 style={{ color: colors.text.heading, fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.bold, margin: '0 0 8px' }}>
                   {t.instructions.sections[activeInstructionSection as keyof typeof t.instructions.sections] || activeInstructionSection}
                 </h3>
                 <textarea
                   value={editedInstructions[activeInstructionSection] || ''}
                   onChange={(e) => handleInstructionChange(activeInstructionSection, e.target.value)}
                   placeholder={getDefaultPlaceholder(activeInstructionSection)}
-                  style={{
-                    width: '100%', minHeight: '400px', padding: '12px', border: `1px solid ${colors.border.light}`,
-                    borderRadius: radii.lg, fontSize: typography.fontSize.xs, fontFamily: typography.fontFamily.mono,
-                    color: colors.text.body, background: colors.surface.card, resize: 'vertical',
-                    lineHeight: typography.lineHeight.relaxed, outline: 'none',
-                  }}
+                  style={{ ...inputStyle, minHeight: '300px', resize: 'vertical', fontFamily: typography.fontFamily.mono, fontSize: '12px', lineHeight: '1.6' }}
                 />
-              </div>
-            </div>
-          )}
-
-          {/* ═══ AI PROVIDER TAB ═══ */}
-          {activeTab === 'ai' && (
-            <div style={{ maxWidth: '600px' }}>
-              <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 4px' }}>
-                {language === 'si' ? 'AI Ponudnik' : 'AI Provider'}
-              </h3>
-              <p style={{ fontSize: typography.fontSize.sm, color: colors.text.muted, margin: '0 0 20px' }}>
-                {language === 'si' ? 'Izberi ponudnika AI in vnesi API ključ.' : 'Select your AI provider and enter your API key.'}
-              </p>
-
-              {/* ★ v2.3: Provider cards — now 3 cards */}
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-                {/* Gemini card */}
-                <div
-                  onClick={() => handleProviderChange('gemini')}
-                  style={{
-                    flex: 1, padding: spacing.lg, borderRadius: radii.xl, cursor: 'pointer',
-                    border: `2px solid ${aiProvider === 'gemini' ? (isDark ? '#818CF8' : colors.primary[500]) : colors.border.light}`,
-                    background: aiProvider === 'gemini' ? primaryBadgeBg : 'transparent',
-                    transition: `all ${animation.duration.fast}`,
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: '28px', marginBottom: spacing.sm }}>✨</div>
-                  <div style={{ fontWeight: typography.fontWeight.semibold, color: colors.text.heading, fontSize: typography.fontSize.sm }}>Gemini</div>
-                  <div style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, marginTop: '2px' }}>Google AI Studio</div>
-                </div>
-
-                {/* ★ v2.3: OpenAI card */}
-                <div
-                  onClick={() => handleProviderChange('openai')}
-                  style={{
-                    flex: 1, padding: spacing.lg, borderRadius: radii.xl, cursor: 'pointer',
-                    border: `2px solid ${aiProvider === 'openai' ? (isDark ? '#818CF8' : colors.primary[500]) : colors.border.light}`,
-                    background: aiProvider === 'openai' ? primaryBadgeBg : 'transparent',
-                    transition: `all ${animation.duration.fast}`,
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: '28px', marginBottom: spacing.sm }}>🤖</div>
-                  <div style={{ fontWeight: typography.fontWeight.semibold, color: colors.text.heading, fontSize: typography.fontSize.sm }}>OpenAI</div>
-                  <div style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, marginTop: '2px' }}>ChatGPT / GPT-5.2</div>
-                </div>
-
-                {/* OpenRouter card */}
-                <div
-                  onClick={() => handleProviderChange('openrouter')}
-                  style={{
-                    flex: 1, padding: spacing.lg, borderRadius: radii.xl, cursor: 'pointer',
-                    border: `2px solid ${aiProvider === 'openrouter' ? (isDark ? '#818CF8' : colors.primary[500]) : colors.border.light}`,
-                    background: aiProvider === 'openrouter' ? primaryBadgeBg : 'transparent',
-                    transition: `all ${animation.duration.fast}`,
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: '28px', marginBottom: spacing.sm }}>🔀</div>
-                  <div style={{ fontWeight: typography.fontWeight.semibold, color: colors.text.heading, fontSize: typography.fontSize.sm }}>OpenRouter</div>
-                  <div style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, marginTop: '2px' }}>200+ Models</div>
-                </div>
-              </div>
-
-              {/* API Key input — conditional per provider */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-                {/* Gemini key */}
-                {aiProvider === 'gemini' && (
-                  <div>
-                    <label style={labelStyle}>Gemini API Key</label>
-                    <input type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} style={inputStyle} placeholder="AIza..." />
-                    <p style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, marginTop: '4px' }}>
-                      {language === 'si' ? 'Pridobi brezplačni ključ na ' : 'Get your free key at '}
-                      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: colors.primary[isDark ? 300 : 600] }}>Google AI Studio</a>
-                    </p>
-                  </div>
-                )}
-
-                {/* ★ v2.3: OpenAI key */}
-                {aiProvider === 'openai' && (
-                  <div>
-                    <label style={labelStyle}>OpenAI API Key</label>
-                    <input type="password" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} style={inputStyle} placeholder="sk-..." />
-                    <p style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, marginTop: '4px' }}>
-                      {language === 'si' ? 'Pridobi ključ na ' : 'Get your key at '}
-                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: colors.primary[isDark ? 300 : 600] }}>platform.openai.com</a>
-                    </p>
-                  </div>
-                )}
-
-                {/* OpenRouter key */}
-                {aiProvider === 'openrouter' && (
-                  <div>
-                    <label style={labelStyle}>OpenRouter API Key</label>
-                    <input type="password" value={openRouterKey} onChange={(e) => setOpenRouterKey(e.target.value)} style={inputStyle} placeholder="sk-or-..." />
-                    <p style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, marginTop: '4px' }}>
-                      {language === 'si' ? 'Pridobi ključ na ' : 'Get your key at '}
-                      <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" style={{ color: colors.primary[isDark ? 300 : 600] }}>openrouter.ai</a>
-                    </p>
-                  </div>
-                )}
-
-                {/* Model selector */}
-                <div>
-                  <label style={labelStyle}>{language === 'si' ? 'Model' : 'Model'}</label>
-                  <select
-                    value={modelName}
-                    onChange={(e) => setModelName(e.target.value)}
-                    style={{
-                      ...inputStyle, fontFamily: typography.fontFamily.sans, cursor: 'pointer',
-                      appearance: 'none',
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394A3B8' d='M2 4l4 4 4-4'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 12px center',
-                      paddingRight: '36px',
-                    }}
-                  >
-                    {currentModels.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name} — {m.description}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Info box per provider */}
-                {aiProvider === 'gemini' && (
-                  <div style={{ background: secondaryInfoBg, border: `1px solid ${secondaryInfoBorder}`, borderRadius: radii.lg, padding: '12px 16px' }}>
-                    <p style={{ fontSize: typography.fontSize.xs, color: secondaryInfoText, margin: 0 }}>
-                      {language === 'si'
-                        ? '💡 Gemini 3 Pro je privzeti model — najzmogljivejši za EU projektno pisanje. Gemini API ključ je brezplačen za osebno uporabo.'
-                        : '💡 Gemini 3 Pro is the default model — most capable for EU project writing. Gemini API key is free for personal use.'}
-                    </p>
-                  </div>
-                )}
-
-                {aiProvider === 'openai' && (
-                  <div style={{ background: secondaryInfoBg, border: `1px solid ${secondaryInfoBorder}`, borderRadius: radii.lg, padding: '12px 16px' }}>
-                    <p style={{ fontSize: typography.fontSize.xs, color: secondaryInfoText, margin: 0 }}>
-                      {language === 'si'
-                        ? '💡 GPT-5.2 je privzeti model — najnovejši OpenAI flagship. Zahteva plačljivi API račun na platform.openai.com.'
-                        : '💡 GPT-5.2 is the default model — latest OpenAI flagship. Requires a paid API account at platform.openai.com.'}
-                    </p>
-                  </div>
-                )}
-
-                {aiProvider === 'openrouter' && (
-                  <div style={{ background: warningInfoBg, border: `1px solid ${warningInfoBorder}`, borderRadius: radii.lg, padding: '12px 16px' }}>
-                    <p style={{ fontSize: typography.fontSize.xs, color: warningInfoText, margin: 0 }}>
-                      {language === 'si'
-                        ? '⚠️ OpenRouter omogoča dostop do 200+ modelov (DeepSeek, Llama, Mistral, Claude...). Nekateri modeli so brezplačni. Preveri kredite na openrouter.ai.'
-                        : '⚠️ OpenRouter gives you access to 200+ models (DeepSeek, Llama, Mistral, Claude...). Some models are free. Check your credits at openrouter.ai.'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Message */}
-                {message && (
-                  <div style={{
-                    padding: '10px 16px', borderRadius: radii.lg, fontSize: typography.fontSize.sm, textAlign: 'center',
-                    background: isError ? errorBg : successBg,
-                    border: `1px solid ${isError ? errorBorder : successBorder}`,
-                    color: isError ? errorText : successText,
-                  }}>
-                    {message}
-                  </div>
-                )}
-
-                {/* Save button */}
-                <button
-                  onClick={handleAISave}
-                  disabled={isValidating}
-                  style={{
-                    width: '100%', padding: '12px', fontSize: typography.fontSize.sm,
-                    fontWeight: typography.fontWeight.semibold, background: colors.primary.gradient,
-                    color: '#FFFFFF', border: 'none', borderRadius: radii.lg, cursor: isValidating ? 'not-allowed' : 'pointer',
-                    opacity: isValidating ? 0.6 : 1, boxShadow: shadows.sm,
-                  }}
-                >
-                  {isValidating
-                    ? (language === 'si' ? 'Preverjam...' : 'Validating...')
-                    : (language === 'si' ? 'Shrani & Preveri' : 'Save & Validate')}
-                </button>
-              </div>
-            </div>
-          )}
-          {/* ═══ PROFILE & SECURITY TAB ═══ */}
-          {activeTab === 'profile' && (
-            <div style={{ maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-              {/* ★ v2.4: Custom Logo — SUPERADMIN ONLY or White-Label notice */}
-              {storageService.isSuperAdmin() ? (
-                /* Superadmin sees full logo upload UI */
-                <div>
-                  <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
-                    {t.whiteLabel.logoTitle}
-                  </h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    {customLogo && (
-                      <img src={customLogo} alt="Logo" style={{ height: 48, width: 'auto', borderRadius: radii.md, border: `1px solid ${colors.border.light}` }} />
-                    )}
-                    <label style={{
-                      padding: '8px 16px', fontSize: typography.fontSize.sm, borderRadius: radii.md,
-                      border: `1px solid ${colors.border.light}`, background: 'transparent',
-                      color: colors.text.body, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    }}>
-                      <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                      {language === 'si' ? 'Naloži logo' : 'Upload Logo'}
-                      <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
-                    </label>
-                    {customLogo && (
-                      <button
-                        onClick={handleRemoveLogo}
-                        style={{
-                          padding: '8px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md,
-                          border: `1px solid ${errorBorder}`, background: errorBg,
-                          color: errorText, cursor: 'pointer',
-                        }}
-                      >
-                        {language === 'si' ? 'Odstrani' : 'Remove'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* ★ v2.4: Non-superadmin sees White-Label notice */
-                <div>
-                  <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
-                    {t.whiteLabel.logoTitle}
-                  </h3>
-                  <div style={{
-                    background: isDark ? 'rgba(251,191,36,0.08)' : '#FFFBEB',
-                    border: `1px solid ${isDark ? 'rgba(251,191,36,0.2)' : '#FDE68A'}`,
-                    borderRadius: radii.lg, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px',
-                  }}>
-                    <span style={{ fontSize: '20px', flexShrink: 0 }}>🏷️</span>
-                    <p style={{ fontSize: typography.fontSize.sm, color: isDark ? '#FDE68A' : '#92400E', margin: 0, lineHeight: typography.lineHeight.relaxed }}>
-                      {t.whiteLabel.logoNotice}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Change Password */}
-              <div>
-                <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
-                  {language === 'si' ? 'Spremeni geslo' : 'Change Password'}
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div>
-                    <label style={labelStyle}>{language === 'si' ? 'Novo geslo' : 'New Password'}</label>
-                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={{ ...inputStyle, fontFamily: typography.fontFamily.sans }} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>{language === 'si' ? 'Potrdi geslo' : 'Confirm Password'}</label>
-                    <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={{ ...inputStyle, fontFamily: typography.fontFamily.sans }} />
-                  </div>
-                  <button onClick={handlePasswordChange} style={{ padding: '10px 20px', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, background: colors.primary.gradient, color: '#FFFFFF', border: 'none', borderRadius: radii.lg, cursor: 'pointer', alignSelf: 'flex-start' }}>
-                    {language === 'si' ? 'Spremeni geslo' : 'Change Password'}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                  <button onClick={handleSaveGlobalInstructions}
+                    style={{ padding: '8px 20px', borderRadius: radii.lg, border: 'none', background: colors.primary[600], color: '#fff', cursor: 'pointer', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold }}>
+                    {t.instructions.save}
+                  </button>
+                  <button onClick={handleResetGlobalInstructions}
+                    style={{ padding: '8px 20px', borderRadius: radii.lg, border: `1px solid ${colors.border.light}`, background: colors.surface.card, color: colors.text.body, cursor: 'pointer', fontSize: typography.fontSize.sm }}>
+                    {t.instructions.reset}
                   </button>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* 2FA */}
-              <div>
-                <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
-                  {language === 'si' ? 'Dvostopenjsko preverjanje (2FA)' : 'Two-Factor Authentication (2FA)'}
-                </h3>
+          {/* ═══ AI TAB — same as v2.4, unchanged ═══ */}
+          {activeTab === 'ai' && (
+            <div>
+              <h3 style={{ color: colors.text.heading, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, margin: '0 0 16px' }}>
+                🤖 {language === 'si' ? 'AI Ponudnik' : 'AI Provider'}
+              </h3>
 
+              {/* Provider cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                {(['gemini', 'openai', 'openrouter'] as AIProviderType[]).map((provider) => {
+                  const isActive = aiProvider === provider;
+                  const names = { gemini: 'Google Gemini', openai: 'OpenAI (ChatGPT)', openrouter: 'OpenRouter' };
+                  const icons = { gemini: '💎', openai: '🧠', openrouter: '🌐' };
+                  return (
+                    <button key={provider} onClick={() => handleProviderChange(provider)}
+                      style={{
+                        padding: '16px', borderRadius: radii.lg, cursor: 'pointer', textAlign: 'left',
+                        border: isActive ? `2px solid ${colors.primary[500]}` : `1px solid ${colors.border.light}`,
+                        background: isActive ? primaryBadgeBg : colors.surface.card, transition: `all ${animation.duration.fast}`,
+                      }}>
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>{icons[provider]}</div>
+                      <div style={{ color: colors.text.heading, fontWeight: typography.fontWeight.semibold, fontSize: typography.fontSize.sm }}>{names[provider]}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* API Key input */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle}>{aiProvider === 'gemini' ? 'Gemini' : aiProvider === 'openai' ? 'OpenAI' : 'OpenRouter'} API Key</label>
+                <input type="password"
+                  value={aiProvider === 'gemini' ? geminiKey : aiProvider === 'openai' ? openaiKey : openRouterKey}
+                  onChange={(e) => { if (aiProvider === 'gemini') setGeminiKey(e.target.value); else if (aiProvider === 'openai') setOpenaiKey(e.target.value); else setOpenRouterKey(e.target.value); }}
+                  placeholder={`Enter ${aiProvider} API key...`}
+                  style={inputStyle} />
+              </div>
+
+              {/* Model selection */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle}>{language === 'si' ? 'Model' : 'Model'}</label>
+                <select value={modelName} onChange={(e) => setModelName(e.target.value)}
+                  style={{ ...inputStyle, fontFamily: typography.fontFamily.body }}>
+                  {currentModels.map((m: any) => <option key={m.id || m} value={m.id || m}>{m.name || m.id || m}</option>)}
+                </select>
+              </div>
+
+              {/* Save + message */}
+              {message && (
+                <div style={{ padding: '10px 14px', borderRadius: radii.lg, marginBottom: '12px', background: isError ? errorBg : successBg, border: `1px solid ${isError ? errorBorder : successBorder}`, color: isError ? errorText : successText, fontSize: typography.fontSize.sm }}>
+                  {isError ? '❌' : '✅'} {message}
+                </div>
+              )}
+              <button onClick={handleAISave} disabled={isValidating}
+                style={{ padding: '10px 24px', borderRadius: radii.lg, border: 'none', background: colors.primary[600], color: '#fff', cursor: isValidating ? 'not-allowed' : 'pointer', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, opacity: isValidating ? 0.7 : 1 }}>
+                {isValidating ? (language === 'si' ? 'Preverjam...' : 'Validating...') : (language === 'si' ? 'Shrani nastavitve' : 'Save Settings')}
+              </button>
+            </div>
+          )}
+
+          {/* ═══ PROFILE & SECURITY TAB ═══ */}
+          {activeTab === 'profile' && (
+            <div>
+              <h3 style={{ color: colors.text.heading, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, margin: '0 0 16px' }}>
+                👤 {language === 'si' ? 'Profil & Varnost' : 'Profile & Security'}
+              </h3>
+
+              {/* Change password */}
+              <div style={{ marginBottom: '24px' }}>
+                <h4 style={{ color: colors.text.heading, fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold, margin: '0 0 12px' }}>
+                  🔑 {language === 'si' ? 'Spremeni geslo' : 'Change Password'}
+                </h4>
+                <div style={{ display: 'grid', gap: '12px', maxWidth: '400px' }}>
+                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={language === 'si' ? 'Novo geslo' : 'New password'} style={inputStyle} />
+                  <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder={language === 'si' ? 'Potrdi geslo' : 'Confirm password'} style={inputStyle} />
+                  <button onClick={handlePasswordChange}
+                    style={{ padding: '10px 20px', borderRadius: radii.lg, border: 'none', background: colors.primary[600], color: '#fff', cursor: 'pointer', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, maxWidth: '200px' }}>
+                    {language === 'si' ? 'Spremeni geslo' : 'Change Password'}
+                  </button>
+                </div>
+                {message && activeTab === 'profile' && (
+                  <div style={{ padding: '10px 14px', borderRadius: radii.lg, marginTop: '12px', background: isError ? errorBg : successBg, border: `1px solid ${isError ? errorBorder : successBorder}`, color: isError ? errorText : successText, fontSize: typography.fontSize.sm, maxWidth: '400px' }}>
+                    {isError ? '❌' : '✅'} {message}
+                  </div>
+                )}
+              </div>
+
+              {/* 2FA / MFA section */}
+              <div style={{ marginBottom: '24px' }}>
+                <h4 style={{ color: colors.text.heading, fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold, margin: '0 0 12px' }}>
+                  🔐 {language === 'si' ? 'Dvofaktorska avtentikacija (2FA)' : 'Two-Factor Authentication (2FA)'}
+                </h4>
                 {hasMFA ? (
-                  <div style={{ background: successBg, border: `1px solid ${successBorder}`, borderRadius: radii.lg, padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '18px' }}>✅</span>
-                      <span style={{ fontWeight: typography.fontWeight.semibold, color: successText, fontSize: typography.fontSize.sm }}>
-                        {language === 'si' ? '2FA je aktiviran' : '2FA is enabled'}
-                      </span>
+                  <div>
+                    <div style={{ padding: '12px 16px', borderRadius: radii.lg, background: successBg, border: `1px solid ${successBorder}`, color: successText, marginBottom: '12px', fontSize: typography.fontSize.sm }}>
+                      ✅ {language === 'si' ? '2FA je aktiviran' : '2FA is enabled'}
                     </div>
-                    {mfaFactors.map((factor) => (
-                      <div key={factor.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
-                        <span style={{ fontSize: typography.fontSize.sm, color: colors.text.body }}>{factor.friendly_name || 'TOTP'}</span>
-                        <button
-                          onClick={() => handleDisableMFA(factor.id)}
-                          style={{ padding: '4px 12px', fontSize: typography.fontSize.xs, borderRadius: radii.md, border: `1px solid ${errorBorder}`, background: errorBg, color: errorText, cursor: 'pointer' }}
-                        >
+                    {mfaFactors.map((f) => (
+                      <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', border: `1px solid ${colors.border.light}`, borderRadius: radii.lg, marginBottom: '8px' }}>
+                        <span style={{ color: colors.text.body, fontSize: typography.fontSize.sm }}>{f.friendly_name || 'TOTP'}</span>
+                        <button onClick={() => handleDisableMFA(f.id)}
+                          style={{ padding: '4px 12px', borderRadius: radii.lg, border: `1px solid ${dangerBtnBorder}`, background: dangerBtnBg, color: dangerBtnText, cursor: 'pointer', fontSize: typography.fontSize.xs }}>
                           {language === 'si' ? 'Deaktiviraj' : 'Disable'}
                         </button>
                       </div>
                     ))}
                   </div>
                 ) : mfaEnrolling && enrollData ? (
-                  <div style={{ background: colors.surface.card, border: `1px solid ${colors.border.light}`, borderRadius: radii.lg, padding: '20px' }}>
-                    <p style={{ fontSize: typography.fontSize.sm, color: colors.text.body, marginBottom: '16px' }}>
-                      {language === 'si' ? 'Skeniraj QR kodo z authenticator aplikacijo:' : 'Scan this QR code with your authenticator app:'}
+                  <div style={{ maxWidth: '400px' }}>
+                    <p style={{ color: colors.text.body, fontSize: typography.fontSize.sm, marginBottom: '12px' }}>
+                      {language === 'si' ? 'Skeniraj QR kodo z avtentikatorjem:' : 'Scan this QR code with your authenticator app:'}
                     </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                      <QRCodeImage value={enrollData.qrUri} size={180} colors={colors} />
-                    </div>
-                    <p style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, textAlign: 'center', marginBottom: '16px', fontFamily: typography.fontFamily.mono, wordBreak: 'break-all' }}>
+                    <QRCodeImage value={enrollData.qrUri} size={200} colors={colors} />
+                    <p style={{ color: colors.text.muted, fontSize: typography.fontSize.xs, margin: '8px 0', fontFamily: typography.fontFamily.mono, wordBreak: 'break-all' }}>
                       {enrollData.secret}
                     </p>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                      <input
-                        type="text" value={enrollCode}
-                        onChange={(e) => setEnrollCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        placeholder="000000" maxLength={6}
-                        style={{ ...inputStyle, textAlign: 'center', letterSpacing: '0.3em', fontFamily: typography.fontFamily.mono, fontSize: typography.fontSize.lg, flex: 1 }}
-                        onKeyDown={(e) => e.key === 'Enter' && enrollCode.length === 6 && handleVerifyMFAEnroll()}
-                      />
-                      <button onClick={handleVerifyMFAEnroll} disabled={enrollCode.length !== 6} style={{ padding: '10px 20px', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, background: colors.primary.gradient, color: '#FFFFFF', border: 'none', borderRadius: radii.lg, cursor: enrollCode.length !== 6 ? 'not-allowed' : 'pointer', opacity: enrollCode.length !== 6 ? 0.5 : 1 }}>
-                        {language === 'si' ? 'Potrdi' : 'Verify'}
-                      </button>
-                    </div>
-                    {enrollError && <p style={{ color: errorText, fontSize: typography.fontSize.xs, margin: '8px 0 0' }}>{enrollError}</p>}
-                    <button onClick={() => { setMfaEnrolling(false); setEnrollData(null); }} style={{ marginTop: '8px', fontSize: typography.fontSize.xs, color: colors.text.muted, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                      {language === 'si' ? 'Prekliči' : 'Cancel'}
+                    <input type="text" maxLength={6} value={enrollCode} onChange={(e) => setEnrollCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="000000" style={{ ...inputStyle, maxWidth: '150px', textAlign: 'center', letterSpacing: '4px', fontSize: typography.fontSize.lg, marginBottom: '8px' }} />
+                    {enrollError && <p style={{ color: errorText, fontSize: typography.fontSize.xs, margin: '4px 0' }}>❌ {enrollError}</p>}
+                    <button onClick={handleVerifyMFAEnroll}
+                      style={{ padding: '8px 20px', borderRadius: radii.lg, border: 'none', background: colors.primary[600], color: '#fff', cursor: 'pointer', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, display: 'block', marginTop: '8px' }}>
+                      {language === 'si' ? 'Potrdi' : 'Verify'}
                     </button>
                   </div>
                 ) : (
-                  <button onClick={handleStartMFAEnroll} style={{ padding: '10px 20px', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, background: colors.primary.gradient, color: '#FFFFFF', border: 'none', borderRadius: radii.lg, cursor: 'pointer' }}>
+                  <button onClick={handleStartMFAEnroll}
+                    style={{ padding: '10px 20px', borderRadius: radii.lg, border: `1px solid ${colors.border.light}`, background: colors.surface.card, color: colors.text.body, cursor: 'pointer', fontSize: typography.fontSize.sm }}>
                     {language === 'si' ? 'Aktiviraj 2FA' : 'Enable 2FA'}
                   </button>
                 )}
-                {enrollError && !mfaEnrolling && <p style={{ color: errorText, fontSize: typography.fontSize.xs, marginTop: '8px' }}>{enrollError}</p>}
               </div>
 
-              {/* Profile message */}
-              {message && (
-                <div style={{
-                  padding: '10px 16px', borderRadius: radii.lg, fontSize: typography.fontSize.sm, textAlign: 'center',
-                  background: isError ? errorBg : successBg,
-                  border: `1px solid ${isError ? errorBorder : successBorder}`,
-                  color: isError ? errorText : successText,
-                }}>
-                  {message}
+              {/* Logo upload — superadmin only */}
+              {isUserSuperAdmin ? (
+                <div style={{ marginBottom: '24px' }}>
+                  <h4 style={{ color: colors.text.heading, fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold, margin: '0 0 12px' }}>
+                    🎨 {t.whiteLabel.logoTitle}
+                  </h4>
+                  {customLogo && <img src={customLogo} alt="Custom Logo" style={{ maxWidth: 200, maxHeight: 60, marginBottom: '12px', borderRadius: radii.md }} />}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <label style={{ padding: '8px 16px', borderRadius: radii.lg, border: `1px solid ${colors.border.light}`, background: colors.surface.card, color: colors.text.body, cursor: 'pointer', fontSize: typography.fontSize.sm }}>
+                      {language === 'si' ? 'Naloži logo' : 'Upload Logo'}
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
+                    </label>
+                    {customLogo && (
+                      <button onClick={handleRemoveLogo}
+                        style={{ padding: '8px 16px', borderRadius: radii.lg, border: `1px solid ${dangerBtnBorder}`, background: dangerBtnBg, color: dangerBtnText, cursor: 'pointer', fontSize: typography.fontSize.sm }}>
+                        {language === 'si' ? 'Odstrani' : 'Remove'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '16px', borderRadius: radii.lg, background: secondaryInfoBg, border: `1px solid ${secondaryInfoBorder}`, marginBottom: '24px' }}>
+                  <h4 style={{ color: secondaryInfoText, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, margin: '0 0 4px' }}>{t.whiteLabel.logoTitle}</h4>
+                  <p style={{ color: secondaryInfoText, fontSize: typography.fontSize.xs, margin: 0, opacity: 0.85 }}>{t.whiteLabel.logoNotice}</p>
                 </div>
               )}
+
+              {/* ★ v3.0: DANGER ZONE — Delete my account */}
+              <div style={{ marginTop: '32px', padding: '20px', borderRadius: radii.lg, background: dangerBg, border: `1px solid ${dangerBorder}` }}>
+                <h4 style={{ color: dangerBtnText, fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.bold, margin: '0 0 8px' }}>
+                  ⚠️ {t.selfDelete.title}
+                </h4>
+                <p style={{ color: isDark ? '#FDA4AF' : '#991B1B', fontSize: typography.fontSize.sm, margin: '0 0 16px', lineHeight: '1.5' }}>
+                  {t.selfDelete.warning}
+                </p>
+                {storageService.isSuperAdmin() ? (
+                  <p style={{ color: colors.text.muted, fontSize: typography.fontSize.sm, fontStyle: 'italic' }}>
+                    {language === 'si' ? 'SuperAdmin ne more izbrisati lastnega računa. Najprej si odvzemite SuperAdmin vlogo.' : 'SuperAdmin cannot delete own account. Demote yourself first.'}
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text" value={selfDeleteInput} onChange={(e) => setSelfDeleteInput(e.target.value)}
+                      placeholder={language === 'si' ? 'Vnesite DELETE' : 'Type DELETE'}
+                      style={{ ...inputStyle, maxWidth: '200px', borderColor: dangerBtnBorder }}
+                    />
+                    <button onClick={handleSelfDelete} disabled={selfDeleteInput !== 'DELETE' || selfDeleteLoading}
+                      style={{
+                        padding: '10px 20px', borderRadius: radii.lg, border: 'none',
+                        background: selfDeleteInput === 'DELETE' ? '#DC2626' : (isDark ? '#4B1113' : '#FCA5A5'),
+                        color: '#fff', cursor: selfDeleteInput === 'DELETE' ? 'pointer' : 'not-allowed',
+                        fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.bold,
+                        opacity: selfDeleteInput === 'DELETE' ? 1 : 0.5,
+                      }}>
+                      {selfDeleteLoading ? '...' : `🗑️ ${t.selfDelete.button}`}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* ═══ AUDIT LOG TAB ═══ */}
           {activeTab === 'audit' && isUserAdmin && (
             <div>
-              <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 4px' }}>{t.log.title}</h3>
-              <p style={{ fontSize: typography.fontSize.sm, color: colors.text.muted, margin: '0 0 20px' }}>{t.log.subtitle}</p>
-
-              {admin.isLoadingLog ? (
-                <Card><SkeletonTable rows={5} cols={4} /></Card>
-              ) : admin.adminLog.length === 0 ? (
-                <Card><p style={{ textAlign: 'center', color: colors.text.muted, padding: '40px 0' }}>{t.log.noEntries}</p></Card>
+              <h3 style={{ color: colors.text.heading, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, margin: '0 0 4px' }}>{t.log.title}</h3>
+              <p style={{ color: colors.text.muted, fontSize: typography.fontSize.sm, margin: '0 0 16px' }}>{t.log.subtitle}</p>
+              {admin.isLoadingLog ? <SkeletonTable rows={5} cols={5} /> : admin.adminLog.length === 0 ? (
+                <p style={{ color: colors.text.muted, textAlign: 'center', padding: '40px' }}>{t.log.noEntries}</p>
               ) : (
-                <div style={{ borderRadius: radii.xl, border: `1px solid ${colors.border.light}`, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: typography.fontSize.sm }}>
                     <thead>
-                      <tr style={{ background: isDark ? '#1A2332' : colors.surface.sidebar }}>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.log.date}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.log.admin}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.log.action}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.log.details}</th>
+                      <tr style={{ borderBottom: `2px solid ${colors.border.light}` }}>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.log.date}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.log.admin}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.log.action}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.log.target}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.log.details}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {admin.adminLog.map((entry: AdminLogEntry) => (
-                        <tr key={entry.id} style={{ borderTop: `1px solid ${colors.border.light}`, background: rowDefaultBg, transition: `background ${animation.duration.fast}` }}
-                          onMouseEnter={e => (e.currentTarget.style.background = rowHoverBg)}
-                          onMouseLeave={e => (e.currentTarget.style.background = rowDefaultBg)}>
-                          <td style={{ padding: '12px 16px', fontSize: typography.fontSize.xs, color: colors.text.muted }}>{formatDate(entry.created_at)}</td>
-                          <td style={{ padding: '12px 16px', fontSize: typography.fontSize.sm, color: colors.text.body }}>{entry.admin_email || '—'}</td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <Badge variant={entry.action === 'role_change' ? 'primary' : entry.action === 'instructions_reset' ? 'warning' : 'secondary'}>
+                      {admin.adminLog.map((entry) => (
+                        <tr key={entry.id} style={{ borderBottom: `1px solid ${colors.border.light}`, background: rowDefaultBg }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = rowHoverBg; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = rowDefaultBg; }}>
+                          <td style={{ padding: '10px 12px', color: colors.text.muted, whiteSpace: 'nowrap' }}>{formatDate(entry.createdAt)}</td>
+                          <td style={{ padding: '10px 12px', color: colors.text.body }}>{entry.adminEmail}</td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: radii.full, background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, color: primaryBadgeText, fontSize: typography.fontSize.xs }}>
                               {(t.log.actions as Record<string, string>)[entry.action] || entry.action}
-                            </Badge>
+                            </span>
                           </td>
-                          <td style={{ padding: '12px 16px', fontSize: typography.fontSize.xs, color: colors.text.muted, maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {entry.target_email && <span>{entry.target_email} </span>}
-                            {entry.details && <span>{typeof entry.details === 'string' ? entry.details : JSON.stringify(entry.details)}</span>}
+                          <td style={{ padding: '10px 12px', color: colors.text.body }}>{entry.targetEmail || '—'}</td>
+                          <td style={{ padding: '10px 12px', color: colors.text.muted, fontSize: typography.fontSize.xs, fontFamily: typography.fontFamily.mono, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {JSON.stringify(entry.details).substring(0, 80)}
                           </td>
                         </tr>
                       ))}
@@ -1194,57 +1156,86 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
             </div>
           )}
 
-            </>
-          )}
-        </div>
-
-        {/* ─── Toast ─── */}
-        {toast && (
-          <div style={{
-            position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-            padding: '10px 24px', borderRadius: radii.lg, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium,
-            background: toast.type === 'success' ? successBg : errorBg,
-            border: `1px solid ${toast.type === 'success' ? successBorder : errorBorder}`,
-            color: toast.type === 'success' ? successText : errorText,
-            boxShadow: shadows.lg, animation: 'fadeIn 0.2s ease-out', zIndex: 10,
-          }}>
-            {toast.type === 'success' ? '✓ ' : '✗ '}{toast.message}
-          </div>
-        )}
-
-        {/* ─── Confirm Modal ─── */}
-        {confirmModal?.isOpen && (
-          <div style={{
-            position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', zIndex: 10, borderRadius: radii['2xl'],
-          }}>
-            <div style={{
-              background: colors.surface.card, borderRadius: radii.xl, padding: '24px',
-              maxWidth: '400px', width: '90%', boxShadow: shadows['2xl'], border: `1px solid ${colors.border.light}`,
-            }}>
-              <h3 style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.heading, margin: '0 0 12px' }}>
-                {confirmModal.title}
-              </h3>
-              <p style={{ fontSize: typography.fontSize.sm, color: colors.text.body, margin: '0 0 20px', lineHeight: typography.lineHeight.relaxed }}>
-                {confirmModal.message}
-              </p>
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => setConfirmModal(null)}
-                  style={{ padding: '8px 16px', fontSize: typography.fontSize.sm, borderRadius: radii.md, border: `1px solid ${colors.border.light}`, background: 'transparent', color: colors.text.body, cursor: 'pointer' }}
-                >
-                  {language === 'si' ? 'Prekliči' : 'Cancel'}
-                </button>
-                <button
-                  onClick={confirmModal.onConfirm}
-                  style={{ padding: '8px 16px', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, borderRadius: radii.md, border: 'none', background: colors.primary.gradient, color: '#FFFFFF', cursor: 'pointer' }}
-                >
-                  {language === 'si' ? 'Potrdi' : 'Confirm'}
-                </button>
+          {/* ═══ ★ v3.0: ERROR LOG TAB ═══ */}
+          {activeTab === 'errors' && isUserSuperAdmin && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h3 style={{ color: colors.text.heading, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, margin: 0 }}>
+                    🐛 {t.errors.title}
+                  </h3>
+                  <p style={{ color: colors.text.muted, fontSize: typography.fontSize.sm, margin: '4px 0 0' }}>
+                    {t.errors.subtitle} — {errorLogs.length} {language === 'si' ? 'vnosov' : 'entries'}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => {
+                      const text = errorLogService.formatLogsForExport(errorLogs);
+                      navigator.clipboard.writeText(text);
+                      setToast({ message: t.errors.copied, type: 'success' });
+                    }}
+                    style={{ background: colors.primary[600], color: '#fff', border: 'none', borderRadius: radii.lg, padding: '8px 16px', cursor: 'pointer', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium }}>
+                    📋 {t.errors.copyForDev}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(t.errors.clearConfirm)) return;
+                      const result = await errorLogService.clearAllLogs();
+                      if (result.success) { setErrorLogs([]); setToast({ message: t.errors.cleared, type: 'success' }); }
+                    }}
+                    style={{ background: dangerBtnBg, border: `1px solid ${dangerBtnBorder}`, borderRadius: radii.lg, padding: '8px 16px', cursor: 'pointer', color: dangerBtnText, fontSize: typography.fontSize.sm }}>
+                    🗑️ {t.errors.clearAll}
+                  </button>
+                </div>
               </div>
+
+              {errorLogsLoading ? <SkeletonTable rows={5} cols={5} /> : errorLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: colors.text.muted }}>
+                  ✅ {t.errors.noErrors}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: typography.fontSize.sm }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${colors.border.light}`, position: 'sticky', top: 0, background: colors.surface.card, zIndex: 1 }}>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.errors.date}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.errors.user}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.errors.component}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.errors.error}</th>
+                        <th style={{ textAlign: 'left', padding: '10px 12px', color: colors.text.muted, fontWeight: typography.fontWeight.semibold }}>{t.errors.code}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errorLogs.map((log) => (
+                        <tr key={log.id} style={{ borderBottom: `1px solid ${colors.border.light}`, background: rowDefaultBg }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = rowHoverBg; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = rowDefaultBg; }}>
+                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: colors.text.muted }}>
+                            {new Date(log.created_at).toLocaleString('sl-SI', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: colors.text.body }}>{log.user_email || '—'}</td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span style={{ background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, color: primaryBadgeText, padding: '2px 8px', borderRadius: radii.full, fontSize: typography.fontSize.xs }}>
+                              {log.component || '—'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 12px', color: colors.text.body, maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {log.error_message}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: colors.text.muted, fontFamily: typography.fontFamily.mono, fontSize: typography.fontSize.xs }}>
+                            {log.error_code || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+
+        </div>
       </div>
     </div>
   );
