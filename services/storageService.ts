@@ -1,16 +1,22 @@
 // services/storageService.ts
 // Supabase-backed storage service — replaces localStorage completely
 //
-// v2.2 — 2026-02-18
+// v3.0 — 2026-02-19
 // CHANGES:
-//   - NEW: isSuperAdmin(), isAdminOrSuperAdmin(), getSuperAdminEmail()
-//   - NEW: getEffectiveLogo() — returns custom logo only for superadmin
-//   - FIX: saveCustomLogo() guarded — only superadmin can save
-//   - FIX: getCustomLogo() returns null for non-superadmin
+//   - ★ v3.0: Multi-Tenant Organization integration
+//     - login() and restoreSession() call organizationService.loadActiveOrg()
+//     - register() auto-loads active org after signup
+//     - logout() calls organizationService.clearCache()
+//     - createProject() sets organization_id from active org
+//     - getUserProjects() filters by active organization
+//     - NEW: getActiveOrgId(), getActiveOrgName()
+//
+// v2.2 — 2026-02-18
+//   - isSuperAdmin(), isAdminOrSuperAdmin(), getSuperAdminEmail()
+//   - getEffectiveLogo(), saveCustomLogo() guarded
 //
 // v2.1 — 2026-02-18
-//   - OpenAI key support (getOpenAIKey, setOpenAIKey)
-//   - register() accepts apiProvider parameter
+//   - OpenAI key support, register() accepts apiProvider
 //
 // v2.0 — 2026-02-17
 //   - DB-1/DB-2/DB-3 fixes
@@ -19,6 +25,7 @@ import { supabase } from './supabaseClient.ts';
 import { createEmptyProjectData } from '../utils.ts';
 import type { AIProviderType } from './aiProvider.ts';
 import { BRAND_ASSETS } from '../constants.tsx';
+import { organizationService } from './organizationService.ts'; // ★ v3.0
 
 // ─── ID GENERATOR ────────────────────────────────────────────────
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -73,6 +80,9 @@ export const storageService = {
 
       await this.loadSettings();
 
+      // ★ v3.0: Load active organization
+      await organizationService.loadActiveOrg();
+
       return {
         success: true,
         email: cachedUser.email,
@@ -103,7 +113,7 @@ export const storageService = {
     }
 
     if (data.user) {
-      // Wait for DB trigger to create profile + user_settings row
+      // Wait for DB trigger to create profile + user_settings + org membership
       await new Promise(r => setTimeout(r, 1500));
 
       // Save key to correct column based on provider
@@ -146,6 +156,9 @@ export const storageService = {
       };
 
       await this.loadSettings();
+
+      // ★ v3.0: Load active organization (auto-assigned by trigger)
+      await organizationService.loadActiveOrg();
 
       // Force key into cache if not loaded
       if (apiKey && apiKey.trim() !== '' && cachedSettings) {
@@ -195,6 +208,8 @@ export const storageService = {
     cachedUser = null;
     cachedSettings = null;
     cachedProjectsMeta = null;
+    // ★ v3.0: Clear org cache
+    organizationService.clearCache();
   },
 
   getCurrentUser(): string | null {
@@ -220,6 +235,15 @@ export const storageService = {
 
   getSuperAdminEmail(): string {
     return SUPERADMIN_EMAIL;
+  },
+
+  // ★ v3.0: Organization helpers
+  getActiveOrgId(): string | null {
+    return organizationService.getActiveOrgId();
+  },
+
+  getActiveOrgName(): string {
+    return organizationService.getActiveOrgName();
   },
 
   async getCurrentUserId(): Promise<string | null> {
@@ -255,6 +279,9 @@ export const storageService = {
       };
 
       await this.loadSettings();
+
+      // ★ v3.0: Load active organization
+      await organizationService.loadActiveOrg();
 
       return cachedUser.email;
     }
@@ -400,16 +427,17 @@ export const storageService = {
   },
 
   // ═══════════════════════════════════════════════════════════════
-  // PROJECT MANAGEMENT
+  // PROJECT MANAGEMENT — ★ v3.0: Organization-scoped
   // ═══════════════════════════════════════════════════════════════
 
   async getUserProjects(): Promise<any[]> {
     const userId = await this.getCurrentUserId();
     if (!userId) return [];
 
+    // ★ v3.0: RLS handles org filtering via get_active_org_id()
     const { data, error } = await supabase
       .from('projects')
-      .select('id, title, created_at, updated_at')
+      .select('id, title, created_at, updated_at, organization_id')
       .eq('owner_id', userId)
       .order('updated_at', { ascending: false });
 
@@ -422,7 +450,8 @@ export const storageService = {
       id: p.id,
       title: p.title,
       createdAt: p.created_at,
-      updatedAt: p.updated_at
+      updatedAt: p.updated_at,
+      organizationId: p.organization_id,
     }));
 
     cachedProjectsMeta = projects;
@@ -439,12 +468,16 @@ export const storageService = {
     const newId = generateId();
     const dataToSave = initialData || createEmptyProjectData();
 
+    // ★ v3.0: Set organization_id from active org
+    const activeOrgId = organizationService.getActiveOrgId();
+
     const { error: projError } = await supabase
       .from('projects')
       .insert({
         id: newId,
         owner_id: userId,
-        title: 'New Project'
+        title: 'New Project',
+        organization_id: activeOrgId,
       });
 
     if (projError) {
@@ -467,7 +500,8 @@ export const storageService = {
       id: newId,
       title: 'New Project',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      organizationId: activeOrgId,
     };
 
     cachedProjectsMeta = null;
