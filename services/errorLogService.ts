@@ -126,10 +126,23 @@ export const errorLogService = {
 };
 
 // ─── Global error handler (auto-captures unhandled errors) ───
+// Filters out harmless browser noise (e.g. ResizeObserver)
+const IGNORED_ERRORS = [
+  'ResizeObserver loop',
+  'ResizeObserver loop completed',
+];
+
+function shouldIgnore(message: string): boolean {
+  return IGNORED_ERRORS.some(pattern => message.includes(pattern));
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
+    const msg = event.message || 'Unhandled error';
+    if (shouldIgnore(msg)) return; // ← skip harmless noise
+
     errorLogService.logError({
-      errorMessage: event.message || 'Unhandled error',
+      errorMessage: msg,
       errorStack: event.error?.stack || `${event.filename}:${event.lineno}:${event.colno}`,
       component: 'window.onerror',
       context: { filename: event.filename, lineno: event.lineno, colno: event.colno },
@@ -137,8 +150,11 @@ if (typeof window !== 'undefined') {
   });
 
   window.addEventListener('unhandledrejection', (event) => {
+    const msg = event.reason?.message || String(event.reason) || 'Unhandled promise rejection';
+    if (shouldIgnore(msg)) return; // ← skip harmless noise
+
     errorLogService.logError({
-      errorMessage: event.reason?.message || String(event.reason) || 'Unhandled promise rejection',
+      errorMessage: msg,
       errorStack: event.reason?.stack || null,
       component: 'unhandledrejection',
     });
