@@ -1,6 +1,12 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
+// v3.0 — 2026-02-19
+//   ★ v3.0: Multi-Tenant Organization integration
+//     - NEW: useOrganization hook — loads orgs, handles switching
+//     - NEW: orgHook.loadOrgs() called on login
+//     - NEW: Sidebar receives org props (activeOrg, userOrgs, onSwitchOrg)
+//     - NEW: On org switch → refresh projects, reset current project
 // v2.4 — 2026-02-18
 //   - REMOVED: StepNavigationBar from App toolbar (moved to ProjectDisplay header)
 //   - NEW: onStepClick + completedStepsStatus props passed to ProjectDisplay
@@ -28,6 +34,7 @@ import DashboardPanel from './components/DashboardPanel.tsx';
 import Sidebar from './components/Sidebar.tsx';
 import SummaryModal from './components/SummaryModal.tsx';
 import { useAdmin } from './hooks/useAdmin.ts';
+import { useOrganization } from './hooks/useOrganization.ts'; // ★ v3.0
 import { ensureGlobalInstructionsLoaded } from './services/globalInstructionsService.ts';
 import { ICONS, getSteps, BRAND_ASSETS } from './constants.tsx';
 import { TEXT } from './locales.ts';
@@ -118,6 +125,7 @@ const App = () => {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const adminHook = useAdmin();
+  const orgHook = useOrganization(); // ★ v3.0
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dashboardCollapsed, setDashboardCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
@@ -161,7 +169,8 @@ const App = () => {
   });
 
   /* ═══ EFFECTS ═══ */
-  useEffect(() => { if (auth.currentUser) { ensureGlobalInstructionsLoaded(); adminHook.checkAdminStatus(); } }, [auth.currentUser]);
+  // ★ v3.0: Load organizations on login
+  useEffect(() => { if (auth.currentUser) { ensureGlobalInstructionsLoaded(); adminHook.checkAdminStatus(); orgHook.loadOrgs(); } }, [auth.currentUser]);
   useEffect(() => { initTheme(); const unsub = onThemeChange((m) => setIsDark(m === 'dark')); return unsub; }, []);
   useEffect(() => { if (pm.showProjectListOnLogin) { setIsProjectListOpen(true); pm.setShowProjectListOnLogin(false); } }, [pm.showProjectListOnLogin]);
 
@@ -187,6 +196,17 @@ const App = () => {
   const handlePrint = () => window.print();
   const handleExportDocx = async () => { try { await pm.handleExportDocx(generation.setIsLoading); } catch (e: any) { alert(e.message); } };
   const handleImportProject = async (event: React.ChangeEvent<HTMLInputElement>) => { generation.setIsLoading(true); try { await pm.handleImportProject(event); } catch (e: any) { generation.setError(`Failed to import: ${e.message}`); } finally { generation.setIsLoading(false); } };
+
+  // ★ v3.0: Handle organization switch
+  const handleSwitchOrg = async (orgId: string) => {
+    const result = await orgHook.switchOrg(orgId);
+    if (result.success) {
+      // Refresh projects for the new org (RLS will filter)
+      await pm.refreshProjectList();
+      pm.setCurrentProjectId(null);
+      await pm.loadActiveProject();
+    }
+  };
 
   /* ═══ UNAUTHENTICATED VIEW ═══ */
   if (!auth.currentUser) {
@@ -267,11 +287,14 @@ const App = () => {
           )}
 
           {/* ═══ SIDEBAR ═══ */}
+          {/* ★ v3.0: Added org props */}
           <Sidebar
             language={language} projectData={pm.projectData} currentStepId={pm.currentStepId}
             setCurrentStepId={pm.setCurrentStepId} completedStepsStatus={completedStepsStatus}
             displayTitle={displayTitle} currentUser={auth.currentUser} appLogo={auth.appLogo}
             isAdmin={adminHook.isAdmin} isSidebarOpen={isSidebarOpen}
+            activeOrg={orgHook.activeOrg} userOrgs={orgHook.userOrgs}
+            onSwitchOrg={handleSwitchOrg} isSwitchingOrg={orgHook.isSwitching}
             onCloseSidebar={() => setIsSidebarOpen(false)}
             onBackToWelcome={() => pm.setCurrentStepId(1)}
             onOpenProjectList={() => setIsProjectListOpen(true)}
