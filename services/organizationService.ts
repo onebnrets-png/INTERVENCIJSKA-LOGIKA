@@ -1,7 +1,12 @@
 // services/organizationService.ts
 // ═══════════════════════════════════════════════════════════════
 // Organization Service — Multi-Tenant organization management
-// v1.1 — 2026-02-19
+// v1.2 — 2026-02-19
+//
+// CHANGES:
+//   ★ v1.2: createOrg() — slug is now optional (auto-generated from name)
+//           — return now includes orgId for convenience
+//   v1.1: Complete implementation of all service methods
 //
 // ARCHITECTURE:
 //   - Manages organizations, members, and org-level instructions
@@ -73,6 +78,21 @@ function mapOrg(row: any): Organization {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * ★ v1.2: Generate a URL-safe slug from organization name.
+ * "Moje Podjetje d.o.o." → "moje-podjetje-doo"
+ */
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[čćž]/g, (c) => ({ 'č': 'c', 'ć': 'c', 'ž': 'z' }[c] || c))
+    .replace(/[šđ]/g, (c) => ({ 'š': 's', 'đ': 'd' }[c] || c))
+    .replace(/[^a-z0-9]+/g, '-')   // non-alphanumeric → dash
+    .replace(/^-+|-+$/g, '')        // trim leading/trailing dashes
+    .slice(0, 60)                   // max 60 chars
+    + '-' + Date.now().toString(36); // append unique suffix
 }
 
 // ─── Public API ──────────────────────────────────────────────
@@ -208,13 +228,19 @@ export const organizationService = {
   // ORGANIZATION CRUD
   // ═══════════════════════════════════════════════════════════
 
-  async createOrg(name: string, slug: string): Promise<{ success: boolean; org?: Organization; message?: string }> {
+  /**
+   * ★ v1.2: slug is now optional — auto-generated from name if not provided.
+   * Returns orgId for direct use in storageService.register().
+   */
+  async createOrg(name: string, slug?: string): Promise<{ success: boolean; orgId?: string; org?: Organization; message?: string }> {
     const userId = await getAuthUserId();
     if (!userId) return { success: false, message: 'Not authenticated' };
 
+    const finalSlug = slug?.trim() || generateSlug(name);
+
     const { data, error } = await supabase
       .from('organizations')
-      .insert({ name, slug, created_by: userId })
+      .insert({ name, slug: finalSlug, created_by: userId })
       .select()
       .single();
 
@@ -223,9 +249,14 @@ export const organizationService = {
     }
 
     // Auto-add creator as owner
-    await supabase
+    const { error: memberError } = await supabase
       .from('organization_members')
       .insert({ organization_id: data.id, user_id: userId, org_role: 'owner' });
+
+    if (memberError) {
+      console.warn('[OrgService] createOrg: Failed to add owner membership:', memberError.message);
+      // Org was created — continue but warn
+    }
 
     // Create empty instructions row
     await supabase
@@ -234,7 +265,7 @@ export const organizationService = {
 
     const org = mapOrg(data);
     cachedUserOrgs = null; // invalidate
-    return { success: true, org };
+    return { success: true, orgId: data.id, org };
   },
 
   async updateOrg(orgId: string, updates: { name?: string; slug?: string; logo_url?: string | null }): Promise<{ success: boolean; message?: string }> {
