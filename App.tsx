@@ -177,6 +177,12 @@ const App = () => {
       setActiveView('dashboard');
     }
   }, [auth.currentUser]);
+  // Safety: redirect to dashboard if no project loaded in project view
+  useEffect(() => {
+    if (activeView === 'project' && !pm.currentProjectId) {
+      setActiveView('dashboard');
+    }
+  }, [activeView, pm.currentProjectId]);
 
   /* ═══ DERIVED STATE ═══ */
   const t = TEXT[language] || TEXT['en'];
