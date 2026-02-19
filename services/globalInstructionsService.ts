@@ -1,27 +1,36 @@
 // services/globalInstructionsService.ts
 // ═══════════════════════════════════════════════════════════════
-// Global Instructions Service — thin caching layer between
-// Instructions.ts and Supabase global_settings.
+// Global + Organization Instructions Service
+// v2.0 — 2026-02-19
 //
-// v1.0 — 2026-02-17
+// CHANGES v2.0 (Multi-Tenant):
+//   - NEW: Org-level instructions integration
+//   - getEffectiveOverride(key) merges: global → org (org wins if set)
+//   - getEffectiveOverrideSync(key) — sync version for Instructions.ts
+//   - ensureAllInstructionsLoaded() — primes both caches
+//   - Backward compatible: getGlobalOverride/Sync still work
 //
 // ARCHITECTURE:
-//   - Fetches global_settings from Supabase ONCE, caches in memory
-//   - Provides getGlobalOverride(key) for Instructions.ts to check
-//   - Cache is invalidated when admin saves new instructions
-//   - Falls back gracefully to null (= use hardcoded defaults)
+//   When AI generates content, instructions are merged in this order:
+//     1. Hardcoded rules (Instructions.ts) — base layer
+//     2. Global overrides (superadmin) — middle layer
+//     3. Org overrides (org admin) — top layer (wins if set)
 //
-// IMPORTANT: This service does NOT replace Instructions.ts.
-//   Instructions.ts remains the SINGLE SOURCE OF TRUTH.
-//   Global overrides only SUPPLEMENT or REPLACE specific sections
-//   when an admin has explicitly set them via Admin Panel.
+//   This means:
+//     - Superadmin sets rules that apply to ALL orgs by default
+//     - Org admin can OVERRIDE specific rules for their org
+//     - If org doesn't override a rule, global version applies
+//     - If neither overrides, hardcoded default applies
+//
+// v1.0 — 2026-02-17 (original)
 // ═══════════════════════════════════════════════════════════════
 
 import { supabase } from './supabaseClient.ts';
+import { organizationService } from './organizationService.ts';
 
 // ─── Types ───────────────────────────────────────────────────
 
-interface GlobalInstructionsCache {
+interface InstructionsCache {
   instructions: Record<string, string> | null;
   loadedAt: number;
   isLoading: boolean;
@@ -29,21 +38,20 @@ interface GlobalInstructionsCache {
 
 // ─── State ───────────────────────────────────────────────────
 
-let cache: GlobalInstructionsCache = {
+let globalCache: InstructionsCache = {
   instructions: null,
   loadedAt: 0,
   isLoading: false,
 };
 
-// Cache TTL: 5 minutes (admin changes take effect within 5 min)
+// Cache TTL: 5 minutes
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-// ─── Load from Supabase ──────────────────────────────────────
+// ─── Load Global from Supabase ───────────────────────────────
 
 const loadGlobalInstructions = async (): Promise<void> => {
-  if (cache.isLoading) return;
-
-  cache.isLoading = true;
+  if (globalCache.isLoading) return;
+  globalCache.isLoading = true;
 
   try {
     const { data, error } = await supabase
@@ -54,65 +62,52 @@ const loadGlobalInstructions = async (): Promise<void> => {
 
     if (error) {
       console.warn('[GlobalInstructions] Failed to load from Supabase:', error.message);
-      // Keep existing cache or null — graceful degradation
-      cache.isLoading = false;
+      globalCache.isLoading = false;
       return;
     }
 
-    cache.instructions = data?.custom_instructions || null;
-    cache.loadedAt = Date.now();
+    globalCache.instructions = data?.custom_instructions || null;
+    globalCache.loadedAt = Date.now();
 
-    if (cache.instructions) {
-      const keys = Object.keys(cache.instructions);
-      console.log(`[GlobalInstructions] Loaded ${keys.length} override(s): ${keys.join(', ')}`);
+    if (globalCache.instructions) {
+      const keys = Object.keys(globalCache.instructions);
+      console.log(`[GlobalInstructions] Loaded ${keys.length} global override(s): ${keys.join(', ')}`);
     } else {
       console.log('[GlobalInstructions] No global overrides set — using hardcoded defaults.');
     }
   } catch (err: any) {
     console.warn('[GlobalInstructions] Exception during load:', err.message);
   } finally {
-    cache.isLoading = false;
+    globalCache.isLoading = false;
   }
 };
 
-// ─── Ensure cache is fresh ───────────────────────────────────
+// ─── Ensure Global Cache Fresh ───────────────────────────────
 
-const ensureLoaded = async (): Promise<void> => {
+const ensureGlobalLoaded = async (): Promise<void> => {
   const now = Date.now();
-  const isExpired = now - cache.loadedAt > CACHE_TTL_MS;
-  const isFirstLoad = cache.loadedAt === 0;
+  const isExpired = now - globalCache.loadedAt > CACHE_TTL_MS;
+  const isFirstLoad = globalCache.loadedAt === 0;
 
   if (isFirstLoad || isExpired) {
     await loadGlobalInstructions();
   }
 };
 
-// ─── Public API ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API — GLOBAL OVERRIDES (backward compatible)
+// ═══════════════════════════════════════════════════════════════
 
 /**
  * Get a global override for a specific instruction key.
- * Returns the override string if set by admin, or null (= use default).
- *
- * Supported keys (match AdminPanel Instructions tab):
- *   - GLOBAL_RULES
- *   - ACADEMIC_RIGOR_RULES.en / ACADEMIC_RIGOR_RULES.si
- *   - HUMANIZATION_RULES.en / HUMANIZATION_RULES.si
- *   - PROJECT_TITLE_RULES.en / PROJECT_TITLE_RULES.si
- *   - SECTION_TASK_INSTRUCTIONS.<section>.<lang>
- *   - QUALITY_GATES.<section>.<lang>
- *   - CHAPTERS.<chapterKey>
- *   - FIELD_RULES.<fieldKey>.<lang>
- *   - SUMMARY_RULES.<lang>
- *   - LANGUAGE_DIRECTIVES.<lang>
- *
- * The key format uses dot notation matching the Instructions.ts structure.
+ * Returns the override string if set by superadmin, or null.
  */
 export const getGlobalOverride = async (key: string): Promise<string | null> => {
-  await ensureLoaded();
+  await ensureGlobalLoaded();
 
-  if (!cache.instructions) return null;
+  if (!globalCache.instructions) return null;
 
-  const value = cache.instructions[key];
+  const value = globalCache.instructions[key];
   if (typeof value === 'string' && value.trim().length > 0) {
     return value;
   }
@@ -121,14 +116,12 @@ export const getGlobalOverride = async (key: string): Promise<string | null> => 
 };
 
 /**
- * Synchronous version — returns cached value WITHOUT triggering a load.
- * Use this when you need a non-async path (e.g., inside getRulesForSection).
- * Call ensureGlobalInstructionsLoaded() at app start to prime the cache.
+ * Synchronous version — returns cached global value.
  */
 export const getGlobalOverrideSync = (key: string): string | null => {
-  if (!cache.instructions) return null;
+  if (!globalCache.instructions) return null;
 
-  const value = cache.instructions[key];
+  const value = globalCache.instructions[key];
   if (typeof value === 'string' && value.trim().length > 0) {
     return value;
   }
@@ -136,27 +129,94 @@ export const getGlobalOverrideSync = (key: string): string | null => {
   return null;
 };
 
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API — EFFECTIVE OVERRIDES (★ v2.0: global + org merged)
+// ═══════════════════════════════════════════════════════════════
+
 /**
- * Prime the cache — call this ONCE at app startup (e.g., after auth).
- * This ensures the synchronous getGlobalOverrideSync() has data.
+ * ★ v2.0: Get the EFFECTIVE override for a key.
+ * Merge order: org override > global override > null (hardcoded default)
+ *
+ * This is what Instructions.ts should call instead of getGlobalOverrideSync.
  */
-export const ensureGlobalInstructionsLoaded = async (): Promise<void> => {
-  await ensureLoaded();
+export const getEffectiveOverrideSync = (key: string): string | null => {
+  // 1. Check org-level override first (highest priority)
+  const orgInstructions = organizationService.getActiveOrgInstructionsSync();
+  if (orgInstructions) {
+    const orgValue = orgInstructions[key];
+    if (typeof orgValue === 'string' && orgValue.trim().length > 0) {
+      return orgValue;
+    }
+  }
+
+  // 2. Fall back to global override (superadmin)
+  if (globalCache.instructions) {
+    const globalValue = globalCache.instructions[key];
+    if (typeof globalValue === 'string' && globalValue.trim().length > 0) {
+      return globalValue;
+    }
+  }
+
+  // 3. No override — Instructions.ts will use hardcoded default
+  return null;
 };
 
 /**
- * Invalidate cache — call after admin saves new instructions.
- * Next getGlobalOverride() call will re-fetch from Supabase.
+ * ★ v2.0: Async version of effective override.
+ */
+export const getEffectiveOverride = async (key: string): Promise<string | null> => {
+  await ensureGlobalLoaded();
+  await organizationService.getActiveOrgInstructions(); // ensures org cache is primed
+
+  return getEffectiveOverrideSync(key);
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API — INITIALIZATION & CACHE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * ★ v2.0: Prime BOTH caches — call ONCE at app startup after auth.
+ */
+export const ensureAllInstructionsLoaded = async (): Promise<void> => {
+  await ensureGlobalLoaded();
+  await organizationService.getActiveOrgInstructions();
+  console.log('[Instructions] Both global and org instruction caches primed.');
+};
+
+/**
+ * Backward compatible alias.
+ */
+export const ensureGlobalInstructionsLoaded = ensureAllInstructionsLoaded;
+
+/**
+ * Invalidate global cache — call after superadmin saves global instructions.
  */
 export const invalidateGlobalInstructionsCache = (): void => {
-  cache.loadedAt = 0;
-  console.log('[GlobalInstructions] Cache invalidated — will reload on next access.');
+  globalCache.loadedAt = 0;
+  console.log('[GlobalInstructions] Global cache invalidated — will reload on next access.');
 };
 
 /**
- * Get all current overrides (for debug/admin display).
+ * ★ v2.0: Invalidate org instructions cache — call after org admin saves.
+ */
+export const invalidateOrgInstructionsCache = (): void => {
+  organizationService.invalidateOrgInstructionsCache();
+  console.log('[OrgInstructions] Org cache invalidated — will reload on next access.');
+};
+
+/**
+ * ★ v2.0: Invalidate ALL instruction caches (both global + org).
+ */
+export const invalidateAllInstructionsCaches = (): void => {
+  invalidateGlobalInstructionsCache();
+  invalidateOrgInstructionsCache();
+};
+
+/**
+ * Get all current global overrides (for admin display).
  */
 export const getAllGlobalOverrides = async (): Promise<Record<string, string> | null> => {
-  await ensureLoaded();
-  return cache.instructions;
+  await ensureGlobalLoaded();
+  return globalCache.instructions;
 };
