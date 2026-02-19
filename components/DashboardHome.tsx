@@ -176,14 +176,15 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any 
     setInput('');
     setIsGenerating(true);
 
-    try {
+        try {
+      // Check if any API key is configured (generateContent reads it internally)
       const provider = storageService.getAIProvider();
-      let apiKey = '';
-      if (provider === 'gemini') apiKey = storageService.getApiKey() || '';
-      else if (provider === 'openai') apiKey = storageService.getOpenAIKey() || '';
-      else if (provider === 'openrouter') apiKey = storageService.getOpenRouterKey() || '';
+      let hasKey = false;
+      if (provider === 'gemini') hasKey = !!(storageService.getApiKey());
+      else if (provider === 'openai') hasKey = !!(storageService.getOpenAIKey());
+      else if (provider === 'openrouter') hasKey = !!(storageService.getOpenRouterKey());
 
-      if (!apiKey) {
+      if (!hasKey) {
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: language === 'si'
@@ -199,21 +200,20 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any 
         ? `Si Euro-Office AI asistent, specializiran za EU projekt management, intervencijsko logiko, in pripravo EU projektnih predlogov. Odgovarjaš v slovenščini. Si prijazen, strokoven in jedrnat. Če uporabnik vpraša o nečem kar ni povezano z EU projekti, vseeno pomagaš.`
         : `You are the Euro-Office AI assistant, specialized in EU project management, intervention logic, and EU project proposal preparation. You are friendly, professional, and concise. If the user asks about something unrelated to EU projects, you still help.`;
 
-      const conversationHistory = messages.slice(-10).map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
-      conversationHistory.push({ role: 'user', content: trimmed });
+      const conversationHistory = messages.slice(-10).map(m =>
+        `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
+      ).join('\n');
 
-      const fullPrompt = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}\n\nAssistant:`;
+      const fullPrompt = `${systemPrompt}\n\n${conversationHistory}\nUser: ${trimmed}\n\nAssistant:`;
 
-      const response = await aiSendMessage(fullPrompt, provider, apiKey, storageService.getCustomModel());
+      const result = await generateContent({ prompt: fullPrompt });
 
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response || (language === 'si' ? 'Ni bilo mogoče generirati odgovora.' : 'Could not generate a response.'),
+        content: result.text || (language === 'si' ? 'Ni bilo mogoče generirati odgovora.' : 'Could not generate a response.'),
         timestamp: Date.now(),
       }]);
+    }
     } catch (err: any) {
       setMessages(prev => [...prev, {
         role: 'assistant',
