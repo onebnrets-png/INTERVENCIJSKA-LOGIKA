@@ -1,6 +1,11 @@
 // components/Sidebar.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Sidebar — Design System Edition
+// v2.0 — 2026-02-19
+//   ★ v2.0: Organization Switcher (Multi-Tenant)
+//     - NEW: activeOrg, userOrgs, onSwitchOrg, isSwitchingOrg props
+//     - NEW: Organization Switcher UI (dropdown or label)
+//     - Collapsed mode shows org initial badge
 // v1.8 — 2026-02-18
 //   ★ v1.8: Superadmin support
 //     - 👑 icon + "Super Admin / Settings" label in footer
@@ -14,7 +19,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo } from 'react';
-import { colors, darkColors, stepColors, shadows, radii, spacing, animation, typography, zIndex, type StepColorKey } from '../design/theme.ts';
+import { colors, colors as lightColors, darkColors, stepColors, shadows, radii, spacing, animation, typography, zIndex, type StepColorKey } from '../design/theme.ts';
 import { ProgressRing } from '../design/components/ProgressRing.tsx';
 import { ICONS, getSteps, getSubSteps } from '../constants.tsx';
 import { TEXT } from '../locales.ts';
@@ -159,6 +164,11 @@ interface SidebarProps {
   currentUser: string;
   appLogo: string;
   isAdmin: boolean;
+  // ★ v2.0: Organization props
+  activeOrg: { id: string; name: string; slug: string } | null;
+  userOrgs: { id: string; name: string; slug: string }[];
+  onSwitchOrg: (orgId: string) => void;
+  isSwitchingOrg: boolean;
   isSidebarOpen: boolean;
   onCloseSidebar: () => void;
   onBackToWelcome: () => void;
@@ -175,7 +185,9 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
   language, projectData, currentStepId, setCurrentStepId, completedStepsStatus,
-  displayTitle, currentUser, appLogo, isAdmin, isSidebarOpen, onCloseSidebar,
+  displayTitle, currentUser, appLogo, isAdmin,
+  activeOrg, userOrgs, onSwitchOrg, isSwitchingOrg,  // ★ v2.0
+  isSidebarOpen, onCloseSidebar,
   onBackToWelcome, onOpenProjectList, onOpenAdminPanel, onLogout, onLanguageSwitch,
   onSubStepClick, isLoading, onCollapseChange,
 }) => {
@@ -194,7 +206,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     return onThemeChange((mode) => setIsDark(mode === 'dark'));
   }, []);
 
-  const activeColors = isDark ? darkColors : colors;
+  const tc = isDark ? darkColors : colors;
   const t = TEXT[language] || TEXT['en'];
   const STEPS = getSteps(language);
   const SUB_STEPS = getSubSteps(language);
@@ -214,15 +226,15 @@ const Sidebar: React.FC<SidebarProps> = ({
     width: sidebarWidth,
     background: isDark
       ? `linear-gradient(180deg, ${darkColors.surface.card} 0%, ${darkColors.surface.sidebar} 100%)`
-      : `linear-gradient(180deg, ${activeColors.surface.card} 0%, ${activeColors.surface.sidebar} 100%)`,
-    borderRight: `1px solid ${activeColors.border.light}`,
+      : `linear-gradient(180deg, ${tc.surface.card} 0%, ${tc.surface.sidebar} 100%)`,
+    borderRight: `1px solid ${tc.border.light}`,
     display: 'flex',
     flexDirection: 'column',
     transition: `width ${animation.duration.normal} ${animation.easing.default}, transform ${animation.duration.normal} ${animation.easing.default}`,
     overflow: 'hidden',
     boxShadow: shadows.lg,
     fontFamily: typography.fontFamily.sans,
-    color: activeColors.text.body,
+    color: tc.text.body,
   };
 
   const mobileTransform = isDesktop || isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)';
@@ -239,24 +251,24 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <>
       {isSidebarOpen && (
-        <div onClick={onCloseSidebar} style={{ position: 'fixed', inset: 0, background: activeColors.surface.overlay, zIndex: zIndex.sidebar - 1 }} className="lg:hidden" />
+        <div onClick={onCloseSidebar} style={{ position: 'fixed', inset: 0, background: tc.surface.overlay, zIndex: zIndex.sidebar - 1 }} className="lg:hidden" />
       )}
 
       <aside style={responsiveStyle}>
         {/* ═══ HEADER ═══ */}
-        <div style={{ padding: isCollapsed ? `${spacing.md} ${spacing.sm}` : `${spacing.lg} ${spacing.lg}`, borderBottom: `1px solid ${activeColors.border.light}`, flexShrink: 0 }}>
+        <div style={{ padding: isCollapsed ? `${spacing.md} ${spacing.sm}` : `${spacing.lg} ${spacing.lg}`, borderBottom: `1px solid ${tc.border.light}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: isCollapsed ? 'center' : 'space-between', alignItems: 'center', marginBottom: isCollapsed ? spacing.sm : spacing.lg }}>
             <button onClick={onBackToWelcome} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} title={t.backToHome}>
               <img src={appLogo} alt="Logo" style={{ height: isCollapsed ? 28 : 36, width: 'auto', objectFit: 'contain', transition: `height ${animation.duration.normal}` }} />
             </button>
             {!isCollapsed && (
-              <div style={{ display: 'flex', background: activeColors.surface.sidebar, borderRadius: radii.md, padding: '2px', border: `1px solid ${activeColors.border.light}` }}>
+              <div style={{ display: 'flex', background: tc.surface.sidebar, borderRadius: radii.md, padding: '2px', border: `1px solid ${tc.border.light}` }}>
                 {(['si', 'en'] as const).map((lang) => (
                   <button key={lang} onClick={() => onLanguageSwitch(lang)} disabled={isLoading} style={{
                     padding: '2px 8px', fontSize: typography.fontSize.xs, fontWeight: language === lang ? typography.fontWeight.bold : typography.fontWeight.medium,
                     borderRadius: radii.sm, border: 'none', cursor: isLoading ? 'not-allowed' : 'pointer',
-                    background: language === lang ? activeColors.surface.card : 'transparent',
-                    color: language === lang ? (isDark ? '#A5B4FC' : activeColors.primary[600]) : activeColors.text.muted,
+                    background: language === lang ? tc.surface.card : 'transparent',
+                    color: language === lang ? (isDark ? '#A5B4FC' : tc.primary[600]) : tc.text.muted,
                     boxShadow: language === lang ? shadows.xs : 'none', transition: `all ${animation.duration.fast}`, opacity: isLoading ? 0.5 : 1,
                   }}>{lang.toUpperCase()}</button>
                 ))}
@@ -270,11 +282,69 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <>
-              <div style={{ background: activeColors.surface.card, borderRadius: radii.lg, padding: spacing.md, border: `1px solid ${activeColors.border.light}`, marginBottom: spacing.md }}>
-                <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: typography.fontWeight.bold, color: activeColors.text.muted, marginBottom: '4px', letterSpacing: '0.05em', margin: '0 0 4px 0' }}>{t.projects.currentProject}</p>
+              {/* ═══ Organization Switcher ═══ */}
+              {activeOrg && (
+                <div style={{
+                  background: tc.surface.card,
+                  borderRadius: radii.lg,
+                  padding: `${spacing.sm} ${spacing.md}`,
+                  border: `1px solid ${tc.border.light}`,
+                  marginBottom: spacing.md,
+                }}>
+                  <div style={{
+                    fontSize: '10px',
+                    color: tc.text.muted,
+                    marginBottom: '4px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    fontWeight: typography.fontWeight.bold,
+                  }}>
+                    {language === 'si' ? 'Organizacija' : 'Organization'}
+                  </div>
+                  {userOrgs.length <= 1 ? (
+                    <div style={{
+                      fontSize: typography.fontSize.sm,
+                      color: tc.text.heading,
+                      fontWeight: typography.fontWeight.medium,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {activeOrg.name}
+                    </div>
+                  ) : (
+                    <select
+                      value={activeOrg.id}
+                      onChange={(e) => onSwitchOrg(e.target.value)}
+                      disabled={isSwitchingOrg}
+                      style={{
+                        width: '100%',
+                        padding: `${spacing.xs} ${spacing.sm}`,
+                        borderRadius: radii.md,
+                        border: `1px solid ${tc.border.light}`,
+                        background: tc.surface.primary,
+                        color: tc.text.heading,
+                        fontSize: typography.fontSize.sm,
+                        fontWeight: typography.fontWeight.medium,
+                        cursor: isSwitchingOrg ? 'wait' : 'pointer',
+                        outline: 'none',
+                        opacity: isSwitchingOrg ? 0.6 : 1,
+                      }}
+                    >
+                      {userOrgs.map((org) => (
+                        <option key={org.id} value={org.id}>{org.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {/* Project card */}
+              <div style={{ background: tc.surface.card, borderRadius: radii.lg, padding: spacing.md, border: `1px solid ${tc.border.light}`, marginBottom: spacing.md }}>
+                <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: typography.fontWeight.bold, color: tc.text.muted, marginBottom: '4px', letterSpacing: '0.05em', margin: '0 0 4px 0' }}>{t.projects.currentProject}</p>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <h3 style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, color: activeColors.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: spacing.sm, margin: 0 }} title={displayTitle}>{displayTitle}</h3>
-                  <button onClick={onOpenProjectList} style={{ padding: '4px', borderRadius: radii.sm, border: 'none', background: 'transparent', color: activeColors.primary[500], cursor: 'pointer', display: 'flex', alignItems: 'center' }} title={t.projects.switchProject}>
+                  <h3 style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, color: tc.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: spacing.sm, margin: 0 }} title={displayTitle}>{displayTitle}</h3>
+                  <button onClick={onOpenProjectList} style={{ padding: '4px', borderRadius: radii.sm, border: 'none', background: 'transparent', color: tc.primary[500], cursor: 'pointer', display: 'flex', alignItems: 'center' }} title={t.projects.switchProject}>
                     <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                   </button>
                 </div>
@@ -282,21 +352,49 @@ const Sidebar: React.FC<SidebarProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
                 <ProgressRing value={overallCompletion} size={36} strokeWidth={4} showLabel={true} labelSize="0.55rem" />
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: typography.fontSize.xs, color: activeColors.text.muted, margin: 0 }}>{language === 'si' ? 'Skupni napredek' : 'Overall Progress'}</p>
-                  <div style={{ height: 4, background: activeColors.border.light, borderRadius: radii.full, marginTop: 4, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${overallCompletion}%`, background: activeColors.primary.gradient, borderRadius: radii.full, transition: `width ${animation.duration.slower} ${animation.easing.default}` }} />
+                  <p style={{ fontSize: typography.fontSize.xs, color: tc.text.muted, margin: 0 }}>{language === 'si' ? 'Skupni napredek' : 'Overall Progress'}</p>
+                  <div style={{ height: 4, background: tc.border.light, borderRadius: radii.full, marginTop: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${overallCompletion}%`, background: tc.primary.gradient, borderRadius: radii.full, transition: `width ${animation.duration.slower} ${animation.easing.default}` }} />
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: typography.fontSize.xs, color: activeColors.text.muted }}>
-                <span>{t.auth.welcome} <strong style={{ color: activeColors.text.body }}>{currentUser}</strong></span>
-                <button onClick={() => onOpenAdminPanel('profile')} style={{ border: 'none', background: 'none', color: activeColors.primary[500], cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }} title={t.auth.settings}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: typography.fontSize.xs, color: tc.text.muted }}>
+                <span>{t.auth.welcome} <strong style={{ color: tc.text.body }}>{currentUser}</strong></span>
+                <button onClick={() => onOpenAdminPanel('profile')} style={{ border: 'none', background: 'none', color: tc.primary[500], cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }} title={t.auth.settings}>
                   <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 </button>
               </div>
             </>
           )}
         </div>
+
+        {/* ═══ Organization badge — collapsed mode ═══ */}
+        {isCollapsed && activeOrg && (
+          <div
+            title={activeOrg.name}
+            style={{
+              padding: spacing.sm,
+              textAlign: 'center',
+              borderBottom: `1px solid ${tc.border.light}`,
+            }}
+          >
+            <div style={{
+              width: 28,
+              height: 28,
+              borderRadius: radii.full,
+              background: isDark ? `${tc.primary[500]}30` : tc.primary[50],
+              color: isDark ? tc.primary[300] : tc.primary[700],
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: typography.fontSize.xs,
+              fontWeight: typography.fontWeight.bold,
+              margin: '0 auto',
+            }}>
+              {activeOrg.name.charAt(0).toUpperCase()}
+            </div>
+          </div>
+        )}
 
         {/* ═══ STEP NAVIGATION ═══ */}
         <nav style={{ flex: 1, overflowY: 'auto', padding: isCollapsed ? `${spacing.sm} ${spacing.xs}` : `${spacing.md} ${spacing.md}`, minHeight: 0 }} className="custom-scrollbar">
@@ -336,7 +434,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         <ProgressRing value={completionPct} size={36} strokeWidth={3} customColor={stepColor.main} showLabel={false} />
                         {StepIcon && (
                           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <StepIcon style={{ width: 16, height: 16, color: isActive ? stepColor.main : activeColors.text.muted }} />
+                            <StepIcon style={{ width: 16, height: 16, color: isActive ? stepColor.main : tc.text.muted }} />
                           </div>
                         )}
                       </div>
@@ -347,7 +445,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                       <span style={{
                         flex: 1, fontSize: typography.fontSize.sm,
                         fontWeight: isActive ? typography.fontWeight.semibold : typography.fontWeight.medium,
-                        color: isActive ? getStepTextColor(stepColor, isDark) : activeColors.text.body,
+                        color: isActive ? getStepTextColor(stepColor, isDark) : tc.text.body,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         transition: `color ${animation.duration.fast}`,
                       }}>
@@ -378,7 +476,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                               borderRadius: radii.md, border: 'none', background: 'transparent',
                               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: spacing.sm,
                               fontSize: typography.fontSize.xs,
-                              color: subCompleted ? getStepTextColor(stepColor, isDark) : activeColors.text.muted,
+                              color: subCompleted ? getStepTextColor(stepColor, isDark) : tc.text.muted,
                               fontFamily: 'inherit',
                               transition: `all ${animation.duration.fast}`,
                             }}
@@ -386,7 +484,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             {subCompleted ? (
                               <ICONS.CHECK style={{ width: 14, height: 14, color: stepColor.main, flexShrink: 0 }} />
                             ) : (
-                              <div style={{ width: 6, height: 6, borderRadius: radii.full, background: activeColors.border.medium, flexShrink: 0 }} />
+                              <div style={{ width: 6, height: 6, borderRadius: radii.full, background: tc.border.medium, flexShrink: 0 }} />
                             )}
                             <span>{subStep.title}</span>
                           </button>
@@ -401,13 +499,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* ═══ FOOTER ═══ */}
-        <div style={{ padding: isCollapsed ? `${spacing.md} ${spacing.sm}` : spacing.lg, borderTop: `1px solid ${activeColors.border.light}`, flexShrink: 0 }}>
-          {/* ★ v1.8: Admin/SuperAdmin button — expanded */}
+        <div style={{ padding: isCollapsed ? `${spacing.md} ${spacing.sm}` : spacing.lg, borderTop: `1px solid ${tc.border.light}`, flexShrink: 0 }}>
+          {/* Admin/SuperAdmin button — expanded */}
           {!isCollapsed && (
             <button onClick={() => onOpenAdminPanel()} style={{
               width: '100%', textAlign: 'left', padding: `${spacing.sm} ${spacing.lg}`, borderRadius: radii.lg,
               border: 'none', background: 'transparent', cursor: 'pointer', fontSize: typography.fontSize.sm,
-              color: isSuperAdmin ? '#D97706' : isDark ? '#A5B4FC' : activeColors.primary[600],
+              color: isSuperAdmin ? '#D97706' : isDark ? '#A5B4FC' : tc.primary[600],
               fontWeight: typography.fontWeight.medium,
               display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: '2px', fontFamily: 'inherit',
             }}>
@@ -415,7 +513,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               {footerLabel}
             </button>
           )}
-          {/* ★ v1.8: Admin/SuperAdmin button — collapsed */}
+          {/* Admin/SuperAdmin button — collapsed */}
           {isCollapsed && (
             <button onClick={() => onOpenAdminPanel()} style={{
               width: '100%', display: 'flex', justifyContent: 'center', padding: `${spacing.sm} 0`,
@@ -430,7 +528,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <button onClick={() => { toggleTheme(); }} style={{
               width: '100%', textAlign: 'left', padding: `${spacing.sm} ${spacing.lg}`, borderRadius: radii.lg,
               border: 'none', background: 'transparent', cursor: 'pointer', fontSize: typography.fontSize.sm,
-              color: activeColors.text.muted, display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: '2px', fontFamily: 'inherit',
+              color: tc.text.muted, display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: '2px', fontFamily: 'inherit',
             }}>
               {isDark ? (
                 <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
@@ -444,7 +542,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           {isCollapsed && (
             <button onClick={() => { toggleTheme(); }} style={{
               width: '100%', display: 'flex', justifyContent: 'center', padding: `${spacing.sm} 0`,
-              borderRadius: radii.lg, border: 'none', background: 'transparent', cursor: 'pointer', marginBottom: '2px', color: activeColors.text.muted,
+              borderRadius: radii.lg, border: 'none', background: 'transparent', cursor: 'pointer', marginBottom: '2px', color: tc.text.muted,
             }} title={isDark ? 'Light Mode' : 'Dark Mode'}>
               {isDark ? (
                 <svg style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
@@ -458,7 +556,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button onClick={onLogout} style={{
             width: '100%', textAlign: isCollapsed ? 'center' : 'left',
             padding: `${spacing.sm} ${isCollapsed ? '0' : spacing.lg}`, borderRadius: radii.lg, border: 'none',
-            background: 'transparent', cursor: 'pointer', fontSize: typography.fontSize.sm, color: activeColors.text.muted,
+            background: 'transparent', cursor: 'pointer', fontSize: typography.fontSize.sm, color: tc.text.muted,
             display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'flex-start',
             gap: spacing.sm, fontFamily: 'inherit', transition: `color ${animation.duration.fast}`,
           }}>
@@ -468,7 +566,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Copyright */}
           {!isCollapsed && (
-            <p style={{ fontSize: '10px', color: activeColors.text.muted, textAlign: 'center', marginTop: spacing.sm, opacity: 0.6 }}>© 2026 INFINITA d.o.o.</p>
+            <p style={{ fontSize: '10px', color: tc.text.muted, textAlign: 'center', marginTop: spacing.sm, opacity: 0.6 }}>© 2026 INFINITA d.o.o.</p>
           )}
         </div>
       </aside>
@@ -479,8 +577,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => { const next = !isCollapsed; setIsCollapsed(next); onCollapseChange?.(next); }}
           style={{
             position: 'fixed', top: 12, left: sidebarWidth - 12, width: 24, height: 24, borderRadius: radii.full,
-            background: activeColors.primary[500], border: `2px solid ${activeColors.surface.card}`,
-            color: activeColors.text.inverse, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: tc.primary[500], border: `2px solid ${tc.surface.card}`,
+            color: tc.text.inverse, display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer', zIndex: zIndex.sidebar + 1, boxShadow: shadows.md,
             transition: `left ${animation.duration.normal} ${animation.easing.default}, transform ${animation.duration.fast} ${animation.easing.default}`,
           }}
