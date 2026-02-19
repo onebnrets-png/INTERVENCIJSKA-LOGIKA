@@ -222,38 +222,94 @@ export const storageService = {
     }
 
     if (data.user) {
-      // ★ v5.1: Check if session exists (email confirm OFF = immediate session)
+      // ★ v5.2: Check if email confirmation is required
       const { data: sessionData } = await supabase.auth.getSession();
 
-      if (sessionData.session) {
-        // Email confirmation is OFF — user has immediate session
-        await new Promise(r => setTimeout(r, 1500));
+      if (!sessionData.session) {
+        // Email confirmation is ON — user must verify email first
+        // Do NOT proceed — return success with confirmation message
+        return {
+          success: true,
+          email,
+          displayName: displayName || email.split('@')[0],
+          role: 'admin',
+          needsEmailConfirmation: true
+        };
+      }
 
-        // Save API key directly
-        if (apiKey && apiKey.trim() !== '') {
-          const keyColumn = apiProvider === 'openai' ? 'openai_key'
-                          : apiProvider === 'openrouter' ? 'openrouter_key'
-                          : 'gemini_key';
+      // Email confirmation is OFF — user has immediate session, proceed normally
+      await new Promise(r => setTimeout(r, 1500));
 
-          const { error: keyError } = await supabase
+      // Save API key directly
+      if (apiKey && apiKey.trim() !== '') {
+        const keyColumn = apiProvider === 'openai' ? 'openai_key'
+                        : apiProvider === 'openrouter' ? 'openrouter_key'
+                        : 'gemini_key';
+
+        const { error: keyError } = await supabase
+          .from('user_settings')
+          .upsert(
+            {
+              user_id: data.user.id,
+              [keyColumn]: apiKey.trim(),
+              ai_provider: apiProvider
+            },
+            { onConflict: 'user_id' }
+          );
+
+        if (keyError) {
+          console.warn('register: Failed to save API key via upsert, trying update...', keyError.message);
+          await supabase
             .from('user_settings')
-            .upsert(
-              {
-                user_id: data.user.id,
-                [keyColumn]: apiKey.trim(),
-                ai_provider: apiProvider
-              },
-              { onConflict: 'user_id' }
-            );
-
-          if (keyError) {
-            console.warn('register: Failed to save API key via upsert, trying update...', keyError.message);
-            await supabase
-              .from('user_settings')
-              .update({ [keyColumn]: apiKey.trim(), ai_provider: apiProvider })
-              .eq('user_id', data.user.id);
-          }
+            .update({ [keyColumn]: apiKey.trim(), ai_provider: apiProvider })
+            .eq('user_id', data.user.id);
         }
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      cachedUser = {
+        id: data.user.id,
+        email: email,
+        displayName: profile?.display_name || displayName || email.split('@')[0],
+        role: profile?.role || 'admin'
+      };
+
+      await this.loadSettings();
+
+      const meta = data.user.user_metadata || {};
+      await ensureUserHasOrg(data.user.id, meta);
+      await ensureApiKeySaved(data.user.id, meta);
+      await organizationService.loadActiveOrg();
+      await this.loadSettings();
+
+      // Force key into cache
+      if (apiKey && apiKey.trim() !== '' && cachedSettings) {
+        const keyColumn = apiProvider === 'openai' ? 'openai_key'
+                        : apiProvider === 'openrouter' ? 'openrouter_key'
+                        : 'gemini_key';
+        if (!cachedSettings[keyColumn]) {
+          cachedSettings[keyColumn] = apiKey.trim();
+          cachedSettings.ai_provider = apiProvider;
+        }
+      } else if (apiKey && apiKey.trim() !== '' && !cachedSettings) {
+        const keyColumn = apiProvider === 'openai' ? 'openai_key'
+                        : apiProvider === 'openrouter' ? 'openrouter_key'
+                        : 'gemini_key';
+        cachedSettings = { [keyColumn]: apiKey.trim(), ai_provider: apiProvider };
+      }
+
+      return {
+        success: true,
+        email,
+        displayName: cachedUser.displayName,
+        role: cachedUser.role
+      };
+    }
 
         const { data: profile } = await supabase
           .from('profiles')
