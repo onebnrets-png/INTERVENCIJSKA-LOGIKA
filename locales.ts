@@ -1,12 +1,10 @@
 // locales.ts
 // ═══════════════════════════════════════════════════════════════
 // UI text strings — English (en) & Slovenian (si)
-// v4.6 — 2026-02-15 — CHANGES:
-//   - RENAMED appTitle: "EU Project Idea Draft" (EN) /
-//     "Idejni osnutek projekta EU" (SI)
-//   - copyright: "© 2026 INFINITA d.o.o. All rights reserved.",
-//   - copyright: "© 2026 INFINITA d.o.o. Vse pravice pridržane.",
-//   - All previous v4.5 changes preserved.
+// v5.0 — 2026-02-19 — CHANGES:
+//   - NEW: organization section (EN + SI) for multi-tenant UI
+//   - FIX: organization block moved INSIDE en/si objects
+//   - All previous v4.6 changes preserved.
 // ═══════════════════════════════════════════════════════════════
 
 export const TEXT = {
@@ -169,8 +167,8 @@ export const TEXT = {
         strategyPlaceholder: "Professional, precise, and deep exploitation strategy..."
     },
     management: {
-        title: "Implementation",                                                    // ★ v4.5 CHANGE
-        implementation: "Implementation",                                           // ★ v4.5 CHANGE
+        title: "Implementation",
+        implementation: "Implementation",
         implementationDesc: "Describe the project management structure, decision-making processes, and quality assurance mechanisms.",
         desc: "Describe the project management structure, decision-making processes, and quality assurance mechanisms.",
         placeholder: "Describe how the project will be managed (e.g., Steering Committee, WP Leaders, conflict resolution, quality control)...",
@@ -205,7 +203,7 @@ export const TEXT = {
       proposedSolution: "Proposed Solution",
       readinessLevels: "Readiness Levels",
       euPolicies: "EU Policies",
-      implementation: "Implementation",                                             // ★ v4.5 CHANGE
+      implementation: "Implementation",
       organigram: "Organizational Structure",
       qualityEfficiency: "Quality & Efficiency",
       workplan: "Workplan",
@@ -334,9 +332,8 @@ export const TEXT = {
       uploadLogo: "Upload Logo",
       removeLogo: "Remove Logo",
       logoUpdated: "Logo updated!"
-    }
-  },
-  organization: {
+    },
+    organization: {
       title: "Organization",
       switchOrg: "Switch Organization",
       members: "Members",
@@ -358,6 +355,7 @@ export const TEXT = {
       instructionsReset: "Organization instructions reset to global defaults.",
       noInstructions: "No custom instructions set. Global instructions apply.",
     },
+  },
   si: {
     appTitle: "Idejni osnutek projekta EU",
     subtitle: "10 ključnih korakov",
@@ -517,8 +515,8 @@ export const TEXT = {
         strategyPlaceholder: "Strokovna, natančna in poglobljena strategija izkoriščanja..."
     },
     management: {
-        title: "Implementacija",                                                    // ★ v4.5 CHANGE
-        implementation: "Implementacija",                                           // ★ v4.5 CHANGE
+        title: "Implementacija",
+        implementation: "Implementacija",
         implementationDesc: "Opišite strukturo vodenja projekta, procese odločanja in mehanizme zagotavljanja kakovosti.",
         desc: "Opišite strukturo vodenja projekta, procese odločanja in mehanizme zagotavljanja kakovosti.",
         placeholder: "Opišite, kako bo projekt voden (npr. usmerjevalni odbor, vodje DS, reševanje konfliktov, nadzor kakovosti)...",
@@ -553,7 +551,7 @@ export const TEXT = {
       proposedSolution: "Predlagana rešitev",
       readinessLevels: "Stopnje pripravljenosti",
       euPolicies: "Politike EU",
-      implementation: "Implementacija",                                             // ★ v4.5 CHANGE
+      implementation: "Implementacija",
       organigram: "Organizacijska struktura",
       qualityEfficiency: "Kakovost in učinkovitost",
       workplan: "Načrt dela (WP)",
@@ -682,7 +680,7 @@ export const TEXT = {
       uploadLogo: "Naloži logotip",
       removeLogo: "Odstrani",
       logoUpdated: "Logotip posodobljen!"
-    }
+    },
     organization: {
       title: "Organizacija",
       switchOrg: "Zamenjaj organizacijo",
@@ -704,6 +702,6 @@ export const TEXT = {
       instructionsSaved: "Pravila organizacije uspešno shranjena.",
       instructionsReset: "Pravila organizacije ponastavljena na globalne privzete vrednosti.",
       noInstructions: "Pravila po meri niso nastavljena. Veljajo globalna pravila.",
-    }
+    },
   },
 };
