@@ -1,23 +1,16 @@
 // components/DashboardHome.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Dashboard Home — Main view after login
-// v1.0 — 2026-02-19
+// v1.1 — 2026-02-19
 //
 // FEATURES:
 //   - 7 draggable cards (drag & drop reordering)
-//   - Card layout saved to user_settings.dashboard_layout
+//   - Card layout saved to localStorage
 //   - AI Chatbot card with full conversation UI
 //   - Responsive grid: 3 columns desktop, 2 tablet, 1 mobile
 //   - Dark mode support via theme system
 //
-// CARDS:
-//   1. My Projects — list with progress, open/create
-//   2. AI Chatbot — chat interface with AI assistant
-//   3. Quick Statistics — project count, org, last activity
-//   4. Admin Panel — admin/superadmin only quick links
-//   5. Organization — name, members, role
-//   6. AI Settings — provider, model, API key status
-//   7. Recent Activity — last 5 changes
+// FIX v1.1: Use generateContent instead of non-existent sendMessage
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -26,7 +19,7 @@ import { getThemeMode, onThemeChange } from '../services/themeService.ts';
 import { storageService } from '../services/storageService.ts';
 import { organizationService } from '../services/organizationService.ts';
 import { TEXT } from '../locales.ts';
-import { sendMessage as aiSendMessage } from '../services/aiProvider.ts';
+import { generateContent } from '../services/aiProvider.ts';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -60,7 +53,7 @@ const DEFAULT_CARD_ORDER: CardId[] = ['projects', 'chatbot', 'statistics', 'admi
 function getProjectProgress(projectData: any): number {
   if (!projectData) return 0;
   let filled = 0;
-  let total = 6;
+  const total = 6;
   if (projectData.problemAnalysis?.coreProblem?.title?.trim()) filled++;
   if (projectData.projectIdea?.mainAim?.trim()) filled++;
   if (projectData.generalObjectives?.some((o: any) => o.title?.trim())) filled++;
@@ -176,7 +169,7 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any 
     setInput('');
     setIsGenerating(true);
 
-        try {
+    try {
       // Check if any API key is configured (generateContent reads it internally)
       const provider = storageService.getAIProvider();
       let hasKey = false;
@@ -213,7 +206,6 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any 
         content: result.text || (language === 'si' ? 'Ni bilo mogoče generirati odgovora.' : 'Could not generate a response.'),
         timestamp: Date.now(),
       }]);
-    }
     } catch (err: any) {
       setMessages(prev => [...prev, {
         role: 'assistant',
