@@ -336,6 +336,28 @@ export const TEXT = {
       logoUpdated: "Logo updated!"
     }
   },
+  organization: {
+      title: "Organization",
+      switchOrg: "Switch Organization",
+      members: "Members",
+      instructions: "Organization Instructions",
+      noOrg: "No Organization",
+      role: "Role",
+      owner: "Owner",
+      admin: "Admin",
+      member: "Member",
+      addMember: "Add Member",
+      removeMember: "Remove Member",
+      createOrg: "Create Organization",
+      orgName: "Organization Name",
+      orgSlug: "URL Slug",
+      deleteOrg: "Delete Organization",
+      confirmDelete: "Are you sure you want to delete this organization? This action cannot be undone.",
+      instructionsDesc: "Custom AI instructions for this organization. These override global instructions.",
+      instructionsSaved: "Organization instructions saved successfully.",
+      instructionsReset: "Organization instructions reset to global defaults.",
+      noInstructions: "No custom instructions set. Global instructions apply.",
+    },
   si: {
     appTitle: "Idejni osnutek projekta EU",
     subtitle: "10 ključnih korakov",
@@ -661,5 +683,27 @@ export const TEXT = {
       removeLogo: "Odstrani",
       logoUpdated: "Logotip posodobljen!"
     }
-  }
+    organization: {
+      title: "Organizacija",
+      switchOrg: "Zamenjaj organizacijo",
+      members: "Člani",
+      instructions: "Pravila organizacije",
+      noOrg: "Ni organizacije",
+      role: "Vloga",
+      owner: "Lastnik",
+      admin: "Administrator",
+      member: "Član",
+      addMember: "Dodaj člana",
+      removeMember: "Odstrani člana",
+      createOrg: "Ustvari organizacijo",
+      orgName: "Ime organizacije",
+      orgSlug: "URL oznaka",
+      deleteOrg: "Izbriši organizacijo",
+      confirmDelete: "Ali ste prepričani, da želite izbrisati to organizacijo? Tega dejanja ni mogoče razveljaviti.",
+      instructionsDesc: "Pravila umetne inteligence po meri za to organizacijo. Ta pravila nadomestijo globalna pravila.",
+      instructionsSaved: "Pravila organizacije uspešno shranjena.",
+      instructionsReset: "Pravila organizacije ponastavljena na globalne privzete vrednosti.",
+      noInstructions: "Pravila po meri niso nastavljena. Veljajo globalna pravila.",
+    }
+  },
 };
