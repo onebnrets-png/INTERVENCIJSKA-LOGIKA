@@ -262,7 +262,7 @@ const App = () => {
         isOpen={isProjectListOpen} onClose={() => setIsProjectListOpen(false)}
         projects={pm.userProjects} currentProjectId={pm.currentProjectId}
         onSelectProject={handleSwitchProjectAndClose} onCreateProject={handleCreateProjectAndClose}
-        onDeleteProject={pm.handleDeleteProject} language={language}
+        onDeleteProject={handleDeleteProjectWrapped} language={language}
       />
       <SummaryModal
         isOpen={generation.summaryModalOpen} onClose={() => generation.setSummaryModalOpen(false)}
