@@ -4,10 +4,10 @@
 // v2.0 — 2026-02-19
 //
 // CHANGES v2.0:
-//   - FIX: Admin card tabs now use correct AdminPanel tab keys
+//   - FIX: Admin card tabs use correct AdminPanel tab keys
 //   - NEW: Chat history persisted to localStorage (survives refresh)
-//   - NEW: Rich Activity card with per-project progress bars
-//   - NEW: Statistics card with visual progress rings
+//   - NEW: Rich Project Statistics card with ProgressRing, icons, bars
+//   - NEW: Statistics card with visual progress ring + section bars
 //   - FIX: generateContent import (was sendMessage)
 // ═══════════════════════════════════════════════════════════════
 
@@ -484,7 +484,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
           </DashboardCard>
         );
 
-      case 'statistics':
+      case 'statistics': {
         const progress = getProjectProgress(projectData);
         const sections = getProjectSectionCounts(projectData);
         return (
@@ -528,6 +528,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
             </div>
           </DashboardCard>
         );
+      }
 
       case 'admin':
         return (
@@ -535,7 +536,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
               {[
                 { label: language === 'si' ? 'Uporabniki' : 'Users', tab: 'users', icon: '👥' },
-                { label: language === 'si' ? 'Dnevnik napak' : 'Error Log', tab: 'errorLog', icon: '📋' },
+                { label: language === 'si' ? 'Dnevnik napak' : 'Error Log', tab: 'errors', icon: '📋' },
                 { label: language === 'si' ? 'Pravila' : 'Instructions', tab: 'instructions', icon: '📝' },
                 { label: language === 'si' ? 'AI nastavitve' : 'AI Settings', tab: 'ai', icon: '⚙️' },
               ].map((item) => (
@@ -629,53 +630,104 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
           </DashboardCard>
         );
 
-      case 'activity':
+      case 'activity': {
+        const actProgress = getProjectProgress(projectData);
+        const statDefs = [
+          { label: language === 'si' ? 'Splošni cilji' : 'General Obj.', icon: '🎯', getValue: () => projectData?.generalObjectives?.filter((o: any) => o.title?.trim()).length || 0, color: '#6366F1' },
+          { label: language === 'si' ? 'Specifični cilji' : 'Specific Obj.', icon: '🏁', getValue: () => projectData?.specificObjectives?.filter((o: any) => o.title?.trim()).length || 0, color: '#8B5CF6' },
+          { label: language === 'si' ? 'Delovni sklopi' : 'Work Packages', icon: '📦', getValue: () => projectData?.activities?.filter((a: any) => a.title?.trim()).length || 0, color: '#10B981' },
+          { label: language === 'si' ? 'Naloge' : 'Tasks', icon: '✅', getValue: () => { let cnt = 0; projectData?.activities?.forEach((wp: any) => { cnt += wp.tasks?.filter((tk: any) => tk.title?.trim()).length || 0; }); return cnt; }, color: '#F59E0B' },
+          { label: language === 'si' ? 'Rezultati' : 'Outputs', icon: '📊', getValue: () => projectData?.outputs?.filter((o: any) => o.title?.trim() || o.description?.trim()).length || 0, color: '#EF4444' },
+          { label: language === 'si' ? 'Učinki' : 'Outcomes', icon: '📈', getValue: () => projectData?.outcomes?.filter((o: any) => o.title?.trim() || o.description?.trim()).length || 0, color: '#3B82F6' },
+          { label: language === 'si' ? 'Vplivi' : 'Impacts', icon: '⚡', getValue: () => projectData?.impacts?.filter((o: any) => o.title?.trim() || o.description?.trim()).length || 0, color: '#8B5CF6' },
+          { label: 'KERs', icon: '🔑', getValue: () => projectData?.kers?.filter((k: any) => k.title?.trim() || k.result?.trim()).length || 0, color: '#10B981' },
+          { label: language === 'si' ? 'Tveganja' : 'Risks', icon: '🛡️', getValue: () => projectData?.risks?.filter((r: any) => r.title?.trim()).length || 0, color: '#F97316' },
+        ];
         return (
-          <DashboardCard key={id} id={id} title={language === 'si' ? 'Pregled projektov' : 'Project Overview'} icon="🕐" {...commonProps}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
-              {projectsMeta.length === 0 ? (
-                <p style={{ color: c.text.muted, fontSize: typography.fontSize.sm, textAlign: 'center' }}>
-                  {language === 'si' ? 'Ni projektov' : 'No projects yet'}
-                </p>
-              ) : (
-                projectsMeta.slice(0, 6).map((proj: any, i: number) => {
-                  // Estimate progress from title existence as a proxy
-                  const hasTitle = !!(proj.title && proj.title.trim());
-                  const projProgress = hasTitle ? Math.min(20 + Math.floor(Math.random() * 30), 50) : 0;
-                  const barColors = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6'];
-                  const barColor = barColors[i % barColors.length];
+          <DashboardCard key={id} id={id} title={language === 'si' ? 'Statistika projekta' : 'Project Statistics'} icon="📊" wide {...commonProps}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
+              {/* Progress ring header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <ProgressRing percent={actProgress} size={80} strokeWidth={8}
+                    color={actProgress > 60 ? '#10B981' : actProgress > 30 ? '#F59E0B' : '#EF4444'}
+                    bgColor={isDark ? c.border.light : '#E2E8F0'} />
+                  <div style={{
+                    position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <span style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, color: c.text.heading, lineHeight: 1 }}>{actProgress}%</span>
+                    <span style={{ fontSize: '9px', color: c.text.muted }}>{language === 'si' ? 'napredek' : 'progress'}</span>
+                  </div>
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.bold, color: c.text.heading }}>
+                    {projectData?.projectIdea?.projectTitle || (language === 'si' ? 'Trenutni projekt' : 'Current Project')}
+                  </p>
+                  <p style={{ margin: `4px 0 0`, fontSize: typography.fontSize.xs, color: c.text.muted }}>
+                    {projectData?.projectIdea?.projectAcronym ? `${projectData.projectIdea.projectAcronym} · ` : ''}
+                    {projectData?.projectIdea?.durationMonths ? `${projectData.projectIdea.durationMonths} ${language === 'si' ? 'mes.' : 'mo.'}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Stats grid - matching DashboardPanel style */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {statDefs.map((stat, i) => {
+                  const val = stat.getValue();
                   return (
-                    <div key={proj.id || i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <button onClick={() => onOpenProject(proj.id)}
-                          style={{
-                            margin: 0, fontSize: typography.fontSize.xs, color: c.text.heading,
-                            fontWeight: typography.fontWeight.medium, background: 'none', border: 'none',
-                            padding: 0, cursor: 'pointer', textAlign: 'left',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%',
-                            fontFamily: typography.fontFamily.sans,
-                          }}
-                        >
-                          {proj.title || t.projects.untitled}
-                        </button>
-                        <span style={{ fontSize: typography.fontSize.xs, color: c.text.muted }}>
-                          {new Date(proj.updatedAt || proj.createdAt).toLocaleDateString(language === 'si' ? 'sl-SI' : 'en-GB')}
-                        </span>
-                      </div>
-                      <div style={{ height: 4, borderRadius: 2, background: isDark ? c.border.light : '#E2E8F0', overflow: 'hidden' }}>
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: spacing.sm,
+                      padding: `5px ${spacing.sm}`, borderRadius: radii.md,
+                      background: val > 0 ? (isDark ? `${stat.color}12` : `${stat.color}08`) : 'transparent',
+                    }}>
+                      <span style={{ fontSize: '14px', width: 22, textAlign: 'center', flexShrink: 0 }}>{stat.icon}</span>
+                      <span style={{ flex: 1, fontSize: typography.fontSize.xs, color: c.text.body }}>{stat.label}</span>
+                      <div style={{ width: 50, height: 4, borderRadius: 2, background: isDark ? c.border.light : '#E2E8F0', overflow: 'hidden', flexShrink: 0 }}>
                         <div style={{
-                          height: '100%', borderRadius: 2, background: barColor,
-                          width: proj.id === currentProjectId ? `${getProjectProgress(projectData)}%` : '0%',
+                          height: '100%', borderRadius: 2, background: stat.color,
+                          width: `${Math.min(val * 20, 100)}%`,
                           transition: 'width 0.4s ease',
                         }} />
                       </div>
+                      <span style={{
+                        fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.bold,
+                        color: val > 0 ? c.text.heading : c.text.muted, width: 24, textAlign: 'right',
+                      }}>{val}</span>
                     </div>
                   );
-                })
+                })}
+              </div>
+
+              {/* Recent projects mini-list */}
+              {projectsMeta.length > 1 && (
+                <div style={{ borderTop: `1px solid ${c.border.light}`, paddingTop: spacing.md }}>
+                  <p style={{ margin: `0 0 ${spacing.sm}`, fontSize: typography.fontSize.xs, color: c.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: typography.fontWeight.semibold }}>
+                    {language === 'si' ? 'Vsi projekti' : 'All Projects'}
+                  </p>
+                  {projectsMeta.slice(0, 4).map((proj: any, i: number) => (
+                    <div key={proj.id || i} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: `3px 0`,
+                    }}>
+                      <button onClick={() => onOpenProject(proj.id)} style={{
+                        fontSize: typography.fontSize.xs, color: c.primary[500], background: 'none',
+                        border: 'none', padding: 0, cursor: 'pointer', fontFamily: typography.fontFamily.sans,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%', textAlign: 'left',
+                      }}>
+                        {proj.title || t.projects?.untitled || 'Untitled'}
+                      </button>
+                      <span style={{ fontSize: '10px', color: c.text.muted }}>
+                        {new Date(proj.updatedAt || proj.createdAt).toLocaleDateString(language === 'si' ? 'sl-SI' : 'en-GB')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </DashboardCard>
         );
+      }
 
       default:
         return null;
