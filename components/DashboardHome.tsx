@@ -234,7 +234,7 @@ const DropZone: React.FC<{ index: number; isDark: boolean; colors: any; dragging
   return (<div onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setIsOver(true); }} onDragLeave={() => setIsOver(false)} onDrop={(e) => { e.preventDefault(); setIsOver(false); onDropAtEnd(e); }} style={{ gridColumn: 'span 1', minHeight: 80, borderRadius: radii.xl, border: `2px dashed ${isOver ? c.primary[400] : c.border.light}`, background: isOver ? (isDark ? c.primary[900]+'20' : c.primary[50]) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease', color: c.text.muted, fontSize: typography.fontSize.xs }}>{isOver ? '↓' : ''}</div>);
 };
 
-// ——— Project Charts Card — resizable + auto-load ————————
+// ——— Project Charts Card — v6.1 — resizable + auto-load + acronyms ————————
 
 const ProjectChartsCard: React.FC<{
   language: 'en' | 'si'; isDark: boolean; colors: any; colSpan: number;
@@ -246,7 +246,9 @@ const ProjectChartsCard: React.FC<{
   const [loadedData, setLoadedData] = useState<Record<string, any>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoLoadedRef = useRef(false);
 
+  // Cache current project data
   useEffect(() => {
     if (currentProjectId && projectData) {
       setLoadedData(prev => ({ ...prev, [currentProjectId]: projectData }));
@@ -256,18 +258,76 @@ const ProjectChartsCard: React.FC<{
 
   const loadProjectData = useCallback(async (projectId: string) => {
     if (loadedData[projectId]) { setActiveProjectId(projectId); return; }
-    if (projectId === currentProjectId && projectData) { setLoadedData(prev => ({ ...prev, [projectId]: projectData })); setActiveProjectId(projectId); return; }
+    if (projectId === currentProjectId && projectData) {
+      setLoadedData(prev => ({ ...prev, [projectId]: projectData }));
+      setActiveProjectId(projectId);
+      return;
+    }
     setLoadingId(projectId); setActiveProjectId(projectId);
-    try { const data = await storageService.loadProject(language, projectId); if (data) setLoadedData(prev => ({ ...prev, [projectId]: data })); } catch (err) { console.warn('ProjectChartsCard: Failed to load', projectId, err); } finally { setLoadingId(null); }
+    try {
+      const data = await storageService.loadProject(language, projectId);
+      if (data) setLoadedData(prev => ({ ...prev, [projectId]: data }));
+    } catch (err) {
+      console.warn('ProjectChartsCard: Failed to load', projectId, err);
+    } finally {
+      setLoadingId(null);
+    }
   }, [loadedData, currentProjectId, projectData, language]);
 
+  // ★ v6.1: Auto-load first project on mount so dashboard isn't empty
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    if (projectsMeta.length === 0) return;
+
+    // If we already have an active project with data, skip
+    if (activeProjectId && loadedData[activeProjectId]) {
+      autoLoadedRef.current = true;
+      return;
+    }
+
+    // Pick the current project first, otherwise first in list
+    const targetId = currentProjectId || projectsMeta[0]?.id;
+    if (!targetId) return;
+
+    autoLoadedRef.current = true;
+
+    // If current project already has data passed via props
+    if (targetId === currentProjectId && projectData) {
+      setLoadedData(prev => ({ ...prev, [targetId]: projectData }));
+      setActiveProjectId(targetId);
+      return;
+    }
+
+    // Load data for the first project
+    (async () => {
+      setLoadingId(targetId);
+      setActiveProjectId(targetId);
+      try {
+        const data = await storageService.loadProject(language, targetId);
+        if (data) setLoadedData(prev => ({ ...prev, [targetId]: data }));
+      } catch (err) {
+        console.warn('ProjectChartsCard: Auto-load failed', targetId, err);
+      } finally {
+        setLoadingId(null);
+      }
+    })();
+  }, [projectsMeta, currentProjectId, projectData, language]);
+
   const handleClick = useCallback((pid: string) => { loadProjectData(pid); }, [loadProjectData]);
-  const handleMouseEnter = useCallback((pid: string) => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); hoverTimerRef.current = setTimeout(() => loadProjectData(pid), 300); }, [loadProjectData]);
-  const handleMouseLeave = useCallback(() => { if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; } }, []);
+  const handleMouseEnter = useCallback((pid: string) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => loadProjectData(pid), 300);
+  }, [loadProjectData]);
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
+  }, []);
   useEffect(() => { return () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); }; }, []);
 
   const activeData = activeProjectId ? loadedData[activeProjectId] : null;
-  const chartsData = useMemo(() => { if (!activeData) return null; try { return extractStructuralData(activeData); } catch { return null; } }, [activeData]);
+  const chartsData = useMemo(() => {
+    if (!activeData) return null;
+    try { return extractStructuralData(activeData); } catch { return null; }
+  }, [activeData]);
   const completeness = useMemo(() => activeData ? calculateCompleteness(activeData) : 0, [activeData]);
   const isLoading = loadingId === activeProjectId;
 
@@ -275,43 +335,228 @@ const ProjectChartsCard: React.FC<{
   const chartH = colSpan >= 2 ? CHART_HEIGHT : Math.min(130, CHART_HEIGHT);
   const isNarrow = colSpan < 2;
 
+  // ★ v6.1: Get acronym from loaded data or meta, NEVER truncated title
+  const getAcronym = (p: any): string => {
+    // 1. Check loaded project data for real acronym
+    const pData = loadedData[p.id];
+    if (pData?.projectIdea?.projectAcronym && pData.projectIdea.projectAcronym.trim()) {
+      return pData.projectIdea.projectAcronym.trim();
+    }
+    // 2. Check meta.acronym (if parent component passes it)
+    if (p.acronym && p.acronym.trim()) {
+      return p.acronym.trim();
+    }
+    // 3. Fallback: first word or first 8 chars of title
+    const title = p.title || p.name || '—';
+    const firstWord = title.split(/[\s\-:]+/)[0];
+    if (firstWord.length <= 10) return firstWord;
+    return title.substring(0, 8) + '…';
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: isNarrow ? 'column' as const : 'row' as const, gap: spacing.md, minHeight: isNarrow ? 300 : 220 }}>
-      <div style={{ width: isNarrow ? '100%' : 120, minWidth: isNarrow ? undefined : 100, flexShrink: 0, borderRight: isNarrow ? 'none' : `1px solid ${c.border.light}`, borderBottom: isNarrow ? `1px solid ${c.border.light}` : 'none', overflowY: 'auto', overflowX: isNarrow ? 'auto' : 'hidden', paddingRight: isNarrow ? 0 : spacing.xs, paddingBottom: isNarrow ? spacing.xs : 0, display: isNarrow ? 'flex' : 'block', gap: isNarrow ? spacing.xs : undefined, maxHeight: isNarrow ? 60 : undefined }}>
-        {!isNarrow && <div style={{ fontSize: '10px', color: c.text.muted, fontWeight: typography.fontWeight.semibold, marginBottom: spacing.sm, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>{language === 'si' ? 'Projekti' : 'Projects'} ({projectsMeta.length})</div>}
+      {/* Left: project list with acronyms */}
+      <div style={{
+        width: isNarrow ? '100%' : 130, minWidth: isNarrow ? undefined : 110, flexShrink: 0,
+        borderRight: isNarrow ? 'none' : `1px solid ${c.border.light}`,
+        borderBottom: isNarrow ? `1px solid ${c.border.light}` : 'none',
+        overflowY: 'auto', overflowX: isNarrow ? 'auto' : 'hidden',
+        paddingRight: isNarrow ? 0 : spacing.xs, paddingBottom: isNarrow ? spacing.xs : 0,
+        display: isNarrow ? 'flex' : 'block', gap: isNarrow ? spacing.xs : undefined,
+        maxHeight: isNarrow ? 60 : undefined,
+      }}>
+        {!isNarrow && (
+          <div style={{
+            fontSize: '10px', color: c.text.muted, fontWeight: typography.fontWeight.semibold,
+            marginBottom: spacing.sm, textTransform: 'uppercase' as const, letterSpacing: '0.05em',
+          }}>
+            {language === 'si' ? 'Projekti' : 'Projects'} ({projectsMeta.length})
+          </div>
+        )}
         {projectsMeta.map(p => {
           const isCurrent = p.id === currentProjectId;
           const isActive = p.id === activeProjectId;
-          const acronym = p.acronym || p.title?.substring(0, 6) || '—';
+          const acronym = getAcronym(p);
+          const hasData = !!loadedData[p.id];
+
           return (
-            <div key={p.id} onMouseEnter={() => handleMouseEnter(p.id)} onMouseLeave={handleMouseLeave} onClick={() => handleClick(p.id)}
-              style={{ padding: isNarrow ? `3px 8px` : `6px ${spacing.xs}`, borderRadius: radii.sm, cursor: 'pointer', background: isActive ? (isDark ? c.primary[900]+'60' : c.primary[100]) : 'transparent', borderLeft: isNarrow ? 'none' : (isActive ? `3px solid ${c.primary[500]}` : '3px solid transparent'), borderBottom: isNarrow ? (isActive ? `2px solid ${c.primary[500]}` : '2px solid transparent') : 'none', marginBottom: isNarrow ? 0 : 3, transition: 'background 0.15s ease', display: 'flex', alignItems: 'center', gap: spacing.xs, flexShrink: 0 }}>
-              {loadedData[p.id] ? <DesignProgressRing value={calculateCompleteness(loadedData[p.id])} size={22} strokeWidth={3} showLabel={true} labelSize="0.4rem" /> :
-                <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, background: isDark ? '#334155' : c.primary[50], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: c.text.muted, fontWeight: 700 }}>{p.id === loadingId ? '…' : acronym[0]}</div>}
+            <div
+              key={p.id}
+              onMouseEnter={() => handleMouseEnter(p.id)}
+              onMouseLeave={handleMouseLeave}
+              onClick={() => handleClick(p.id)}
+              title={p.title || p.name || ''}
+              style={{
+                padding: isNarrow ? `3px 8px` : `6px ${spacing.xs}`,
+                borderRadius: radii.sm, cursor: 'pointer',
+                background: isActive ? (isDark ? c.primary[900]+'60' : c.primary[100]) : 'transparent',
+                borderLeft: isNarrow ? 'none' : (isActive ? `3px solid ${c.primary[500]}` : '3px solid transparent'),
+                borderBottom: isNarrow ? (isActive ? `2px solid ${c.primary[500]}` : '2px solid transparent') : 'none',
+                marginBottom: isNarrow ? 0 : 3,
+                transition: 'background 0.15s ease',
+                display: 'flex', alignItems: 'center', gap: spacing.xs, flexShrink: 0,
+              }}
+            >
+              {hasData ? (
+                <DesignProgressRing
+                  value={calculateCompleteness(loadedData[p.id])}
+                  size={22} strokeWidth={3} showLabel={true} labelSize="0.4rem"
+                />
+              ) : (
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  background: isDark ? '#334155' : c.primary[50],
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '9px', color: c.text.muted, fontWeight: 700,
+                }}>
+                  {p.id === loadingId ? '…' : acronym[0]}
+                </div>
+              )}
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '12px', fontWeight: isActive ? typography.fontWeight.bold : typography.fontWeight.semibold, color: isActive ? c.primary[600] : c.text.heading, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{acronym}</div>
-                {isCurrent && !isNarrow && <div style={{ fontSize: '7px', color: c.success[600], fontWeight: typography.fontWeight.semibold }}>● {language === 'si' ? 'naložen' : 'loaded'}</div>}
+                <div style={{
+                  fontSize: '12px',
+                  fontWeight: isActive ? typography.fontWeight.bold : typography.fontWeight.semibold,
+                  color: isActive ? c.primary[600] : c.text.heading,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  maxWidth: isNarrow ? 80 : 90,
+                }}>
+                  {acronym}
+                </div>
+                {isCurrent && !isNarrow && (
+                  <div style={{
+                    fontSize: '7px', color: c.success[600], fontWeight: typography.fontWeight.semibold,
+                  }}>
+                    ● {language === 'si' ? 'naložen' : 'loaded'}
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
+      {/* Right: charts area */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: spacing.xs }}>
-        {activeProjectId && (() => { const meta = projectsMeta.find(p => p.id === activeProjectId); if (!meta) return null; return (<div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs }}>{meta.acronym && <span style={{ fontSize: '11px', background: isDark ? c.primary[900] : c.primary[100], color: c.primary[700], padding: '2px 8px', borderRadius: radii.full, fontWeight: typography.fontWeight.bold }}>{meta.acronym}</span>}<span style={{ fontSize: typography.fontSize.xs, color: c.text.heading, fontWeight: typography.fontWeight.semibold, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.title || meta.name || ''}</span>{activeProjectId !== currentProjectId && <button onClick={(e) => { e.stopPropagation(); onOpenProject(activeProjectId); }} style={{ background: 'none', border: `1px solid ${c.border.light}`, borderRadius: radii.md, padding: '2px 8px', fontSize: '10px', cursor: 'pointer', color: c.primary[600], fontWeight: typography.fontWeight.semibold, marginLeft: 'auto', flexShrink: 0 }}>{language === 'si' ? 'Odpri' : 'Open'}</button>}</div>); })()}
-        {!activeProjectId && <div style={{ color: c.text.muted, fontSize: typography.fontSize.sm, textAlign: 'center' as const, padding: spacing.xl, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{language === 'si' ? 'Izberite projekt' : 'Select a project'}</div>}
-        {activeProjectId && isLoading && <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: typography.fontSize.xs, color: c.text.muted }}>{language === 'si' ? 'Nalagam...' : 'Loading...'}<span style={{ animation: 'pulse 1.5s infinite' }}> ●</span></div></div>}
-        {activeProjectId && !isLoading && activeData && (
-          <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', flexDirection: 'row' as const, flexWrap: isNarrow ? 'wrap' as const : 'nowrap' as const, gap: spacing.sm, paddingBottom: spacing.xs, alignItems: 'flex-start' }}>
-            <div style={{ flexShrink: 0, width: chartW, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md, background: isDark ? '#1e1e2e' : '#f8fafc', borderRadius: radii.lg, border: `1px solid ${c.border.light}`, minHeight: chartH }}>
-              <DesignProgressRing value={completeness} size={isNarrow ? 60 : 80} strokeWidth={6} showLabel={true} labelSize={isNarrow ? '0.65rem' : '0.8rem'} />
-              <div style={{ textAlign: 'center' as const }}><div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.text.heading }}>{language === 'si' ? 'Zapolnjenost' : 'Completeness'}</div><div style={{ fontSize: '10px', color: c.text.muted }}>{completeness}%</div></div>
+        {/* Active project header */}
+        {activeProjectId && (() => {
+          const meta = projectsMeta.find(p => p.id === activeProjectId);
+          if (!meta) return null;
+          const acronym = getAcronym(meta);
+          const fullTitle = activeData?.projectIdea?.projectTitle || meta.title || meta.name || '';
+
+          return (
+            <div style={{
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs,
+            }}>
+              <span style={{
+                fontSize: '11px',
+                background: isDark ? c.primary[900] : c.primary[100],
+                color: c.primary[700], padding: '2px 8px', borderRadius: radii.full,
+                fontWeight: typography.fontWeight.bold,
+              }}>
+                {acronym}
+              </span>
+              <span style={{
+                fontSize: typography.fontSize.xs, color: c.text.heading,
+                fontWeight: typography.fontWeight.semibold,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {fullTitle}
+              </span>
+              {activeProjectId !== currentProjectId && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenProject(activeProjectId); }}
+                  style={{
+                    background: 'none', border: `1px solid ${c.border.light}`, borderRadius: radii.md,
+                    padding: '2px 8px', fontSize: '10px', cursor: 'pointer',
+                    color: c.primary[600], fontWeight: typography.fontWeight.semibold,
+                    marginLeft: 'auto', flexShrink: 0,
+                  }}
+                >
+                  {language === 'si' ? 'Odpri' : 'Open'}
+                </button>
+              )}
             </div>
-            {chartsData && chartsData.length > 0 && chartsData.map((chart: ExtractedChartData, idx: number) => (<div key={`c-${idx}-${chart.chartType}`} style={{ flexShrink: 0, width: chartW }}><ChartRenderer data={chart} width={chartW} height={chartH} showTitle={true} showSource={false} /></div>))}
-            {(!chartsData || chartsData.length === 0) && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: typography.fontSize.xs, color: c.text.muted, padding: spacing.lg, fontStyle: 'italic' }}>{language === 'si' ? 'Ni podatkov za grafike.' : 'No chart data.'}</div>}
+          );
+        })()}
+
+        {/* Empty state */}
+        {!activeProjectId && (
+          <div style={{
+            color: c.text.muted, fontSize: typography.fontSize.sm, textAlign: 'center' as const,
+            padding: spacing.xl, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {language === 'si' ? 'Izberite projekt' : 'Select a project'}
           </div>
         )}
-        {activeProjectId && !isLoading && !activeData && <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, fontStyle: 'italic' }}>{language === 'si' ? 'Podatki niso na voljo.' : 'Data not available.'}</div></div>}
+
+        {/* Loading */}
+        {activeProjectId && isLoading && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted }}>
+              {language === 'si' ? 'Nalagam...' : 'Loading...'}
+              <span style={{ animation: 'pulse 1.5s infinite' }}> ●</span>
+            </div>
+          </div>
+        )}
+
+        {/* Charts */}
+        {activeProjectId && !isLoading && activeData && (
+          <div style={{
+            flex: 1, overflowX: 'auto', overflowY: 'hidden',
+            display: 'flex', flexDirection: 'row' as const,
+            flexWrap: isNarrow ? 'wrap' as const : 'nowrap' as const,
+            gap: spacing.sm, paddingBottom: spacing.xs, alignItems: 'flex-start',
+          }}>
+            {/* Completeness ring */}
+            <div style={{
+              flexShrink: 0, width: chartW,
+              display: 'flex', flexDirection: 'column' as const,
+              alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+              padding: spacing.md, background: isDark ? '#1e1e2e' : '#f8fafc',
+              borderRadius: radii.lg, border: `1px solid ${c.border.light}`, minHeight: chartH,
+            }}>
+              <DesignProgressRing
+                value={completeness} size={isNarrow ? 60 : 80} strokeWidth={6}
+                showLabel={true} labelSize={isNarrow ? '0.65rem' : '0.8rem'}
+              />
+              <div style={{ textAlign: 'center' as const }}>
+                <div style={{
+                  fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold,
+                  color: c.text.heading,
+                }}>
+                  {language === 'si' ? 'Zapolnjenost' : 'Completeness'}
+                </div>
+                <div style={{ fontSize: '10px', color: c.text.muted }}>{completeness}%</div>
+              </div>
+            </div>
+
+            {/* Extracted charts */}
+            {chartsData && chartsData.length > 0 && chartsData.map((chart: ExtractedChartData, idx: number) => (
+              <div key={`c-${idx}-${chart.chartType}`} style={{ flexShrink: 0, width: chartW }}>
+                <ChartRenderer data={chart} width={chartW} height={chartH} showTitle={true} showSource={false} />
+              </div>
+            ))}
+
+            {(!chartsData || chartsData.length === 0) && (
+              <div style={{
+                flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: typography.fontSize.xs, color: c.text.muted, padding: spacing.lg, fontStyle: 'italic',
+              }}>
+                {language === 'si' ? 'Ni podatkov za grafike.' : 'No chart data.'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* No data */}
+        {activeProjectId && !isLoading && !activeData && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, fontStyle: 'italic' }}>
+              {language === 'si' ? 'Podatki niso na voljo.' : 'Data not available.'}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
