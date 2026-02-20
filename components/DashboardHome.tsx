@@ -331,38 +331,92 @@ const ProjectChartsCard: React.FC<{
   );
 };
 
-// ——— Organization Card — members + projects ————————
+// ——— Organization Card — 3-tier visibility ————————
+// Super Admin → ALL orgs, ALL users, ALL projects
+// Org Admin → own org members + all org projects
+// Member → own org info + self only
 
 const OrganizationCard: React.FC<{
   language: 'en' | 'si'; isDark: boolean; colors: any;
   activeOrg: any | null; userOrgs: any[]; isAdmin: boolean;
   onSwitchOrg: (orgId: string) => void; onOpenProject: (projectId: string) => void;
 }> = ({ language, isDark, colors: c, activeOrg, userOrgs, isAdmin, onSwitchOrg, onOpenProject }) => {
-  const [members, setMembers] = useState<OrganizationMember[]>([]);
-  const [orgProjects, setOrgProjects] = useState<any[]>([]);
+  const [allOrgs, setAllOrgs] = useState<any[]>([]);
+  const [allMembers, setAllMembers] = useState<Record<string, OrganizationMember[]>>({});
+  const [allProjects, setAllProjects] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(false);
-  const [showMembers, setShowMembers] = useState(true);
+  const [activeTab, setActiveTab] = useState<'members' | 'projects'>('members');
+  const [expandedOrgId, setExpandedOrgId] = useState<string | null>(null);
   const t = language === 'si';
 
-  useEffect(() => {
-    if (!activeOrg?.id) return;
-    setLoading(true);
+  const isSuperAdmin = storageService.isSuperAdmin();
+  const isOrgAdmin = isAdmin; // org-level admin
 
+  useEffect(() => {
+    setLoading(true);
     const loadData = async () => {
       try {
-        // Load members
-        const m = await organizationService.getOrgMembers(activeOrg.id);
-        setMembers(m);
+        if (isSuperAdmin) {
+          // ★ SUPER ADMIN: Load ALL organizations
+          const orgs = await organizationService.getAllOrgs();
+          setAllOrgs(orgs);
 
-        // Load org projects (all projects belonging to this org)
-        const { data: projects, error } = await supabase
-          .from('projects')
-          .select('id, title, owner_id, updated_at, created_at')
-          .eq('organization_id', activeOrg.id)
-          .order('updated_at', { ascending: false });
+          // Load members + projects for each org
+          const membersMap: Record<string, OrganizationMember[]> = {};
+          const projectsMap: Record<string, any[]> = {};
 
-        if (!error && projects) {
-          setOrgProjects(projects);
+          for (const org of orgs) {
+            const m = await organizationService.getOrgMembers(org.id);
+            membersMap[org.id] = m;
+
+            const { data: projects } = await supabase
+              .from('projects')
+              .select('id, title, owner_id, updated_at')
+              .eq('organization_id', org.id)
+              .order('updated_at', { ascending: false });
+            projectsMap[org.id] = projects || [];
+          }
+
+          setAllMembers(membersMap);
+          setAllProjects(projectsMap);
+
+          // Auto-expand first org
+          if (orgs.length > 0 && !expandedOrgId) {
+            setExpandedOrgId(activeOrg?.id || orgs[0].id);
+          }
+        } else if (activeOrg?.id) {
+          // ★ ORG ADMIN or MEMBER: Load only own org
+          const orgs = [activeOrg];
+          setAllOrgs(orgs);
+
+          const m = await organizationService.getOrgMembers(activeOrg.id);
+
+          if (isOrgAdmin) {
+            // Admin sees all members
+            setAllMembers({ [activeOrg.id]: m });
+          } else {
+            // Regular member sees only themselves
+            const currentUserId = await storageService.getCurrentUserId();
+            const selfOnly = m.filter(member => member.userId === currentUserId);
+            setAllMembers({ [activeOrg.id]: selfOnly });
+          }
+
+          const { data: projects } = await supabase
+            .from('projects')
+            .select('id, title, owner_id, updated_at')
+            .eq('organization_id', activeOrg.id)
+            .order('updated_at', { ascending: false });
+
+          if (isOrgAdmin) {
+            // Admin sees all org projects
+            setAllProjects({ [activeOrg.id]: projects || [] });
+          } else {
+            // Member sees only own projects
+            const currentUserId = await storageService.getCurrentUserId();
+            setAllProjects({ [activeOrg.id]: (projects || []).filter(p => p.owner_id === currentUserId) });
+          }
+
+          setExpandedOrgId(activeOrg.id);
         }
       } catch (err) {
         console.warn('OrganizationCard: failed to load data', err);
@@ -370,22 +424,8 @@ const OrganizationCard: React.FC<{
         setLoading(false);
       }
     };
-
     loadData();
-  }, [activeOrg?.id]);
-
-  const orgName = activeOrg?.name || (t ? 'Osebni prostor' : 'Personal workspace');
-
-  // Map projects to their owners
-  const projectsByOwner = useMemo(() => {
-    const map: Record<string, any[]> = {};
-    orgProjects.forEach(p => {
-      const ownerId = p.owner_id || 'unknown';
-      if (!map[ownerId]) map[ownerId] = [];
-      map[ownerId].push(p);
-    });
-    return map;
-  }, [orgProjects]);
+  }, [activeOrg?.id, isSuperAdmin, isOrgAdmin]);
 
   const roleLabel = (role: string) => {
     const labels: Record<string, { en: string; si: string }> = {
@@ -402,79 +442,143 @@ const OrganizationCard: React.FC<{
     return c.success[500];
   };
 
+  const totalMembers = Object.values(allMembers).reduce((sum, arr) => sum + arr.length, 0);
+  const totalProjects = Object.values(allProjects).reduce((sum, arr) => sum + arr.length, 0);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm }}>
-      {/* Org info */}
-      <div style={{ padding: spacing.sm, borderRadius: radii.md, background: isDark ? c.primary[900]+'20' : c.primary[50], border: `1px solid ${c.primary[200]}` }}>
-        <div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.primary[700] }}>{t ? 'Organizacija' : 'Organization'}</div>
-        <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.bold, color: c.text.heading, marginTop: '2px' }}>{orgName}</div>
-        {activeOrg?.slug && <div style={{ fontSize: '10px', color: c.text.muted, marginTop: '2px' }}>{activeOrg.slug}</div>}
-      </div>
+      {/* ── Header: Super Admin badge + org count ── */}
+      {isSuperAdmin && (
+        <div style={{ padding: `${spacing.xs} ${spacing.sm}`, borderRadius: radii.md, background: `linear-gradient(135deg, ${c.warning[500]}15, ${c.primary[500]}15)`, border: `1px solid ${c.warning[300]}`, display: 'flex', alignItems: 'center', gap: spacing.xs }}>
+          <span style={{ fontSize: '14px' }}>👑</span>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: typography.fontWeight.bold, color: c.warning[700] }}>Super Admin</div>
+            <div style={{ fontSize: '9px', color: c.text.muted }}>
+              {allOrgs.length} {t ? 'organizacij' : 'organizations'} · {totalMembers} {t ? 'uporabnikov' : 'users'} · {totalProjects} {t ? 'projektov' : 'projects'}
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Switch org */}
-      {userOrgs.length > 1 && (
+      {/* ── Switch org (non-super-admin with multiple orgs) ── */}
+      {!isSuperAdmin && userOrgs.length > 1 && (
         <div style={{ display: 'flex', gap: spacing.xs, flexWrap: 'wrap' as const }}>
-          {userOrgs.filter(o => o.id !== activeOrg?.id).map(org => (
-            <button key={org.id} onClick={() => onSwitchOrg(org.id)} style={{ background: 'transparent', border: `1px solid ${c.border.light}`, borderRadius: radii.md, padding: `3px ${spacing.sm}`, fontSize: '10px', cursor: 'pointer', color: c.text.body }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.primary[900]+'30' : c.primary[50]; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+          {userOrgs.map(org => (
+            <button key={org.id} onClick={() => onSwitchOrg(org.id)}
+              style={{ background: org.id === activeOrg?.id ? (isDark ? c.primary[900]+'60' : c.primary[100]) : 'transparent', border: `1px solid ${org.id === activeOrg?.id ? c.primary[400] : c.border.light}`, borderRadius: radii.md, padding: `3px ${spacing.sm}`, fontSize: '10px', cursor: 'pointer', color: org.id === activeOrg?.id ? c.primary[600] : c.text.body, fontWeight: org.id === activeOrg?.id ? typography.fontWeight.bold : typography.fontWeight.normal }}>
               {org.name}
             </button>
           ))}
         </div>
       )}
 
-      {/* Toggle */}
+      {/* ── Tabs: Members / Projects ── */}
       <div style={{ display: 'flex', gap: spacing.xs }}>
-        <button onClick={() => setShowMembers(true)} style={{ flex: 1, padding: `${spacing.xs} ${spacing.sm}`, borderRadius: radii.md, border: `1px solid ${showMembers ? c.primary[400] : c.border.light}`, background: showMembers ? (isDark ? c.primary[900]+'40' : c.primary[50]) : 'transparent', color: showMembers ? c.primary[600] : c.text.muted, fontSize: typography.fontSize.xs, cursor: 'pointer', fontWeight: showMembers ? typography.fontWeight.semibold : typography.fontWeight.normal }}>
-          {t ? `Člani (${members.length})` : `Members (${members.length})`}
+        <button onClick={() => setActiveTab('members')}
+          style={{ flex: 1, padding: `${spacing.xs} ${spacing.sm}`, borderRadius: radii.md, border: `1px solid ${activeTab === 'members' ? c.primary[400] : c.border.light}`, background: activeTab === 'members' ? (isDark ? c.primary[900]+'40' : c.primary[50]) : 'transparent', color: activeTab === 'members' ? c.primary[600] : c.text.muted, fontSize: typography.fontSize.xs, cursor: 'pointer', fontWeight: activeTab === 'members' ? typography.fontWeight.semibold : typography.fontWeight.normal }}>
+          {t ? `Člani (${totalMembers})` : `Members (${totalMembers})`}
         </button>
-        <button onClick={() => setShowMembers(false)} style={{ flex: 1, padding: `${spacing.xs} ${spacing.sm}`, borderRadius: radii.md, border: `1px solid ${!showMembers ? c.primary[400] : c.border.light}`, background: !showMembers ? (isDark ? c.primary[900]+'40' : c.primary[50]) : 'transparent', color: !showMembers ? c.primary[600] : c.text.muted, fontSize: typography.fontSize.xs, cursor: 'pointer', fontWeight: !showMembers ? typography.fontWeight.semibold : typography.fontWeight.normal }}>
-          {t ? `Projekti (${orgProjects.length})` : `Projects (${orgProjects.length})`}
+        <button onClick={() => setActiveTab('projects')}
+          style={{ flex: 1, padding: `${spacing.xs} ${spacing.sm}`, borderRadius: radii.md, border: `1px solid ${activeTab === 'projects' ? c.primary[400] : c.border.light}`, background: activeTab === 'projects' ? (isDark ? c.primary[900]+'40' : c.primary[50]) : 'transparent', color: activeTab === 'projects' ? c.primary[600] : c.text.muted, fontSize: typography.fontSize.xs, cursor: 'pointer', fontWeight: activeTab === 'projects' ? typography.fontWeight.semibold : typography.fontWeight.normal }}>
+          {t ? `Projekti (${totalProjects})` : `Projects (${totalProjects})`}
         </button>
       </div>
 
       {loading && <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, textAlign: 'center' as const, padding: spacing.sm }}>{t ? 'Nalagam...' : 'Loading...'}</div>}
 
-      {/* Members list */}
-      {!loading && showMembers && (
-        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.xs, maxHeight: 250, overflowY: 'auto' }}>
-          {members.length === 0 && <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, fontStyle: 'italic', textAlign: 'center' as const }}>{t ? 'Ni članov' : 'No members'}</div>}
-          {members.map(m => {
-            const memberProjects = projectsByOwner[m.userId] || [];
-            return (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, padding: spacing.xs, borderRadius: radii.md, border: `1px solid ${c.border.light}`, background: isDark ? c.surface.sidebar : c.surface.main }}>
-                {/* Avatar */}
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg, ${c.primary[400]}, ${c.secondary[400]})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '12px', fontWeight: 700, flexShrink: 0 }}>
-                  {(m.displayName || m.email || '?')[0].toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.displayName || m.email?.split('@')[0] || '—'}</div>
-                  <div style={{ fontSize: '10px', color: c.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
-                  {memberProjects.length > 0 && <div style={{ fontSize: '9px', color: c.primary[500], marginTop: '1px' }}>{memberProjects.length} {t ? 'proj.' : 'proj.'}</div>}
-                </div>
-                <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: radii.full, background: roleBadgeColor(m.orgRole) + '20', color: roleBadgeColor(m.orgRole), fontWeight: 700, textTransform: 'uppercase' as const, flexShrink: 0 }}>{roleLabel(m.orgRole)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* ── Organization list (expandable) ── */}
+      {!loading && (
+        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.xs, maxHeight: 350, overflowY: 'auto' }}>
+          {allOrgs.map(org => {
+            const isExpanded = expandedOrgId === org.id;
+            const orgMembers = allMembers[org.id] || [];
+            const orgProjectList = allProjects[org.id] || [];
+            const isCurrentOrg = org.id === activeOrg?.id;
 
-      {/* Projects list */}
-      {!loading && !showMembers && (
-        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.xs, maxHeight: 250, overflowY: 'auto' }}>
-          {orgProjects.length === 0 && <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, fontStyle: 'italic', textAlign: 'center' as const }}>{t ? 'Ni projektov' : 'No projects'}</div>}
-          {orgProjects.map(p => {
-            const owner = members.find(m => m.userId === p.owner_id);
             return (
-              <div key={p.id} onClick={() => { if (isAdmin || p.owner_id === members.find(m => m.email)?.userId) onOpenProject(p.id); }} style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, padding: spacing.xs, borderRadius: radii.md, border: `1px solid ${c.border.light}`, cursor: isAdmin ? 'pointer' : 'default', background: isDark ? c.surface.sidebar : c.surface.main }}
-                onMouseEnter={isAdmin ? (e) => { e.currentTarget.style.background = isDark ? c.primary[900]+'20' : c.primary[50]; } : undefined}
-                onMouseLeave={isAdmin ? (e) => { e.currentTarget.style.background = isDark ? c.surface.sidebar : c.surface.main; } : undefined}>
-                <div style={{ width: 28, height: 28, borderRadius: radii.sm, background: isDark ? '#334155' : c.primary[50], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0 }}>📄</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title || (t ? 'Brez imena' : 'Untitled')}</div>
-                  <div style={{ fontSize: '9px', color: c.text.muted }}>{owner?.displayName || owner?.email?.split('@')[0] || (t ? 'Neznan' : 'Unknown')} · {new Date(p.updated_at).toLocaleDateString()}</div>
+              <div key={org.id} style={{ borderRadius: radii.md, border: `1px solid ${isCurrentOrg ? c.primary[300] : c.border.light}`, overflow: 'hidden' }}>
+                {/* Org header — clickable to expand */}
+                <div onClick={() => setExpandedOrgId(isExpanded ? null : org.id)}
+                  style={{ padding: `${spacing.xs} ${spacing.sm}`, display: 'flex', alignItems: 'center', gap: spacing.sm, cursor: 'pointer', background: isExpanded ? (isDark ? c.primary[900]+'20' : c.primary[50]) : (isDark ? c.surface.sidebar : c.surface.main), transition: 'background 0.15s ease' }}
+                  onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = isDark ? c.primary[900]+'15' : '#f8fafc'; }}
+                  onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.background = isDark ? c.surface.sidebar : c.surface.main; }}>
+                  {/* Expand arrow */}
+                  <span style={{ fontSize: '10px', color: c.text.muted, transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease', flexShrink: 0 }}>▶</span>
+                  {/* Org icon */}
+                  <div style={{ width: 28, height: 28, borderRadius: radii.sm, background: `linear-gradient(135deg, ${c.primary[400]}, ${c.secondary[400]})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '12px', fontWeight: 700, flexShrink: 0 }}>
+                    {org.name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{org.name}</div>
+                    <div style={{ fontSize: '9px', color: c.text.muted }}>
+                      {orgMembers.length} {t ? 'članov' : 'members'} · {orgProjectList.length} {t ? 'proj.' : 'proj.'}
+                    </div>
+                  </div>
+                  {isCurrentOrg && <span style={{ fontSize: '8px', padding: '2px 6px', borderRadius: radii.full, background: c.success[500]+'20', color: c.success[600], fontWeight: 700, flexShrink: 0 }}>{t ? 'AKTIVNA' : 'ACTIVE'}</span>}
+                  {!isCurrentOrg && isSuperAdmin && (
+                    <button onClick={(e) => { e.stopPropagation(); onSwitchOrg(org.id); }}
+                      style={{ fontSize: '9px', padding: '2px 6px', borderRadius: radii.md, border: `1px solid ${c.border.light}`, background: 'transparent', cursor: 'pointer', color: c.primary[500], flexShrink: 0 }}>
+                      {t ? 'Preklopi' : 'Switch'}
+                    </button>
+                  )}
                 </div>
+
+                {/* Expanded content */}
+                {isExpanded && (
+                  <div style={{ padding: `${spacing.xs} ${spacing.sm}`, borderTop: `1px solid ${c.border.light}`, background: isDark ? '#0f0f1a' : '#fafbfc' }}>
+                    {activeTab === 'members' && (
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                        {orgMembers.length === 0 && <div style={{ fontSize: '10px', color: c.text.muted, fontStyle: 'italic', padding: spacing.xs }}>{t ? 'Ni članov' : 'No members'}</div>}
+                        {orgMembers.map(m => {
+                          const memberProjects = (allProjects[org.id] || []).filter(p => p.owner_id === m.userId);
+                          return (
+                            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, padding: '4px 6px', borderRadius: radii.sm, background: isDark ? c.surface.card : '#fff', border: `1px solid ${c.border.light}` }}>
+                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: `linear-gradient(135deg, ${roleBadgeColor(m.orgRole)}80, ${roleBadgeColor(m.orgRole)}40)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 700, flexShrink: 0 }}>
+                                {(m.displayName || m.email || '?')[0].toUpperCase()}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '11px', fontWeight: typography.fontWeight.semibold, color: c.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {m.displayName || m.email?.split('@')[0] || '—'}
+                                </div>
+                                <div style={{ fontSize: '9px', color: c.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
+                              </div>
+                              {memberProjects.length > 0 && (
+                                <span style={{ fontSize: '9px', color: c.primary[500], flexShrink: 0 }}>{memberProjects.length} {t ? 'proj.' : 'proj.'}</span>
+                              )}
+                              <span style={{ fontSize: '8px', padding: '1px 5px', borderRadius: radii.full, background: roleBadgeColor(m.orgRole)+'20', color: roleBadgeColor(m.orgRole), fontWeight: 700, textTransform: 'uppercase' as const, flexShrink: 0 }}>{roleLabel(m.orgRole)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {activeTab === 'projects' && (
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                        {orgProjectList.length === 0 && <div style={{ fontSize: '10px', color: c.text.muted, fontStyle: 'italic', padding: spacing.xs }}>{t ? 'Ni projektov' : 'No projects'}</div>}
+                        {orgProjectList.map(p => {
+                          const owner = orgMembers.find(m => m.userId === p.owner_id);
+                          const canOpen = isSuperAdmin || isOrgAdmin || p.owner_id === orgMembers.find(m => true)?.userId;
+                          return (
+                            <div key={p.id}
+                              onClick={() => { if (canOpen) onOpenProject(p.id); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, padding: '4px 6px', borderRadius: radii.sm, cursor: canOpen ? 'pointer' : 'default', background: isDark ? c.surface.card : '#fff', border: `1px solid ${c.border.light}`, transition: 'background 0.1s ease' }}
+                              onMouseEnter={canOpen ? (e) => { e.currentTarget.style.background = isDark ? c.primary[900]+'20' : c.primary[50]; } : undefined}
+                              onMouseLeave={canOpen ? (e) => { e.currentTarget.style.background = isDark ? c.surface.card : '#fff'; } : undefined}>
+                              <div style={{ width: 24, height: 24, borderRadius: radii.sm, background: isDark ? '#334155' : c.primary[50], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', flexShrink: 0 }}>📄</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '11px', fontWeight: typography.fontWeight.semibold, color: c.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title || (t ? 'Brez imena' : 'Untitled')}</div>
+                                <div style={{ fontSize: '9px', color: c.text.muted }}>
+                                  {owner?.displayName || owner?.email?.split('@')[0] || (t ? 'Neznan' : 'Unknown')} · {new Date(p.updated_at).toLocaleDateString()}
+                                </div>
+                              </div>
+                              {canOpen && <span style={{ fontSize: '9px', color: c.primary[400], flexShrink: 0 }}>→</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -483,7 +587,6 @@ const OrganizationCard: React.FC<{
     </div>
   );
 };
-
 // ——— AI Chatbot — with formatted text + scroll fix ————————
 
 const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any; activeOrg: any | null }> = ({ language, isDark, colors: c, activeOrg }) => {
