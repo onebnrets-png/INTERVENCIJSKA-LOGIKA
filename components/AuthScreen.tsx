@@ -1,8 +1,9 @@
 // components/AuthScreen.tsx
 // Supabase Auth - Email/Password login & registration + MFA verification
-// v4.0 — 2026-02-19
+// v5.0 — 2026-02-20
+//   ★ v5.0: First Name + Last Name fields on registration (required)
+//           → display_name = firstName + " " + lastName
 //   ★ v4.0: Organization Name field on registration
-//           → Creates new org + sets user as owner after signup
 //   ★ v3.1: Hardcoded EURO-OFFICE logo on Auth screen
 //   ★ v3.0: Multi-provider API key on registration
 //   v2.0 — 2026-02-17  Dark-mode: isDark + colors pattern
@@ -36,7 +37,7 @@ interface AuthScreenProps {
   onMFACancel: () => void;
 }
 
-// ─── ★ v3.0: Provider config for registration ───────────────────
+// ─── Provider config for registration ───────────────────
 
 const PROVIDER_OPTIONS: { id: AIProviderType; label: string; labelSi: string; icon: string; placeholder: string; desc: string; descSi: string; link: string; linkLabel: string }[] = [
   {
@@ -175,7 +176,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
 
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
-    const [displayName, setDisplayName] = useState('');
+    // ★ v5.0: Separate first/last name fields
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [orgName, setOrgName] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -212,10 +215,23 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
         }
     };
 
-        const handleRegisterSubmit = async (e: React.FormEvent) => {
+    const handleRegisterSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setSuccessMessage('');
+
+        // ★ v5.0: Validate first + last name
+        const trimFirst = firstName.trim();
+        const trimLast = lastName.trim();
+        if (!trimFirst) {
+            setError(language === 'si' ? 'Ime je obvezno.' : 'First name is required.');
+            return;
+        }
+        if (!trimLast) {
+            setError(language === 'si' ? 'Priimek je obvezen.' : 'Last name is required.');
+            return;
+        }
+
         if (!isValidEmail(email)) { setError(t.errorEmailFormat || "Invalid email format"); return; }
         if (!isPasswordSecure(password)) { setError(t.errorPasswordWeak || "Password is not secure enough"); return; }
         if (password !== confirmPassword) { setError(t.errorMatch); return; }
@@ -229,33 +245,39 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
         }
 
         setLoading(true);
-        const finalDisplayName = displayName.trim() || generateDisplayNameFromEmail(email);
-        const result = await storageService.register(email, finalDisplayName, password, apiKey, apiProvider, trimmedOrgName);
+        // ★ v5.0: display_name = "FirstName LastName"
+        const fullDisplayName = `${trimFirst} ${trimLast}`;
+        const result = await storageService.register(
+            email,
+            fullDisplayName,
+            password,
+            apiKey,
+            apiProvider,
+            trimmedOrgName,
+            trimFirst,
+            trimLast
+        );
         setLoading(false);
 
         if (result.success) {
-            // ★ v5.1 FIX: Check if email confirmation is required
             if (result.needsEmailConfirmation) {
-                // DO NOT call onLoginSuccess — show confirmation message instead
                 setSuccessMessage(
                     language === 'si'
                         ? '✅ Registracija uspešna! Preverite svoj e-poštni predal in kliknite povezavo za potrditev. Po potrditvi se lahko prijavite.'
                         : '✅ Registration successful! Please check your email inbox and click the confirmation link. After confirming, you can sign in.'
                 );
-                // Reset form to login mode after short delay
                 setTimeout(() => {
                     setIsLogin(true);
                     setPassword('');
                     setConfirmPassword('');
                     setApiKey('');
                     setOrgName('');
-                    setDisplayName('');
+                    setFirstName('');
+                    setLastName('');
                 }, 100);
-                return;  // ← CRITICAL: Stop here, do NOT enter the app
+                return;
             }
-
-            // Email confirmation OFF — user has session, enter app
-            onLoginSuccess(result.displayName || email.split('@')[0]);
+            onLoginSuccess(result.displayName || fullDisplayName);
         } else {
             setError(result.message || t.errorExists);
         }
@@ -319,15 +341,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                     <img
                       src={BRAND_ASSETS.logoText}
                       alt="EURO-OFFICE"
-                      style={{
-                        height: 48,
-                        width: 'auto',
-                        objectFit: 'contain',
-                        marginBottom: spacing.lg,
-                        display: 'block',
-                        marginLeft: 'auto',
-                        marginRight: 'auto',
-                      }}
+                      style={{ height: 48, width: 'auto', objectFit: 'contain', marginBottom: spacing.lg, display: 'block', marginLeft: 'auto', marginRight: 'auto' }}
                     />
                     <h1 style={{ fontSize: typography.fontSize['3xl'], fontWeight: typography.fontWeight.bold, color: colors.text.heading, marginBottom: spacing.sm }}>
                         {isLogin ? t.loginTitle : t.registerTitle}
@@ -337,18 +351,46 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
 
                 <form onSubmit={isLogin ? handleLoginSubmit : handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
 
-                    <div>
-                        <label style={labelStyle}>{t.emailLabel || "Email Address"}</label>
-                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} placeholder="user@example.com" />
-                    </div>
-
+                    {/* ★ v5.0: First Name + Last Name — side by side */}
                     {!isLogin && (
-                        <div>
-                            <label style={labelStyle}>{t.displayNameLabel || "Username / Display Name"}</label>
-                            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={inputStyle} placeholder={email.split('@')[0] || "Optional"} />
-                            <p style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, marginTop: '4px' }}>{t.displayNameDesc || "If empty, we'll use your email prefix."}</p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md }}>
+                            <div>
+                                <label style={labelStyle}>
+                                    {language === 'si' ? 'Ime' : 'First Name'}
+                                    <span style={{ color: colors.error[500], marginLeft: '2px' }}>*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    style={inputStyle}
+                                    placeholder={language === 'si' ? 'npr. Janez' : 'e.g. John'}
+                                    autoComplete="given-name"
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>
+                                    {language === 'si' ? 'Priimek' : 'Last Name'}
+                                    <span style={{ color: colors.error[500], marginLeft: '2px' }}>*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    style={inputStyle}
+                                    placeholder={language === 'si' ? 'npr. Novak' : 'e.g. Smith'}
+                                    autoComplete="family-name"
+                                />
+                            </div>
                         </div>
                     )}
+
+                    <div>
+                        <label style={labelStyle}>{t.emailLabel || "Email Address"}</label>
+                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} placeholder="user@example.com" autoComplete="email" />
+                    </div>
 
                     {/* ★ v4.0: Organization Name field */}
                     {!isLogin && (
@@ -376,7 +418,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                     <div>
                         <label style={labelStyle}>{t.password}</label>
                         <div style={{ position: 'relative' }}>
-                            <input type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, paddingRight: '40px' }} />
+                            <input type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, paddingRight: '40px' }} autoComplete={isLogin ? "current-password" : "new-password"} />
                             <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: 8, top: 8, background: 'none', border: 'none', cursor: 'pointer' }}>
                                 {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
                             </button>
@@ -395,7 +437,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                         <div>
                             <label style={labelStyle}>{t.confirmPassword}</label>
                             <div style={{ position: 'relative' }}>
-                                <input type={showConfirmPassword ? "text" : "password"} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={{ ...inputStyle, paddingRight: '40px' }} />
+                                <input type={showConfirmPassword ? "text" : "password"} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={{ ...inputStyle, paddingRight: '40px' }} autoComplete="new-password" />
                                 <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={{ position: 'absolute', right: 8, top: 8, background: 'none', border: 'none', cursor: 'pointer' }}>
                                     {showConfirmPassword ? <EyeSlashIcon /> : <EyeIcon />}
                                 </button>
@@ -403,10 +445,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                         </div>
                     )}
 
-                    {/* ═══ ★ v3.0: MULTI-PROVIDER API KEY SECTION ═══ */}
+                    {/* MULTI-PROVIDER API KEY SECTION */}
                     {!isLogin && (
                         <div style={{ background: colors.surface.sidebar, padding: spacing.md, borderRadius: radii.md, border: `1px solid ${colors.border.light}`, marginTop: spacing.sm }}>
-
                             <label style={{ display: 'block', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.bold as any, color: colors.primary[isDark ? 300 : 700], marginBottom: spacing.sm }}>
                                 {language === 'si' ? 'AI Ponudnik & API Ključ' : 'AI Provider & API Key'}
                                 <span style={{ fontWeight: typography.fontWeight.normal as any, color: colors.text.muted, fontSize: typography.fontSize.xs, marginLeft: spacing.sm }}>
@@ -419,26 +460,18 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                                     value={apiProvider}
                                     onChange={(e) => { setApiProvider(e.target.value as AIProviderType); setApiKey(''); }}
                                     style={{
-                                        width: '100%',
-                                        padding: `${spacing.sm} ${spacing.md}`,
-                                        border: `1px solid ${colors.border.medium}`,
-                                        borderRadius: radii.md,
+                                        width: '100%', padding: `${spacing.sm} ${spacing.md}`,
+                                        border: `1px solid ${colors.border.medium}`, borderRadius: radii.md,
                                         background: isDark ? colors.surface.background : '#FFFFFF',
-                                        color: colors.text.heading,
-                                        fontSize: typography.fontSize.sm,
-                                        fontWeight: typography.fontWeight.medium as any,
-                                        cursor: 'pointer',
+                                        color: colors.text.heading, fontSize: typography.fontSize.sm,
+                                        fontWeight: typography.fontWeight.medium as any, cursor: 'pointer',
                                         appearance: 'none',
                                         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394A3B8' d='M2 4l4 4 4-4'/%3E%3C/svg%3E")`,
-                                        backgroundRepeat: 'no-repeat',
-                                        backgroundPosition: 'right 12px center',
-                                        paddingRight: '36px',
+                                        backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: '36px',
                                     }}
                                 >
                                     {PROVIDER_OPTIONS.map(p => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.icon} {language === 'si' ? p.labelSi : p.label}
-                                        </option>
+                                        <option key={p.id} value={p.id}>{p.icon} {language === 'si' ? p.labelSi : p.label}</option>
                                     ))}
                                 </select>
                             </div>
@@ -455,19 +488,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                                 <p style={{ fontSize: typography.fontSize.xs, color: colors.text.muted, margin: 0, flex: 1 }}>
                                     {language === 'si' ? currentProviderConfig.descSi : currentProviderConfig.desc}
                                 </p>
-                                <a
-                                    href={currentProviderConfig.link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                        fontSize: typography.fontSize.xs,
-                                        color: colors.primary[isDark ? 300 : 600],
-                                        fontWeight: typography.fontWeight.semibold as any,
-                                        textDecoration: 'none',
-                                        whiteSpace: 'nowrap',
-                                        flexShrink: 0,
-                                    }}
-                                >
+                                <a href={currentProviderConfig.link} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontSize: typography.fontSize.xs, color: colors.primary[isDark ? 300 : 600], fontWeight: typography.fontWeight.semibold as any, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
                                     {currentProviderConfig.linkLabel}
                                 </a>
                             </div>
@@ -485,7 +507,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
                 <div style={{ marginTop: spacing.xl, textAlign: 'center', fontSize: typography.fontSize.sm, borderTop: `1px solid ${colors.border.light}`, paddingTop: spacing.lg }}>
                     <p style={{ color: colors.text.body }}>
                         {isLogin ? t.switchMsg : t.switchMsgLogin}
-                        <button onClick={() => { setIsLogin(!isLogin); setError(''); setEmail(''); setDisplayName(''); setOrgName(''); setPassword(''); setConfirmPassword(''); setApiKey(''); setApiProvider('gemini'); setSuccessMessage(''); }} style={{ marginLeft: spacing.sm, color: colors.primary[isDark ? 300 : 600], background: 'none', border: 'none', cursor: 'pointer', fontWeight: typography.fontWeight.semibold as any, textDecoration: 'underline' }}>
+                        <button onClick={() => { setIsLogin(!isLogin); setError(''); setEmail(''); setFirstName(''); setLastName(''); setOrgName(''); setPassword(''); setConfirmPassword(''); setApiKey(''); setApiProvider('gemini'); setSuccessMessage(''); }} style={{ marginLeft: spacing.sm, color: colors.primary[isDark ? 300 : 600], background: 'none', border: 'none', cursor: 'pointer', fontWeight: typography.fontWeight.semibold as any, textDecoration: 'underline' }}>
                             {isLogin ? t.switchAction : t.switchActionLogin}
                         </button>
                     </p>
