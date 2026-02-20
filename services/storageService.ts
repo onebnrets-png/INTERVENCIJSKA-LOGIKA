@@ -1,8 +1,12 @@
 // services/storageService.ts
 // Supabase-backed storage service — replaces localStorage completely
 //
-// v5.1 — 2026-02-19
+// v5.2 — 2026-02-20
 // CHANGES:
+//   ★ v5.2: register() accepts firstName + lastName
+//           → Stores first_name, last_name in user_metadata
+//           → display_name = "FirstName LastName"
+//           → handle_new_user() trigger reads these into profiles
 //   - ★ v5.1: Robust first-login setup after email confirmation
 //     → ensureUserHasOrg() creates org via SECURITY DEFINER RPC if missing
 //     → ensureApiKeySaved() saves API key from user_metadata if not yet in DB
@@ -191,15 +195,16 @@ export const storageService = {
     return { success: false, message: 'Login failed' };
   },
 
-  // ★ v5.1: Stores org_name, api_key, api_provider in user_metadata
-  // Org + API key setup happens on first login via ensureUserHasOrg + ensureApiKeySaved
+  // ★ v5.2: register() now accepts firstName + lastName
   async register(
     email: string,
     displayName: string,
     password: string,
     apiKey: string = '',
     apiProvider: AIProviderType = 'gemini',
-    orgName: string = ''
+    orgName: string = '',
+    firstName: string = '',
+    lastName: string = ''
   ) {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -207,6 +212,8 @@ export const storageService = {
       options: {
         data: {
           display_name: displayName || email.split('@')[0],
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           org_name: orgName && orgName.trim() !== '' ? orgName.trim() : (displayName || email.split('@')[0]) + "'s Organization",
           api_key: apiKey && apiKey.trim() !== '' ? apiKey.trim() : '',
           api_provider: apiProvider || 'gemini'
@@ -222,12 +229,11 @@ export const storageService = {
     }
 
     if (data.user) {
-      // ★ v5.2: Check if email confirmation is required
+      // ★ v5.1: Check if email confirmation is required
       const { data: sessionData } = await supabase.auth.getSession();
 
       if (!sessionData.session) {
         // Email confirmation is ON — user must verify email first
-        // Do NOT proceed — return success with confirmation message
         return {
           success: true,
           email,
@@ -309,64 +315,6 @@ export const storageService = {
         displayName: cachedUser.displayName,
         role: cachedUser.role
       };
-    }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        cachedUser = {
-          id: data.user.id,
-          email: email,
-          displayName: profile?.display_name || displayName || email.split('@')[0],
-          role: profile?.role || 'admin'
-        };
-
-        await this.loadSettings();
-
-        // Create org via RPC
-        const meta = data.user.user_metadata || {};
-        await ensureUserHasOrg(data.user.id, meta);
-        await ensureApiKeySaved(data.user.id, meta);
-        await organizationService.loadActiveOrg();
-        await this.loadSettings();
-
-        // Force key into cache
-        if (apiKey && apiKey.trim() !== '' && cachedSettings) {
-          const keyColumn = apiProvider === 'openai' ? 'openai_key'
-                          : apiProvider === 'openrouter' ? 'openrouter_key'
-                          : 'gemini_key';
-          if (!cachedSettings[keyColumn]) {
-            cachedSettings[keyColumn] = apiKey.trim();
-            cachedSettings.ai_provider = apiProvider;
-          }
-        } else if (apiKey && apiKey.trim() !== '' && !cachedSettings) {
-          const keyColumn = apiProvider === 'openai' ? 'openai_key'
-                          : apiProvider === 'openrouter' ? 'openrouter_key'
-                          : 'gemini_key';
-          cachedSettings = { [keyColumn]: apiKey.trim(), ai_provider: apiProvider };
-        }
-
-        return {
-          success: true,
-          email,
-          displayName: cachedUser.displayName,
-          role: cachedUser.role
-        };
-
-      } else {
-        // ★ v5.1: Email confirmation is ON — no session yet
-        // Everything will be set up on first login via login() → ensureUserHasOrg + ensureApiKeySaved
-        return {
-          success: true,
-          email,
-          displayName: displayName || email.split('@')[0],
-          role: 'admin',
-          needsEmailConfirmation: true
-        };
-      }
     }
 
     return { success: false, message: 'Registration failed' };
