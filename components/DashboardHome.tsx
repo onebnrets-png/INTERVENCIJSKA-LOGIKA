@@ -1,11 +1,12 @@
 // components/DashboardHome.tsx
 // ═══════════════════════════════════════════════════════════════════
 // EURO-OFFICE Dashboard Home — Main view after login
-// v4.3 — 2026-02-20
+// v4.4 — 2026-02-20
 //
-// CHANGES v4.3:
-//   - NEW: Cards are resizable (◂ ▸ buttons in header) — 1 or 2 columns
-//   - NEW: Empty grid slots are drop targets (can drop card into empty space)
+// CHANGES v4.4:
+//   - NEW: ProgressRing (design system) shown in ProjectChartsCard
+//   - NEW: calculateCompleteness function for accurate project progress
+//   - KEEP: Cards resizable (◂ ▸), empty grid slots as drop targets
 //   - KEEP: Project Charts card always full-width, horizontal chart scroll
 //   - KEEP: AI Chatbot, KB search, drag-and-drop reorder
 // ═══════════════════════════════════════════════════════════════════
@@ -21,6 +22,7 @@ import { generateContent } from '../services/aiProvider.ts';
 import { extractStructuralData } from '../services/DataExtractionService.ts';
 import type { ExtractedChartData } from '../services/DataExtractionService.ts';
 import ChartRenderer from './ChartRenderer.tsx';
+import { ProgressRing as DesignProgressRing } from '../design/index.ts';
 
 // ——— Types ———————————————————————————————————————
 
@@ -63,7 +65,133 @@ const GRID_COLS = 2;
 const CHART_WIDTH = 260;
 const CHART_HEIGHT = 160;
 
-// ——— Helpers —————————————————————————————————————
+// ——— Helpers: detect real content (for completeness) ———————
+
+const SKIP_KEYS = new Set([
+  'id', 'project_id', 'created_at', 'updated_at',
+  'category', 'likelihood', 'impact', 'type', 'dependencies',
+  'startDate', 'durationMonths', '_calculatedEndDate', '_projectTimeframe',
+]);
+
+const hasRealStringContent = (v: any): boolean =>
+  typeof v === 'string' && v.trim().length > 0;
+
+const arrayHasRealContent = (arr: any[]): boolean => {
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  return arr.some((item: any) => {
+    if (typeof item === 'string') return item.trim().length > 0;
+    if (typeof item !== 'object' || item === null) return false;
+    return Object.entries(item).some(([k, v]) => {
+      if (SKIP_KEYS.has(k)) return false;
+      if (typeof v === 'string') return v.trim().length > 0;
+      if (Array.isArray(v)) return arrayHasRealContent(v);
+      return false;
+    });
+  });
+};
+
+const objectHasRealContent = (obj: any): boolean => {
+  if (!obj || typeof obj !== 'object') return false;
+  if (Array.isArray(obj)) return arrayHasRealContent(obj);
+  return Object.entries(obj).some(([k, v]) => {
+    if (SKIP_KEYS.has(k)) return false;
+    if (typeof v === 'string') return v.trim().length > 0;
+    if (Array.isArray(v)) return arrayHasRealContent(v);
+    if (typeof v === 'object' && v !== null) return objectHasRealContent(v);
+    return false;
+  });
+};
+
+// ——— Completeness calculation (same as DashboardPanel) ———
+
+const calculateCompleteness = (projectData: any): number => {
+  if (!projectData) return 0;
+
+  const sectionChecks: { key: string; check: (data: any) => boolean }[] = [
+    {
+      key: 'problemAnalysis',
+      check: (d) => {
+        if (!d) return false;
+        return (
+          hasRealStringContent(d.coreProblem?.title) ||
+          hasRealStringContent(d.coreProblem?.description) ||
+          arrayHasRealContent(d.causes) ||
+          arrayHasRealContent(d.consequences)
+        );
+      },
+    },
+    {
+      key: 'projectIdea',
+      check: (d) => {
+        if (!d) return false;
+        return (
+          hasRealStringContent(d.projectTitle) ||
+          hasRealStringContent(d.projectAcronym) ||
+          hasRealStringContent(d.mainAim) ||
+          hasRealStringContent(d.stateOfTheArt) ||
+          hasRealStringContent(d.proposedSolution) ||
+          arrayHasRealContent(d.policies) ||
+          (d.readinessLevels && [
+            d.readinessLevels.TRL,
+            d.readinessLevels.SRL,
+            d.readinessLevels.ORL,
+            d.readinessLevels.LRL,
+          ].some((r: any) => typeof r?.level === 'number' && r.level > 0))
+        );
+      },
+    },
+    { key: 'generalObjectives', check: (d) => arrayHasRealContent(d) },
+    { key: 'specificObjectives', check: (d) => arrayHasRealContent(d) },
+    {
+      key: 'projectManagement',
+      check: (d) => {
+        if (!d) return false;
+        return hasRealStringContent(d.description) || objectHasRealContent(d.structure);
+      },
+    },
+    {
+      key: 'activities',
+      check: (d) => {
+        if (!Array.isArray(d)) return false;
+        return d.some((wp: any) =>
+          hasRealStringContent(wp.title) ||
+          arrayHasRealContent(wp.tasks) ||
+          arrayHasRealContent(wp.milestones) ||
+          arrayHasRealContent(wp.deliverables)
+        );
+      },
+    },
+    { key: 'outputs', check: (d) => arrayHasRealContent(d) },
+    { key: 'outcomes', check: (d) => arrayHasRealContent(d) },
+    { key: 'impacts', check: (d) => arrayHasRealContent(d) },
+    {
+      key: 'risks',
+      check: (d) => {
+        if (!Array.isArray(d)) return false;
+        return d.some((r: any) =>
+          hasRealStringContent(r.title) ||
+          hasRealStringContent(r.description) ||
+          hasRealStringContent(r.mitigation)
+        );
+      },
+    },
+    { key: 'kers', check: (d) => arrayHasRealContent(d) },
+  ];
+
+  let filledCount = 0;
+  let totalCount = 0;
+
+  for (const { key, check } of sectionChecks) {
+    const data = projectData?.[key];
+    if (data === undefined || data === null) continue;
+    totalCount++;
+    if (check(data)) filledCount++;
+  }
+
+  return totalCount === 0 ? 0 : Math.round((filledCount / totalCount) * 100);
+};
+
+// ——— Simple progress helper (for project list) ————————
 
 function getProjectProgress(projectData: any): number {
   if (!projectData) return 0;
@@ -79,6 +207,8 @@ function getProjectProgress(projectData: any): number {
   if (projectData.impacts?.some((o: any) => o.title?.trim())) filled++;
   return Math.round((filled / total) * 100);
 }
+
+// ——— Local ProgressRing (used in project list only) ————
 
 const ProgressRing: React.FC<{ percent: number; size?: number; strokeWidth?: number; color: string; bgColor: string }> = ({
   percent, size = 64, strokeWidth = 6, color, bgColor
@@ -150,7 +280,6 @@ const DashboardCard: React.FC<CardProps> = ({
           color: c.text.heading, flex: 1,
         }}>{title}</h3>
 
-        {/* Resize buttons — non-wide cards only */}
         {!wide && (
           <div style={{ display: 'flex', gap: '2px', marginRight: spacing.xs }}>
             {effectiveSpan > 1 && (
@@ -232,8 +361,7 @@ const DropZone: React.FC<{
     </div>
   );
 };
-
-// ——— Project Charts Card — horizontal layout ———
+// ——— Project Charts Card — horizontal layout WITH ProgressRing ———
 
 const ProjectChartsCard: React.FC<{
   language: 'en' | 'si'; isDark: boolean; colors: any;
@@ -251,6 +379,12 @@ const ProjectChartsCard: React.FC<{
     try { return extractStructuralData(projectData); } catch { return null; }
   }, [activeId, currentProjectId, projectData]);
 
+  // ★ v4.4: Calculate completeness for the loaded project
+  const completeness = useMemo(() => {
+    if (!activeId || !projectData || activeId !== currentProjectId) return 0;
+    return calculateCompleteness(projectData);
+  }, [activeId, currentProjectId, projectData]);
+
   const handleProjectClick = useCallback((projectId: string) => {
     setSelectedProjectId(prev => prev === projectId ? null : projectId);
   }, []);
@@ -259,8 +393,9 @@ const ProjectChartsCard: React.FC<{
 
   return (
     <div style={{ display: 'flex', gap: spacing.md, minHeight: 220 }}>
+      {/* ── Left pane: project list with mini progress rings ── */}
       <div style={{
-        width: 140, minWidth: 120, flexShrink: 0,
+        width: 160, minWidth: 140, flexShrink: 0,
         borderRight: `1px solid ${c.border.light}`,
         overflowY: 'auto', paddingRight: spacing.sm,
       }}>
@@ -277,6 +412,8 @@ const ProjectChartsCard: React.FC<{
           const isHovered = p.id === hoveredProjectId;
           const isCurrent = p.id === currentProjectId;
           const isActive = isSelected || (!selectedProjectId && isCurrent);
+          // ★ v4.4: Mini completeness for the loaded project
+          const miniCompleteness = isCurrent && projectData ? calculateCompleteness(projectData) : 0;
           return (
             <div key={p.id}
               onMouseEnter={() => handleMouseEnter(p.id)}
@@ -287,19 +424,36 @@ const ProjectChartsCard: React.FC<{
                 background: isActive ? (isDark ? c.primary[900] + '60' : c.primary[100]) : isHovered ? (isDark ? c.primary[900] + '25' : c.primary[50]) : 'transparent',
                 borderLeft: isActive ? `3px solid ${c.primary[500]}` : isHovered ? `3px solid ${c.primary[300]}` : '3px solid transparent',
                 marginBottom: 2, transition: 'background 0.15s ease, border-left 0.15s ease',
+                display: 'flex', alignItems: 'center', gap: spacing.xs,
               }}>
-              <div style={{ fontSize: '12px', fontWeight: isActive ? typography.fontWeight.bold : typography.fontWeight.semibold, color: isActive ? c.primary[600] : c.text.heading, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {p.acronym || p.title?.substring(0, 10) || '—'}
+              {/* ★ v4.4: Mini ProgressRing per project */}
+              {isCurrent ? (
+                <DesignProgressRing value={miniCompleteness} size={24} strokeWidth={3} showLabel={true} labelSize="0.45rem" />
+              ) : (
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                  background: isDark ? '#334155' : c.primary[50],
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '10px', color: c.text.muted, fontWeight: 700,
+                }}>
+                  {(p.acronym || '?')[0]}
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '12px', fontWeight: isActive ? typography.fontWeight.bold : typography.fontWeight.semibold, color: isActive ? c.primary[600] : c.text.heading, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {p.acronym || p.title?.substring(0, 10) || '—'}
+                </div>
+                <div style={{ fontSize: '9px', color: c.text.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {p.title || p.name || (language === 'si' ? 'Brez imena' : 'Untitled')}
+                </div>
+                {isCurrent && <div style={{ fontSize: '8px', color: c.success[600], fontWeight: typography.fontWeight.semibold }}>● {language === 'si' ? 'naložen' : 'loaded'}</div>}
               </div>
-              <div style={{ fontSize: '9px', color: c.text.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {p.title || p.name || (language === 'si' ? 'Brez imena' : 'Untitled')}
-              </div>
-              {isCurrent && <div style={{ fontSize: '8px', color: c.success[600], fontWeight: typography.fontWeight.semibold }}>● {language === 'si' ? 'naložen' : 'loaded'}</div>}
             </div>
           );
         })}
       </div>
 
+      {/* ── Right pane: ProgressRing + charts (horizontal scroll) ── */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: spacing.xs }}>
         {activeId && (() => {
           const meta = projectsMeta.find(p => p.id === (hoveredProjectId || activeId));
@@ -330,27 +484,53 @@ const ProjectChartsCard: React.FC<{
           </div>
         )}
 
-        {activeId && activeId === currentProjectId && chartsData && chartsData.length > 0 && (
+        {activeId && activeId === currentProjectId && (
           <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', flexDirection: 'row' as const, gap: spacing.sm, paddingBottom: spacing.xs, alignItems: 'flex-start' }}>
-            {chartsData.map((chart: ExtractedChartData, idx: number) => (
+            {/* ★ v4.4: ProgressRing as FIRST element in the chart row */}
+            <div style={{
+              flexShrink: 0, width: CHART_WIDTH,
+              display: 'flex', flexDirection: 'column' as const,
+              alignItems: 'center', justifyContent: 'center',
+              gap: spacing.sm, padding: spacing.md,
+              background: isDark ? '#1e1e2e' : '#f8fafc',
+              borderRadius: radii.lg,
+              border: `1px solid ${c.border.light}`,
+              minHeight: CHART_HEIGHT,
+            }}>
+              <DesignProgressRing value={completeness} size={80} strokeWidth={6} showLabel={true} labelSize="0.8rem" />
+              <div style={{ textAlign: 'center' as const }}>
+                <div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.text.heading }}>
+                  {language === 'si' ? 'Zapolnjenost' : 'Completeness'}
+                </div>
+                <div style={{ fontSize: '10px', color: c.text.muted }}>
+                  {completeness}%
+                </div>
+              </div>
+            </div>
+
+            {/* Charts */}
+            {chartsData && chartsData.length > 0 && chartsData.map((chart: ExtractedChartData, idx: number) => (
               <div key={`chart-${idx}-${chart.chartType}`} style={{ flexShrink: 0, width: CHART_WIDTH }}>
                 <ChartRenderer data={chart} width={CHART_WIDTH} height={CHART_HEIGHT} showTitle={true} showSource={false} />
               </div>
             ))}
-          </div>
-        )}
 
-        {activeId && activeId === currentProjectId && (!chartsData || chartsData.length === 0) && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: spacing.xs }}>
-            <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, textAlign: 'center' as const }}>
-              {language === 'si' ? 'Ni podatkov za grafike. Izpolnite projektne sekcije.' : 'No chart data. Fill in project sections first.'}
-            </div>
+            {(!chartsData || chartsData.length === 0) && (
+              <div style={{
+                flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: typography.fontSize.xs, color: c.text.muted, padding: spacing.lg,
+                fontStyle: 'italic',
+              }}>
+                {language === 'si' ? 'Ni podatkov za grafike. Izpolnite projektne sekcije.' : 'No chart data. Fill in project sections first.'}
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   );
 };
+
 // ——— AI Chatbot ———————————————————————————————————
 
 const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any; activeOrg: any | null }> = ({ language, isDark, colors: c, activeOrg }) => {
@@ -451,7 +631,6 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any;
     </div>
   );
 };
-
 // ——— Main DashboardHome ————————————————————————
 
 const DashboardHome: React.FC<DashboardHomeProps> = ({
@@ -507,7 +686,6 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
     onDragEnd: () => setDraggingId(null),
   }), [draggingId]);
 
-  // Drop at end of grid
   const handleDropAtEnd = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     if (!draggingId) return;
@@ -624,36 +802,42 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm }}>
                   <div style={{ padding: spacing.sm, borderRadius: radii.md, background: isDark ? c.primary[900] + '20' : c.primary[50], border: `1px solid ${c.primary[200]}` }}>
                     <div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.primary[700] }}>{language === 'si' ? 'Trenutna organizacija' : 'Current Organization'}</div>
-                    <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.bold, color: c.text.heading, marginTop: 2 }}>{orgName}</div>
+                    <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.bold, color: c.text.heading, marginTop: '2px' }}>{orgName}</div>
                   </div>
-                  {userOrgs.length > 1 && (<>
-                    <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, fontWeight: typography.fontWeight.semibold }}>{language === 'si' ? 'Preklopi organizacijo:' : 'Switch organization:'}</div>
-                    {userOrgs.filter(o => o.id !== activeOrg?.id).map(org => (
-                      <button key={org.id} onClick={() => onSwitchOrg(org.id)} style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, borderRadius: radii.md, border: `1px solid ${c.border.light}`, background: 'transparent', cursor: 'pointer', color: c.text.body, fontSize: typography.fontSize.xs, textAlign: 'left' as const, width: '100%' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.surface.sidebar : c.surface.main; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-                        🏢 {org.name}
-                      </button>
-                    ))}
-                  </>)}
+                  {userOrgs.length > 1 && (
+                    <>
+                      <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, fontWeight: typography.fontWeight.semibold }}>{language === 'si' ? 'Zamenjaj organizacijo:' : 'Switch organization:'}</div>
+                      {userOrgs.filter(o => o.id !== activeOrg?.id).map(org => (
+                        <button key={org.id} onClick={() => onSwitchOrg(org.id)} style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, padding: spacing.sm, borderRadius: radii.md, border: `1px solid ${c.border.light}`, background: 'transparent', cursor: 'pointer', color: c.text.body, fontSize: typography.fontSize.xs, textAlign: 'left' as const }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.primary[900] + '30' : c.primary[50]; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                          🏢 {org.name}
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
 
               {cardId === 'aiSettings' && (
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm }}>
-                  <p style={{ fontSize: typography.fontSize.xs, color: c.text.muted, margin: 0 }}>{language === 'si' ? 'Konfigurirajte AI ponudnika in API ključ.' : 'Configure your AI provider and API key.'}</p>
-                  <button onClick={onOpenSettings} style={{ background: c.primary[500], color: '#fff', border: 'none', borderRadius: radii.md, padding: `${spacing.sm} ${spacing.md}`, fontSize: typography.fontSize.xs, cursor: 'pointer', fontWeight: typography.fontWeight.semibold }}>{language === 'si' ? 'Odpri nastavitve' : 'Open Settings'}</button>
+                  <p style={{ margin: 0, fontSize: typography.fontSize.xs, color: c.text.muted }}>{language === 'si' ? 'Upravljajte AI nastavitve, ponudnike in modele.' : 'Manage AI settings, providers and models.'}</p>
+                  <button onClick={onOpenSettings} style={{ background: c.primary[500], color: '#fff', border: 'none', borderRadius: radii.md, padding: `${spacing.sm} ${spacing.md}`, fontSize: typography.fontSize.xs, cursor: 'pointer', fontWeight: typography.fontWeight.semibold }}>⚙️ {language === 'si' ? 'Odpri nastavitve' : 'Open Settings'}</button>
                 </div>
               )}
 
               {cardId === 'activity' && (
-                <ProjectChartsCard language={language} isDark={isDark} colors={c} projectsMeta={projectsMeta} projectData={projectData} currentProjectId={currentProjectId} onOpenProject={onOpenProject} />
+                <ProjectChartsCard
+                  language={language} isDark={isDark} colors={c}
+                  projectsMeta={projectsMeta} projectData={projectData}
+                  currentProjectId={currentProjectId} onOpenProject={onOpenProject}
+                />
               )}
             </DashboardCard>
           );
         })}
 
-        {/* Drop zone at end of grid — visible only while dragging */}
+        {/* Drop zone at the end of the grid */}
         <DropZone index={visibleCards.length} isDark={isDark} colors={c} draggingId={draggingId} onDropAtEnd={handleDropAtEnd} />
       </div>
     </div>
