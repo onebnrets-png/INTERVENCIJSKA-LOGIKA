@@ -332,10 +332,9 @@ const ProjectChartsCard: React.FC<{
 };
 
 // ═══════════════════════════════════════════════════════════════
-// OrganizationCard — Full org/member/project overview
-// SuperAdmin: sees ALL orgs, ALL members, ALL projects
-// Org Admin: sees own org members + org projects
-// User: sees self + own projects
+// OrganizationCard — v5.2 — 2026-02-20
+// + Email/Message button per member
+// + mailto: with pre-filled subject & body template
 // ═══════════════════════════════════════════════════════════════
 
 const OrganizationCard: React.FC<{
@@ -350,7 +349,6 @@ const OrganizationCard: React.FC<{
 }> = ({ language, isDark, colors, activeOrg, userOrgs, isAdmin, onSwitchOrg, onOpenProject }) => {
   const t = (en: string, si: string) => language === 'si' ? si : en;
 
-  // ─── Types ─────────────────────────────────────────────
   interface OrgData {
     id: string;
     name: string;
@@ -372,17 +370,20 @@ const OrganizationCard: React.FC<{
     }[];
   }
 
-  // ─── State ─────────────────────────────────────────────
   const [orgDataList, setOrgDataList] = React.useState<OrgData[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [expandedOrgId, setExpandedOrgId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<'members' | 'projects'>('members');
+  // ★ v5.2: Message compose state
+  const [composeFor, setComposeFor] = React.useState<{ email: string; name: string; orgName: string } | null>(null);
+  const [composeSubject, setComposeSubject] = React.useState('');
+  const [composeBody, setComposeBody] = React.useState('');
 
   const isSuperAdmin = storageService.isSuperAdmin();
-  const isOrgAdmin = isAdmin; // org-level admin
+  const isOrgAdmin = isAdmin;
+  const currentUserName = storageService.getCurrentUserDisplayName() || 'User';
 
-  // ─── Load data ─────────────────────────────────────────
   React.useEffect(() => {
     let cancelled = false;
 
@@ -394,13 +395,10 @@ const OrganizationCard: React.FC<{
         let orgsToShow: any[] = [];
 
         if (isSuperAdmin) {
-          // SuperAdmin: load ALL orgs
           orgsToShow = await organizationService.getAllOrgs();
         } else if (isOrgAdmin && activeOrg) {
-          // Org Admin: only own org
           orgsToShow = [activeOrg];
         } else if (activeOrg) {
-          // Regular user: only own org
           orgsToShow = [activeOrg];
         }
 
@@ -409,7 +407,6 @@ const OrganizationCard: React.FC<{
         const results: OrgData[] = [];
 
         for (const org of orgsToShow) {
-          // Get members
           let members: any[] = [];
           try {
             members = await organizationService.getOrgMembers(org.id);
@@ -417,13 +414,11 @@ const OrganizationCard: React.FC<{
             console.warn(`Failed to load members for org ${org.name}:`, e);
           }
 
-          // Regular user: filter to only self
           if (!isSuperAdmin && !isOrgAdmin) {
             const currentUserId = await storageService.getCurrentUserId();
             members = members.filter(m => m.userId === currentUserId);
           }
 
-          // Get projects for this org
           let projects: any[] = [];
           try {
             const { data: projData, error: projErr } = await supabase
@@ -433,7 +428,6 @@ const OrganizationCard: React.FC<{
               .order('updated_at', { ascending: false });
 
             if (!projErr && projData) {
-              // Regular user: only own projects
               if (!isSuperAdmin && !isOrgAdmin) {
                 const currentUserId = await storageService.getCurrentUserId();
                 projects = projData.filter(p => p.owner_id === currentUserId);
@@ -445,7 +439,6 @@ const OrganizationCard: React.FC<{
             console.warn(`Failed to load projects for org ${org.name}:`, e);
           }
 
-          // Map projects with owner names
           const memberMap = new Map(members.map(m => [m.userId, m]));
           const mappedProjects = projects.map(p => ({
             id: p.id,
@@ -455,7 +448,6 @@ const OrganizationCard: React.FC<{
             updatedAt: p.updated_at,
           }));
 
-          // Count projects per member
           const memberProjectCounts = new Map<string, number>();
           projects.forEach(p => {
             memberProjectCounts.set(p.owner_id, (memberProjectCounts.get(p.owner_id) || 0) + 1);
@@ -479,7 +471,6 @@ const OrganizationCard: React.FC<{
 
         if (!cancelled) {
           setOrgDataList(results);
-          // Auto-expand first org if only one, or active org
           if (results.length === 1) {
             setExpandedOrgId(results[0].id);
           } else if (activeOrg) {
@@ -497,7 +488,27 @@ const OrganizationCard: React.FC<{
     return () => { cancelled = true; };
   }, [isSuperAdmin, isOrgAdmin, activeOrg?.id]);
 
-  // ─── Styles ────────────────────────────────────────────
+  // ★ v5.2: Open compose modal with pre-filled template
+  const openCompose = (email: string, name: string, orgName: string) => {
+    setComposeFor({ email, name, orgName });
+    setComposeSubject(`EURO-OFFICE: ${t('Message from', 'Sporočilo od')} ${currentUserName}`);
+    setComposeBody('');
+  };
+
+  // ★ v5.2: Send via mailto
+  const sendViaMailto = () => {
+    if (!composeFor) return;
+    const subject = encodeURIComponent(composeSubject);
+    const body = encodeURIComponent(
+      composeBody +
+      `\n\n---\n${t('Sent via EURO-OFFICE', 'Poslano prek EURO-OFFICE')}\n${t('Organization', 'Organizacija')}: ${composeFor.orgName}\n${t('From', 'Od')}: ${currentUserName}`
+    );
+    window.open(`mailto:${composeFor.email}?subject=${subject}&body=${body}`, '_blank');
+    setComposeFor(null);
+    setComposeSubject('');
+    setComposeBody('');
+  };
+
   const roleColors: Record<string, string> = {
     owner: '#f59e0b',
     admin: '#3b82f6',
@@ -512,10 +523,9 @@ const OrganizationCard: React.FC<{
     superadmin: 'Super Admin',
   };
 
-  // ─── Render ────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflow: 'auto' }}>
-      {/* Header badge for SuperAdmin */}
+      {/* SuperAdmin badge */}
       {isSuperAdmin && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -524,9 +534,7 @@ const OrganizationCard: React.FC<{
           border: `1px solid ${isDark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`,
         }}>
           <span style={{ fontSize: 16 }}>👑</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}>
-            SUPER ADMIN
-          </span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}>SUPER ADMIN</span>
           <span style={{ fontSize: 12, color: colors.textSecondary, marginLeft: 'auto' }}>
             {orgDataList.length} {t('organizations', 'organizacij')} · {' '}
             {orgDataList.reduce((s, o) => s + o.members.length, 0)} {t('users', 'uporabnikov')} · {' '}
@@ -535,14 +543,12 @@ const OrganizationCard: React.FC<{
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, color: colors.textSecondary }}>
           <span style={{ fontSize: 13 }}>{t('Loading...', 'Nalaganje...')}</span>
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div style={{ padding: 12, borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 13 }}>
           {error}
@@ -576,7 +582,7 @@ const OrganizationCard: React.FC<{
             border: `1px solid ${isActive ? colors.primary + '60' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')}`,
             background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
           }}>
-            {/* Org header — click to expand */}
+            {/* Org header */}
             <div
               onClick={() => setExpandedOrgId(isExpanded ? null : org.id)}
               style={{
@@ -586,7 +592,6 @@ const OrganizationCard: React.FC<{
                 transition: 'background 0.2s',
               }}
             >
-              {/* Org avatar */}
               <div style={{
                 width: 36, height: 36, borderRadius: 8,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -610,12 +615,9 @@ const OrganizationCard: React.FC<{
                 <span style={{
                   fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
                   background: colors.primary + '20', color: colors.primary,
-                }}>
-                  ACTIVE
-                </span>
+                }}>ACTIVE</span>
               )}
 
-              {/* Switch button for superadmin (non-active orgs) */}
               {isSuperAdmin && !isActive && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onSwitchOrg(org.id); }}
@@ -658,7 +660,7 @@ const OrganizationCard: React.FC<{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           background: roleColors[member.orgRole] + '20',
                           color: roleColors[member.orgRole] || colors.primary,
-                          fontWeight: 700, fontSize: 14,
+                          fontWeight: 700, fontSize: 14, flexShrink: 0,
                         }}>
                           {member.displayName.charAt(0).toUpperCase()}
                         </div>
@@ -678,18 +680,38 @@ const OrganizationCard: React.FC<{
                           fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
                           background: (roleColors[member.orgRole] || '#666') + '20',
                           color: roleColors[member.orgRole] || '#666',
-                          textTransform: 'uppercase',
+                          textTransform: 'uppercase', flexShrink: 0,
                         }}>
                           {roleLabels[member.orgRole] || member.orgRole}
                         </span>
 
                         {/* Project count */}
-                        <span style={{
-                          fontSize: 11, color: colors.textSecondary,
-                          display: 'flex', alignItems: 'center', gap: 3,
-                        }}>
+                        <span style={{ fontSize: 11, color: colors.textSecondary, display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                           📁 {member.projectCount}
                         </span>
+
+                        {/* ★ v5.2: Message button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openCompose(member.email, member.displayName, org.name); }}
+                          title={t(`Send message to ${member.displayName}`, `Pošlji sporočilo ${member.displayName}`)}
+                          style={{
+                            width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            background: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)',
+                            color: colors.primary, fontSize: 14,
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.background = isDark ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.18)';
+                            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.background = isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)';
+                            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+                          }}
+                        >
+                          ✉
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -717,17 +739,12 @@ const OrganizationCard: React.FC<{
                         onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'; }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'; }}
                       >
-                        {/* Project icon */}
                         <div style={{
                           width: 34, height: 34, borderRadius: 8,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: colors.primary + '15', color: colors.primary,
-                          fontSize: 16,
-                        }}>
-                          📋
-                        </div>
+                          background: colors.primary + '15', color: colors.primary, fontSize: 16, flexShrink: 0,
+                        }}>📋</div>
 
-                        {/* Title + owner */}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {project.title}
@@ -737,8 +754,7 @@ const OrganizationCard: React.FC<{
                           </div>
                         </div>
 
-                        {/* Updated date */}
-                        <span style={{ fontSize: 11, color: colors.textSecondary, whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 11, color: colors.textSecondary, whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString(language === 'si' ? 'sl-SI' : 'en-GB') : '—'}
                         </span>
                       </div>
@@ -755,6 +771,132 @@ const OrganizationCard: React.FC<{
       {!loading && !error && orgDataList.length === 0 && (
         <div style={{ padding: 32, textAlign: 'center', color: colors.textSecondary, fontSize: 13 }}>
           {t('No organizations found', 'Ni najdenih organizacij')}
+        </div>
+      )}
+
+      {/* ★ v5.2: Compose Message Modal */}
+      {composeFor && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+        }} onClick={() => setComposeFor(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: isDark ? '#1e1e2e' : '#fff',
+              borderRadius: 12, width: '100%', maxWidth: 480,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+              overflow: 'hidden',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{
+              padding: '16px 20px', borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{ fontSize: 18 }}>✉</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>
+                  {t('Send Message', 'Pošlji sporočilo')}
+                </div>
+                <div style={{ fontSize: 12, color: colors.textSecondary }}>
+                  {t('To', 'Za')}: {composeFor.name} ({composeFor.email})
+                </div>
+              </div>
+              <button onClick={() => setComposeFor(null)} style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: colors.textSecondary, fontSize: 18, padding: 4,
+              }}>✕</button>
+            </div>
+
+            {/* Modal body */}
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Subject */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, display: 'block', marginBottom: 4 }}>
+                  {t('Subject', 'Zadeva')}
+                </label>
+                <input
+                  type="text"
+                  value={composeSubject}
+                  onChange={(e) => setComposeSubject(e.target.value)}
+                  style={{
+                    width: '100%', padding: '8px 12px', borderRadius: 8,
+                    border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+                    color: colors.text, fontSize: 13, outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              {/* Body */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, display: 'block', marginBottom: 4 }}>
+                  {t('Message', 'Sporočilo')}
+                </label>
+                <textarea
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  rows={6}
+                  placeholder={t('Write your message here...', 'Napišite svoje sporočilo tukaj...')}
+                  style={{
+                    width: '100%', padding: '8px 12px', borderRadius: 8,
+                    border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+                    color: colors.text, fontSize: 13, outline: 'none', resize: 'vertical',
+                    fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              {/* Info */}
+              <div style={{
+                fontSize: 11, color: colors.textSecondary, padding: '8px 10px',
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                borderRadius: 6,
+              }}>
+                💡 {t(
+                  'This will open your default email client (Outlook, Gmail, etc.) with the message pre-filled.',
+                  'To bo odprlo vaš privzeti email odjemalec (Outlook, Gmail, ipd.) z vnaprej izpolnjenim sporočilom.'
+                )}
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div style={{
+              padding: '12px 20px', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+              display: 'flex', justifyContent: 'flex-end', gap: 8,
+            }}>
+              <button
+                onClick={() => setComposeFor(null)}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
+                  background: 'transparent', color: colors.textSecondary, fontSize: 13,
+                  fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {t('Cancel', 'Prekliči')}
+              </button>
+              <button
+                onClick={sendViaMailto}
+                disabled={!composeBody.trim()}
+                style={{
+                  padding: '8px 20px', borderRadius: 8, border: 'none',
+                  background: !composeBody.trim() ? (isDark ? '#334' : '#ddd') : colors.primary,
+                  color: !composeBody.trim() ? colors.textSecondary : '#fff',
+                  fontSize: 13, fontWeight: 700, cursor: !composeBody.trim() ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  transition: 'all 0.15s',
+                }}
+              >
+                ✉ {t('Open Email Client', 'Odpri email odjemalec')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
