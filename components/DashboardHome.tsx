@@ -788,19 +788,27 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
 }) => {
   const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
   const c = isDark ? darkColors : lightColors;
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsub = onThemeChange((mode) => setIsDark(mode === 'dark'));
     return unsub;
   }, []);
 
-  // Card order + drag-and-drop
+  // ★ v4.2: Scroll to top on mount
+  useEffect(() => {
+    if (containerRef.current) containerRef.current.scrollTop = 0;
+    const contentArea = document.getElementById('main-content-area');
+    if (contentArea) contentArea.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Card order + drag-and-drop (HTML5 Drag-and-Drop API — NOT Ajax!)
   const [cardOrder, setCardOrder] = useState<CardId[]>(() => {
     try {
       const saved = localStorage.getItem('euro-office-card-order');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Ensure all default cards are present
         const allCards = [...new Set([...parsed.filter((c: string) => DEFAULT_CARD_ORDER.includes(c as CardId)), ...DEFAULT_CARD_ORDER])];
         return allCards as CardId[];
       }
@@ -839,15 +847,13 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
     onDragEnd: () => setDraggingId(null),
   }), [draggingId]);
 
-  // Stats
   const totalProjects = projectsMeta.length;
   const currentProgress = getProjectProgress(projectData);
   const orgName = activeOrg?.name || (language === 'si' ? 'Osebni prostor' : 'Personal workspace');
-  // ——— RENDER ———
   const t = TEXT[language] || TEXT.en;
 
   return (
-    <div style={{
+    <div ref={containerRef} style={{
       padding: spacing.xl,
       maxWidth: 1400, margin: '0 auto',
       display: 'flex', flexDirection: 'column' as const, gap: spacing.lg,
@@ -866,15 +872,14 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
         </p>
       </div>
 
-      {/* Cards Grid */}
+      {/* Cards Grid — 2-column, activity card spans full width */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
         gap: spacing.lg,
         alignItems: 'start',
       }}>
         {cardOrder.map(cardId => {
-          // Hide admin card for non-admins
           if (cardId === 'admin' && !isAdmin) return null;
 
           const cardConfig: Record<CardId, { title: string; icon: string; wide?: boolean }> = {
@@ -892,28 +897,21 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
 
           return (
             <DashboardCard
-              key={cardId}
-              id={cardId}
-              title={config.title}
-              icon={config.icon}
-              isDark={isDark}
-              colors={c}
+              key={cardId} id={cardId}
+              title={config.title} icon={config.icon}
+              isDark={isDark} colors={c}
               wide={config.wide}
-              dragHandlers={dragHandlers}
-              draggingId={draggingId}
+              dragHandlers={dragHandlers} draggingId={draggingId}
             >
               {/* ═══ PROJECTS CARD ═══ */}
               {cardId === 'projects' && (
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm }}>
-                  <button
-                    onClick={onCreateProject}
-                    style={{
-                      background: c.primary[500], color: '#fff', border: 'none', borderRadius: radii.md,
-                      padding: `${spacing.sm} ${spacing.md}`, fontSize: typography.fontSize.sm,
-                      cursor: 'pointer', fontWeight: typography.fontWeight.semibold,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-                    }}
-                  >
+                  <button onClick={onCreateProject} style={{
+                    background: c.primary[500], color: '#fff', border: 'none', borderRadius: radii.md,
+                    padding: `${spacing.sm} ${spacing.md}`, fontSize: typography.fontSize.sm,
+                    cursor: 'pointer', fontWeight: typography.fontWeight.semibold,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+                  }}>
                     + {language === 'si' ? 'Nov projekt' : 'New Project'}
                   </button>
                   {projectsMeta.length === 0 && (
@@ -931,8 +929,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
                           border: `1px solid ${p.id === currentProjectId ? c.primary[400] : c.border.light}`,
                           cursor: 'pointer', background: p.id === currentProjectId ? (isDark ? c.primary[900] + '20' : c.primary[50]) : 'transparent',
                           transition: `all ${animation.duration.fast} ${animation.easing.default}`,
-                        }}
-                      >
+                        }}>
                         <ProgressRing percent={progress} size={40} strokeWidth={4} color={c.primary[500]} bgColor={c.border.light} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold, color: c.text.heading, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -999,8 +996,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
                         textAlign: 'left' as const,
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.primary[900] + '30' : c.primary[50]; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                    >
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                       <span>{item.icon}</span> {item.label}
                     </button>
                   ))}
@@ -1037,8 +1033,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
                             textAlign: 'left' as const, width: '100%',
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.surface.sidebar : c.surface.main; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                        >
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                           🏢 {org.name}
                         </button>
                       ))}
@@ -1049,33 +1044,26 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
 
               {/* ═══ AI SETTINGS CARD ═══ */}
               {cardId === 'aiSettings' && (
-                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm, alignItems: 'center', textAlign: 'center' as const }}>
-                  <div style={{ fontSize: '32px' }}>⚙️</div>
-                  <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted }}>
-                    {language === 'si' ? 'Konfigurirajte AI ponudnika, modele in API ključe' : 'Configure AI provider, models and API keys'}
-                  </div>
-                  <button onClick={onOpenSettings}
-                    style={{
-                      background: c.primary[500], color: '#fff', border: 'none', borderRadius: radii.md,
-                      padding: `${spacing.xs} ${spacing.md}`, fontSize: typography.fontSize.xs,
-                      cursor: 'pointer', fontWeight: typography.fontWeight.semibold,
-                    }}
-                  >
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm }}>
+                  <p style={{ fontSize: typography.fontSize.xs, color: c.text.muted, margin: 0 }}>
+                    {language === 'si' ? 'Konfigurirajte AI ponudnika in API ključ za generiranje vsebin.' : 'Configure your AI provider and API key for content generation.'}
+                  </p>
+                  <button onClick={onOpenSettings} style={{
+                    background: c.primary[500], color: '#fff', border: 'none', borderRadius: radii.md,
+                    padding: `${spacing.sm} ${spacing.md}`, fontSize: typography.fontSize.xs,
+                    cursor: 'pointer', fontWeight: typography.fontWeight.semibold,
+                  }}>
                     {language === 'si' ? 'Odpri nastavitve' : 'Open Settings'}
                   </button>
                 </div>
               )}
 
-              {/* ═══ PROJECT CHARTS CARD (was: Recent Activity) ═══ */}
+              {/* ═══ PROJECT CHARTS CARD (wide = span 2) ═══ */}
               {cardId === 'activity' && (
                 <ProjectChartsCard
-                  language={language}
-                  isDark={isDark}
-                  colors={c}
-                  projectsMeta={projectsMeta}
-                  projectData={projectData}
-                  currentProjectId={currentProjectId}
-                  onOpenProject={onOpenProject}
+                  language={language} isDark={isDark} colors={c}
+                  projectsMeta={projectsMeta} projectData={projectData}
+                  currentProjectId={currentProjectId} onOpenProject={onOpenProject}
                 />
               )}
             </DashboardCard>
