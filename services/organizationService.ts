@@ -1,9 +1,12 @@
 // services/organizationService.ts
 // ═══════════════════════════════════════════════════════════════
 // Organization Service — Multi-Tenant organization management
-// v1.2 — 2026-02-19
+// v1.3 — 2026-02-20
 //
 // CHANGES:
+//   ★ v1.3: getOrgMembers() — separate queries instead of embedded JOIN
+//           — fixes RLS issue where profiles JOIN returns null
+//           — also fetches first_name, last_name from profiles
 //   ★ v1.2: createOrg() — slug is now optional (auto-generated from name)
 //           — return now includes orgId for convenience
 //   v1.1: Complete implementation of all service methods
@@ -44,6 +47,8 @@ export interface OrganizationMember {
   joinedAt: string;
   email?: string;
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface OrganizationInstructions {
@@ -80,19 +85,15 @@ function mapOrg(row: any): Organization {
   };
 }
 
-/**
- * ★ v1.2: Generate a URL-safe slug from organization name.
- * "Moje Podjetje d.o.o." → "moje-podjetje-doo"
- */
 function generateSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[čćž]/g, (c) => ({ 'č': 'c', 'ć': 'c', 'ž': 'z' }[c] || c))
     .replace(/[šđ]/g, (c) => ({ 'š': 's', 'đ': 'd' }[c] || c))
-    .replace(/[^a-z0-9]+/g, '-')   // non-alphanumeric → dash
-    .replace(/^-+|-+$/g, '')        // trim leading/trailing dashes
-    .slice(0, 60)                   // max 60 chars
-    + '-' + Date.now().toString(36); // append unique suffix
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    + '-' + Date.now().toString(36);
 }
 
 // ─── Public API ──────────────────────────────────────────────
@@ -149,7 +150,6 @@ export const organizationService = {
     const userId = await getAuthUserId();
     if (!userId) return { success: false, message: 'Not authenticated' };
 
-    // Verify user is member of this org
     const { data: membership, error: memError } = await supabase
       .from('organization_members')
       .select('id')
@@ -161,7 +161,6 @@ export const organizationService = {
       return { success: false, message: 'You are not a member of this organization' };
     }
 
-    // Update active_organization_id in profiles
     const { error: updateError } = await supabase
       .from('profiles')
       .update({ active_organization_id: orgId })
@@ -172,10 +171,8 @@ export const organizationService = {
       return { success: false, message: updateError.message };
     }
 
-    // Refresh cache
     await this.loadActiveOrg();
 
-    // Invalidate org instructions cache (new org = new rules)
     cachedOrgInstructions = null;
     cachedOrgInstructionsOrgId = null;
 
@@ -228,10 +225,6 @@ export const organizationService = {
   // ORGANIZATION CRUD
   // ═══════════════════════════════════════════════════════════
 
-  /**
-   * ★ v1.2: slug is now optional — auto-generated from name if not provided.
-   * Returns orgId for direct use in storageService.register().
-   */
   async createOrg(name: string, slug?: string): Promise<{ success: boolean; orgId?: string; org?: Organization; message?: string }> {
     const userId = await getAuthUserId();
     if (!userId) return { success: false, message: 'Not authenticated' };
@@ -248,23 +241,20 @@ export const organizationService = {
       return { success: false, message: error.message };
     }
 
-    // Auto-add creator as owner
     const { error: memberError } = await supabase
       .from('organization_members')
       .insert({ organization_id: data.id, user_id: userId, org_role: 'owner' });
 
     if (memberError) {
       console.warn('[OrgService] createOrg: Failed to add owner membership:', memberError.message);
-      // Org was created — continue but warn
     }
 
-    // Create empty instructions row
     await supabase
       .from('organization_instructions')
       .insert({ organization_id: data.id, instructions: null, updated_by: userId });
 
     const org = mapOrg(data);
-    cachedUserOrgs = null; // invalidate
+    cachedUserOrgs = null;
     return { success: true, orgId: data.id, org };
   },
 
@@ -276,7 +266,6 @@ export const organizationService = {
 
     if (error) return { success: false, message: error.message };
 
-    // Refresh cache if active org was updated
     if (cachedActiveOrg?.id === orgId) {
       await this.loadActiveOrg();
     }
@@ -313,28 +302,69 @@ export const organizationService = {
   // MEMBER MANAGEMENT
   // ═══════════════════════════════════════════════════════════
 
+  /**
+   * ★ v1.3: Two separate queries instead of embedded JOIN.
+   * This avoids RLS issues where the PostgREST embedded query
+   * on profiles returns null because RLS blocks cross-user reads.
+   */
   async getOrgMembers(orgId: string): Promise<OrganizationMember[]> {
-    const { data, error } = await supabase
+    // Step 1: Get member rows (organization_members only)
+    const { data: memberRows, error: memberError } = await supabase
       .from('organization_members')
-      .select('*, profiles(email, display_name)')
+      .select('id, organization_id, user_id, org_role, joined_at')
       .eq('organization_id', orgId)
       .order('joined_at');
 
-    if (error || !data) return [];
+    if (memberError || !memberRows || memberRows.length === 0) {
+      console.warn('[OrgService] getOrgMembers: No members found or error:', memberError?.message);
+      return [];
+    }
 
-    return data.map((row: any) => ({
-      id: row.id,
-      organizationId: row.organization_id,
-      userId: row.user_id,
-      orgRole: row.org_role as OrgRole,
-      joinedAt: row.joined_at,
-      email: row.profiles?.email || '',
-      displayName: row.profiles?.display_name || '',
-    }));
+    // Step 2: Get profiles for all member user IDs
+    const userIds = memberRows.map((r: any) => r.user_id);
+
+    const { data: profileRows, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, display_name, first_name, last_name, role')
+      .in('id', userIds);
+
+    if (profileError) {
+      console.warn('[OrgService] getOrgMembers: Profiles query failed:', profileError.message);
+    }
+
+    // Step 3: Build profile lookup map
+    const profileMap = new Map<string, any>();
+    if (profileRows) {
+      for (const p of profileRows) {
+        profileMap.set(p.id, p);
+      }
+    }
+
+    // Step 4: Merge members + profiles
+    return memberRows.map((row: any) => {
+      const profile = profileMap.get(row.user_id);
+      const firstName = profile?.first_name || '';
+      const lastName = profile?.last_name || '';
+      const displayName = profile?.display_name
+        || (firstName && lastName ? `${firstName} ${lastName}` : '')
+        || profile?.email?.split('@')[0]
+        || 'Unknown';
+
+      return {
+        id: row.id,
+        organizationId: row.organization_id,
+        userId: row.user_id,
+        orgRole: row.org_role as OrgRole,
+        joinedAt: row.joined_at,
+        email: profile?.email || '',
+        displayName,
+        firstName,
+        lastName,
+      };
+    });
   },
 
   async addMember(orgId: string, userEmail: string, role: OrgRole = 'member'): Promise<{ success: boolean; message?: string }> {
-    // Find user by email
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('id')
@@ -345,7 +375,6 @@ export const organizationService = {
       return { success: false, message: 'User not found with this email' };
     }
 
-    // Check if already member
     const { data: existing } = await supabase
       .from('organization_members')
       .select('id')
@@ -411,7 +440,6 @@ export const organizationService = {
     const orgId = cachedActiveOrg?.id;
     if (!orgId) return null;
 
-    // Return cached if same org
     if (cachedOrgInstructionsOrgId === orgId && cachedOrgInstructions !== undefined) {
       return cachedOrgInstructions;
     }
@@ -422,10 +450,6 @@ export const organizationService = {
     return cachedOrgInstructions;
   },
 
-  /**
-   * Synchronous version — returns cached org instructions.
-   * Used by Instructions.ts via getEffectiveOverrideSync.
-   */
   getActiveOrgInstructionsSync(): Record<string, string> | null {
     if (cachedOrgInstructionsOrgId === cachedActiveOrg?.id) {
       return cachedOrgInstructions;
@@ -450,7 +474,6 @@ export const organizationService = {
 
     if (error) return { success: false, message: error.message };
 
-    // Update cache if active org
     if (cachedActiveOrg?.id === orgId) {
       cachedOrgInstructions = instructions;
       cachedOrgInstructionsOrgId = orgId;
