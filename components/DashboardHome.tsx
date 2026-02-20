@@ -330,14 +330,354 @@ const ProjectChartsCard: React.FC<{
     </div>
   );
 };
+// ═══════════════════════════════════════════════════════════
+// EMAIL MODAL COMPONENT (v6.0)
+// ═══════════════════════════════════════════════════════════
+interface EmailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  recipientName: string;
+  recipientEmail: string;
+  senderName?: string;
+  isDarkMode: boolean;
+}
+
+const EmailModal: React.FC<EmailModalProps> = ({
+  isOpen,
+  onClose,
+  recipientName,
+  recipientEmail,
+  senderName = '',
+  isDarkMode,
+}) => {
+  const [subject, setSubject] = React.useState('');
+  const [body, setBody] = React.useState('');
+  const [isSending, setIsSending] = React.useState(false);
+
+  // Reset form when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      setSubject('');
+      setBody('');
+      setIsSending(false);
+    }
+  }, [isOpen]);
+
+  // Close on Escape
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const colors = isDarkMode ? darkColors : lightColors;
+
+  const handleSendViaMailto = () => {
+    const mailtoSubject = encodeURIComponent(subject);
+    const mailtoBody = encodeURIComponent(body + (senderName ? `\n\n---\n${senderName}` : ''));
+    const mailtoLink = `mailto:${recipientEmail}?subject=${mailtoSubject}&body=${mailtoBody}`;
+    window.open(mailtoLink, '_blank');
+    setIsSending(true);
+    setTimeout(() => {
+      onClose();
+    }, 500);
+  };
+
+  const handleSendViaGmail = () => {
+    const gmailSubject = encodeURIComponent(subject);
+    const gmailBody = encodeURIComponent(body + (senderName ? `\n\n---\n${senderName}` : ''));
+    const gmailLink = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(recipientEmail)}&su=${gmailSubject}&body=${gmailBody}`;
+    window.open(gmailLink, '_blank');
+    setTimeout(() => onClose(), 500);
+  };
+
+  const handleSendViaOutlook = () => {
+    const outlookSubject = encodeURIComponent(subject);
+    const outlookBody = encodeURIComponent(body + (senderName ? `\n\n---\n${senderName}` : ''));
+    const outlookLink = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(recipientEmail)}&subject=${outlookSubject}&body=${outlookBody}`;
+    window.open(outlookLink, '_blank');
+    setTimeout(() => onClose(), 500);
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10000,
+        backdropFilter: 'blur(4px)',
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: colors.surface,
+          borderRadius: radii.lg,
+          boxShadow: shadows.xl || '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+          width: '90%',
+          maxWidth: '640px',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          padding: spacing.xl,
+          position: 'relative',
+          border: `1px solid ${colors.border}`,
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg }}>
+          <h2 style={{
+            margin: 0,
+            fontSize: typography.fontSize.xl || '1.25rem',
+            fontWeight: typography.fontWeight.bold || 700,
+            color: colors.text,
+          }}>
+            Pošlji sporočilo
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '1.5rem',
+              cursor: 'pointer',
+              color: colors.textSecondary,
+              padding: '4px 8px',
+              borderRadius: radii.sm,
+              lineHeight: 1,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            title="Zapri"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Recipient (read-only) */}
+        <div style={{ marginBottom: spacing.md }}>
+          <label style={{
+            display: 'block',
+            fontSize: typography.fontSize.sm || '0.875rem',
+            fontWeight: typography.fontWeight.semibold || 600,
+            color: colors.textSecondary,
+            marginBottom: '4px',
+          }}>
+            Prejemnik
+          </label>
+          <div style={{
+            padding: `${spacing.sm} ${spacing.md}`,
+            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+            borderRadius: radii.md,
+            border: `1px solid ${colors.border}`,
+            color: colors.text,
+            fontSize: typography.fontSize.base || '1rem',
+          }}>
+            <strong>{recipientName}</strong>
+            <span style={{ color: colors.textSecondary, marginLeft: spacing.sm }}>
+              &lt;{recipientEmail}&gt;
+            </span>
+          </div>
+        </div>
+
+        {/* Subject */}
+        <div style={{ marginBottom: spacing.md }}>
+          <label style={{
+            display: 'block',
+            fontSize: typography.fontSize.sm || '0.875rem',
+            fontWeight: typography.fontWeight.semibold || 600,
+            color: colors.textSecondary,
+            marginBottom: '4px',
+          }}>
+            Zadeva
+          </label>
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Vnesite zadevo sporočila..."
+            style={{
+              width: '100%',
+              padding: `${spacing.sm} ${spacing.md}`,
+              backgroundColor: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: radii.md,
+              color: colors.text,
+              fontSize: typography.fontSize.base || '1rem',
+              outline: 'none',
+              boxSizing: 'border-box',
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = colors.primary)}
+            onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+          />
+        </div>
+
+        {/* Body */}
+        <div style={{ marginBottom: spacing.lg }}>
+          <label style={{
+            display: 'block',
+            fontSize: typography.fontSize.sm || '0.875rem',
+            fontWeight: typography.fontWeight.semibold || 600,
+            color: colors.textSecondary,
+            marginBottom: '4px',
+          }}>
+            Sporočilo
+          </label>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Napišite vaše sporočilo..."
+            rows={8}
+            style={{
+              width: '100%',
+              padding: spacing.md,
+              backgroundColor: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: radii.md,
+              color: colors.text,
+              fontSize: typography.fontSize.base || '1rem',
+              outline: 'none',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+              minHeight: '160px',
+              fontFamily: 'inherit',
+              lineHeight: 1.5,
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = colors.primary)}
+            onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+          />
+        </div>
+
+        {/* Send buttons */}
+        <div style={{
+          display: 'flex',
+          gap: spacing.sm,
+          flexWrap: 'wrap',
+          justifyContent: 'flex-end',
+          borderTop: `1px solid ${colors.border}`,
+          paddingTop: spacing.md,
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: `${spacing.sm} ${spacing.lg}`,
+              backgroundColor: 'transparent',
+              border: `1px solid ${colors.border}`,
+              borderRadius: radii.md,
+              color: colors.textSecondary,
+              fontSize: typography.fontSize.sm || '0.875rem',
+              cursor: 'pointer',
+              fontWeight: typography.fontWeight.medium || 500,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            Prekliči
+          </button>
+
+          <button
+            onClick={handleSendViaGmail}
+            disabled={!subject.trim() || !body.trim()}
+            style={{
+              padding: `${spacing.sm} ${spacing.lg}`,
+              backgroundColor: '#EA4335',
+              border: 'none',
+              borderRadius: radii.md,
+              color: '#fff',
+              fontSize: typography.fontSize.sm || '0.875rem',
+              cursor: (!subject.trim() || !body.trim()) ? 'not-allowed' : 'pointer',
+              fontWeight: typography.fontWeight.semibold || 600,
+              opacity: (!subject.trim() || !body.trim()) ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            📧 Gmail
+          </button>
+
+          <button
+            onClick={handleSendViaOutlook}
+            disabled={!subject.trim() || !body.trim()}
+            style={{
+              padding: `${spacing.sm} ${spacing.lg}`,
+              backgroundColor: '#0078D4',
+              border: 'none',
+              borderRadius: radii.md,
+              color: '#fff',
+              fontSize: typography.fontSize.sm || '0.875rem',
+              cursor: (!subject.trim() || !body.trim()) ? 'not-allowed' : 'pointer',
+              fontWeight: typography.fontWeight.semibold || 600,
+              opacity: (!subject.trim() || !body.trim()) ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            📨 Outlook
+          </button>
+
+          <button
+            onClick={handleSendViaMailto}
+            disabled={!subject.trim() || !body.trim()}
+            style={{
+              padding: `${spacing.sm} ${spacing.lg}`,
+              backgroundColor: colors.primary,
+              border: 'none',
+              borderRadius: radii.md,
+              color: '#fff',
+              fontSize: typography.fontSize.sm || '0.875rem',
+              cursor: (!subject.trim() || !body.trim()) ? 'not-allowed' : 'pointer',
+              fontWeight: typography.fontWeight.semibold || 600,
+              opacity: (!subject.trim() || !body.trim()) ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            ✉️ Email klient
+          </button>
+        </div>
+
+        {/* Sending indicator */}
+        {isSending && (
+          <div style={{
+            textAlign: 'center',
+            marginTop: spacing.md,
+            color: colors.success || '#22c55e',
+            fontSize: typography.fontSize.sm || '0.875rem',
+          }}>
+            Odpiranje email klienta...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // ═══════════════════════════════════════════════════════════════
 // OrganizationCard — v5.2 — 2026-02-20
 // + Email/Message button per member
 // + mailto: with pre-filled subject & body template
 // ═══════════════════════════════════════════════════════════════
-
-const OrganizationCard: React.FC<{
+// Email modal state
+  const [emailModalOpen, setEmailModalOpen] = React.useState(false);
+  const [emailRecipient, setEmailRecipient] = React.useState<{ name: string; email: string }>({ name: '', email: '' });
+  const OrganizationCard: React.FC<{
   language: 'en' | 'si';
   isDark: boolean;
   colors: any;
