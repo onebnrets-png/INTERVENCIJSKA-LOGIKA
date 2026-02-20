@@ -183,6 +183,13 @@ const App = () => {
       setActiveView('dashboard');
     }
   }, [activeView, pm.currentProjectId]);
+    // ★ v4.2: Reset scroll position when switching views
+  useEffect(() => {
+    const contentArea = document.getElementById('main-content-area');
+    if (contentArea) {
+      contentArea.scrollTop = 0;
+    }
+  }, [activeView]);
 
   /* ═══ DERIVED STATE ═══ */
   const t = TEXT[language] || TEXT['en'];
