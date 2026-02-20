@@ -1,7 +1,13 @@
 // components/DashboardHome.tsx
 // ═══════════════════════════════════════════════════════════════════
 // EURO-OFFICE Dashboard Home — Main view after login
-// v5.0 — 2026-02-20
+// v6.0 — 2026-02-20
+//
+// CHANGES v6.0:
+//   - NEW: EmailModal — fullscreen overlay za pošiljanje emaila članu
+//   - NEW: 3 send opcije: Gmail, Outlook, Default email klient
+//   - NEW: Modal se odpre IZVEN kartice (fullscreen overlay z backdrop blur)
+//   - FIX: Removed inline compose from OrganizationCard (replaced with modal trigger)
 //
 // CHANGES v5.0:
 //   - FIX: AI chat markdown symbols now rendered as formatted text
@@ -68,20 +74,15 @@ function renderFormattedText(text: string): React.ReactNode {
   const elements: React.ReactNode[] = [];
 
   const formatInline = (line: string, key: string): React.ReactNode => {
-    // Process inline: **bold**, *italic*, `code`
     const parts: React.ReactNode[] = [];
     let remaining = line;
     let partIdx = 0;
 
     while (remaining.length > 0) {
-      // Bold: **text**
       const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-      // Italic: *text*
       const italicMatch = remaining.match(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/);
-      // Code: `text`
       const codeMatch = remaining.match(/`(.+?)`/);
 
-      // Find earliest match
       const matches = [
         boldMatch ? { type: 'bold', match: boldMatch, idx: remaining.indexOf(boldMatch[0]) } : null,
         italicMatch ? { type: 'italic', match: italicMatch, idx: remaining.indexOf(italicMatch[0]) } : null,
@@ -94,12 +95,10 @@ function renderFormattedText(text: string): React.ReactNode {
       }
 
       const first = matches[0]!;
-      // Text before match
       if (first.idx > 0) {
         parts.push(<span key={`${key}-${partIdx++}`}>{remaining.substring(0, first.idx)}</span>);
       }
 
-      // Matched content
       const inner = first.match[1];
       if (first.type === 'bold') {
         parts.push(<strong key={`${key}-${partIdx++}`} style={{ fontWeight: 700 }}>{inner}</strong>);
@@ -118,34 +117,23 @@ function renderFormattedText(text: string): React.ReactNode {
   lines.forEach((line, i) => {
     const trimmed = line.trim();
 
-    // Headings: ### → h3, ## → h2, # → h1
     if (trimmed.startsWith('### ')) {
       elements.push(<div key={`l-${i}`} style={{ fontWeight: 700, fontSize: '1em', margin: '8px 0 4px' }}>{formatInline(trimmed.slice(4), `h3-${i}`)}</div>);
     } else if (trimmed.startsWith('## ')) {
       elements.push(<div key={`l-${i}`} style={{ fontWeight: 700, fontSize: '1.05em', margin: '8px 0 4px' }}>{formatInline(trimmed.slice(3), `h2-${i}`)}</div>);
     } else if (trimmed.startsWith('# ')) {
       elements.push(<div key={`l-${i}`} style={{ fontWeight: 700, fontSize: '1.1em', margin: '10px 0 4px' }}>{formatInline(trimmed.slice(2), `h1-${i}`)}</div>);
-    }
-    // Horizontal rule
-    else if (trimmed === '---' || trimmed === '***') {
+    } else if (trimmed === '---' || trimmed === '***') {
       elements.push(<hr key={`l-${i}`} style={{ border: 'none', borderTop: '1px solid rgba(128,128,128,0.2)', margin: '8px 0' }} />);
-    }
-    // Bullet list
-    else if (/^[\*\-]\s/.test(trimmed)) {
+    } else if (/^[\*\-]\s/.test(trimmed)) {
       elements.push(<div key={`l-${i}`} style={{ paddingLeft: '12px', margin: '2px 0', display: 'flex', gap: '6px' }}><span style={{ flexShrink: 0 }}>•</span><span>{formatInline(trimmed.slice(2), `li-${i}`)}</span></div>);
-    }
-    // Numbered list
-    else if (/^\d+\.\s/.test(trimmed)) {
+    } else if (/^\d+\.\s/.test(trimmed)) {
       const numEnd = trimmed.indexOf('. ');
       const num = trimmed.substring(0, numEnd + 1);
       elements.push(<div key={`l-${i}`} style={{ paddingLeft: '12px', margin: '2px 0', display: 'flex', gap: '6px' }}><span style={{ flexShrink: 0 }}>{num}</span><span>{formatInline(trimmed.slice(numEnd + 2), `nl-${i}`)}</span></div>);
-    }
-    // Empty line
-    else if (trimmed === '') {
+    } else if (trimmed === '') {
       elements.push(<div key={`l-${i}`} style={{ height: '6px' }} />);
-    }
-    // Normal paragraph
-    else {
+    } else {
       elements.push(<div key={`l-${i}`} style={{ margin: '2px 0' }}>{formatInline(trimmed, `p-${i}`)}</div>);
     }
   });
@@ -245,6 +233,7 @@ const DropZone: React.FC<{ index: number; isDark: boolean; colors: any; dragging
   if (!draggingId) return null;
   return (<div onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setIsOver(true); }} onDragLeave={() => setIsOver(false)} onDrop={(e) => { e.preventDefault(); setIsOver(false); onDropAtEnd(e); }} style={{ gridColumn: 'span 1', minHeight: 80, borderRadius: radii.xl, border: `2px dashed ${isOver ? c.primary[400] : c.border.light}`, background: isOver ? (isDark ? c.primary[900]+'20' : c.primary[50]) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease', color: c.text.muted, fontSize: typography.fontSize.xs }}>{isOver ? '↓' : ''}</div>);
 };
+
 // ——— Project Charts Card — resizable + auto-load ————————
 
 const ProjectChartsCard: React.FC<{
@@ -282,14 +271,12 @@ const ProjectChartsCard: React.FC<{
   const completeness = useMemo(() => activeData ? calculateCompleteness(activeData) : 0, [activeData]);
   const isLoading = loadingId === activeProjectId;
 
-  // ★ v5.0: Responsive chart dimensions based on colSpan
   const chartW = colSpan >= 2 ? CHART_WIDTH : Math.min(200, CHART_WIDTH);
   const chartH = colSpan >= 2 ? CHART_HEIGHT : Math.min(130, CHART_HEIGHT);
   const isNarrow = colSpan < 2;
 
   return (
     <div style={{ display: 'flex', flexDirection: isNarrow ? 'column' as const : 'row' as const, gap: spacing.md, minHeight: isNarrow ? 300 : 220 }}>
-      {/* Left: acronyms */}
       <div style={{ width: isNarrow ? '100%' : 120, minWidth: isNarrow ? undefined : 100, flexShrink: 0, borderRight: isNarrow ? 'none' : `1px solid ${c.border.light}`, borderBottom: isNarrow ? `1px solid ${c.border.light}` : 'none', overflowY: 'auto', overflowX: isNarrow ? 'auto' : 'hidden', paddingRight: isNarrow ? 0 : spacing.xs, paddingBottom: isNarrow ? spacing.xs : 0, display: isNarrow ? 'flex' : 'block', gap: isNarrow ? spacing.xs : undefined, maxHeight: isNarrow ? 60 : undefined }}>
         {!isNarrow && <div style={{ fontSize: '10px', color: c.text.muted, fontWeight: typography.fontWeight.semibold, marginBottom: spacing.sm, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>{language === 'si' ? 'Projekti' : 'Projects'} ({projectsMeta.length})</div>}
         {projectsMeta.map(p => {
@@ -310,7 +297,6 @@ const ProjectChartsCard: React.FC<{
         })}
       </div>
 
-      {/* Right: charts */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: spacing.xs }}>
         {activeProjectId && (() => { const meta = projectsMeta.find(p => p.id === activeProjectId); if (!meta) return null; return (<div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs }}>{meta.acronym && <span style={{ fontSize: '11px', background: isDark ? c.primary[900] : c.primary[100], color: c.primary[700], padding: '2px 8px', borderRadius: radii.full, fontWeight: typography.fontWeight.bold }}>{meta.acronym}</span>}<span style={{ fontSize: typography.fontSize.xs, color: c.text.heading, fontWeight: typography.fontWeight.semibold, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.title || meta.name || ''}</span>{activeProjectId !== currentProjectId && <button onClick={(e) => { e.stopPropagation(); onOpenProject(activeProjectId); }} style={{ background: 'none', border: `1px solid ${c.border.light}`, borderRadius: radii.md, padding: '2px 8px', fontSize: '10px', cursor: 'pointer', color: c.primary[600], fontWeight: typography.fontWeight.semibold, marginLeft: 'auto', flexShrink: 0 }}>{language === 'si' ? 'Odpri' : 'Open'}</button>}</div>); })()}
         {!activeProjectId && <div style={{ color: c.text.muted, fontSize: typography.fontSize.sm, textAlign: 'center' as const, padding: spacing.xl, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{language === 'si' ? 'Izberite projekt' : 'Select a project'}</div>}
@@ -330,354 +316,276 @@ const ProjectChartsCard: React.FC<{
     </div>
   );
 };
+
 // ═══════════════════════════════════════════════════════════
-// EMAIL MODAL COMPONENT (v6.0)
+// EMAIL MODAL — v6.0 — Fullscreen overlay with Gmail/Outlook/Mailto
 // ═══════════════════════════════════════════════════════════
+
 interface EmailModalProps {
   isOpen: boolean;
   onClose: () => void;
   recipientName: string;
   recipientEmail: string;
-  senderName?: string;
+  orgName: string;
+  senderName: string;
+  language: 'en' | 'si';
   isDarkMode: boolean;
 }
 
 const EmailModal: React.FC<EmailModalProps> = ({
-  isOpen,
-  onClose,
-  recipientName,
-  recipientEmail,
-  senderName = '',
-  isDarkMode,
+  isOpen, onClose, recipientName, recipientEmail, orgName, senderName, language, isDarkMode,
 }) => {
-  const [subject, setSubject] = React.useState('');
-  const [body, setBody] = React.useState('');
-  const [isSending, setIsSending] = React.useState(false);
+  const t = (en: string, si: string) => language === 'si' ? si : en;
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sent, setSent] = useState(false);
 
-  // Reset form when modal opens
-  React.useEffect(() => {
+  // Reset on open
+  useEffect(() => {
     if (isOpen) {
-      setSubject('');
+      setSubject(`EURO-OFFICE: ${t('Message from', 'Sporočilo od')} ${senderName}`);
       setBody('');
-      setIsSending(false);
+      setSent(false);
     }
   }, [isOpen]);
 
   // Close on Escape
-  React.useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose();
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const colors = isDarkMode ? darkColors : lightColors;
+  const c = isDarkMode ? darkColors : lightColors;
 
-  const handleSendViaMailto = () => {
-    const mailtoSubject = encodeURIComponent(subject);
-    const mailtoBody = encodeURIComponent(body + (senderName ? `\n\n---\n${senderName}` : ''));
-    const mailtoLink = `mailto:${recipientEmail}?subject=${mailtoSubject}&body=${mailtoBody}`;
-    window.open(mailtoLink, '_blank');
-    setIsSending(true);
-    setTimeout(() => {
-      onClose();
-    }, 500);
+  const buildSignature = () =>
+    `\n\n---\n${t('Sent via EURO-OFFICE', 'Poslano prek EURO-OFFICE')}\n${t('Organization', 'Organizacija')}: ${orgName}\n${t('From', 'Od')}: ${senderName}`;
+
+  const fullBody = body + buildSignature();
+
+  const handleGmail = () => {
+    const url = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
+    window.open(url, '_blank');
+    setSent(true);
+    setTimeout(onClose, 600);
   };
 
-  const handleSendViaGmail = () => {
-    const gmailSubject = encodeURIComponent(subject);
-    const gmailBody = encodeURIComponent(body + (senderName ? `\n\n---\n${senderName}` : ''));
-    const gmailLink = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(recipientEmail)}&su=${gmailSubject}&body=${gmailBody}`;
-    window.open(gmailLink, '_blank');
-    setTimeout(() => onClose(), 500);
+  const handleOutlook = () => {
+    const url = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(recipientEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
+    window.open(url, '_blank');
+    setSent(true);
+    setTimeout(onClose, 600);
   };
 
-  const handleSendViaOutlook = () => {
-    const outlookSubject = encodeURIComponent(subject);
-    const outlookBody = encodeURIComponent(body + (senderName ? `\n\n---\n${senderName}` : ''));
-    const outlookLink = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(recipientEmail)}&subject=${outlookSubject}&body=${outlookBody}`;
-    window.open(outlookLink, '_blank');
-    setTimeout(() => onClose(), 500);
+  const handleMailto = () => {
+    window.open(`mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`, '_blank');
+    setSent(true);
+    setTimeout(onClose, 600);
+  };
+
+  const canSend = subject.trim().length > 0 && body.trim().length > 0;
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 14px', borderRadius: 8,
+    border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
+    background: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+    color: c.text?.heading || c.text, fontSize: 14, outline: 'none',
+    boxSizing: 'border-box' as const, fontFamily: 'inherit',
+    transition: 'border-color 0.2s',
   };
 
   return (
     <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10000,
-        backdropFilter: 'blur(4px)',
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 10000, backdropFilter: 'blur(4px)', padding: 20,
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
-          backgroundColor: colors.surface,
-          borderRadius: radii.lg,
-          boxShadow: shadows.xl || '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          width: '90%',
-          maxWidth: '640px',
-          maxHeight: '90vh',
+          background: isDarkMode ? '#1e1e2e' : '#ffffff',
+          borderRadius: 16, width: '100%', maxWidth: 600, maxHeight: '90vh',
           overflow: 'auto',
-          padding: spacing.xl,
-          position: 'relative',
-          border: `1px solid ${colors.border}`,
+          boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
+          border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
         }}
       >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg }}>
-          <h2 style={{
-            margin: 0,
-            fontSize: typography.fontSize.xl || '1.25rem',
-            fontWeight: typography.fontWeight.bold || 700,
-            color: colors.text,
+        {/* ── Header ── */}
+        <div style={{
+          padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 12,
+          borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            color: '#fff', fontSize: 18,
           }}>
-            Pošlji sporočilo
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '1.5rem',
-              cursor: 'pointer',
-              color: colors.textSecondary,
-              padding: '4px 8px',
-              borderRadius: radii.sm,
-              lineHeight: 1,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            title="Zapri"
-          >
+            ✉
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: c.text?.heading || c.text }}>
+              {t('Send Message', 'Pošlji sporočilo')}
+            </div>
+            <div style={{ fontSize: 13, color: c.text?.muted || c.textSecondary, marginTop: 2 }}>
+              {orgName}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: c.text?.muted || c.textSecondary, fontSize: 22, padding: 4,
+            lineHeight: 1, borderRadius: 6,
+          }}>
             ✕
           </button>
         </div>
 
-        {/* Recipient (read-only) */}
-        <div style={{ marginBottom: spacing.md }}>
-          <label style={{
-            display: 'block',
-            fontSize: typography.fontSize.sm || '0.875rem',
-            fontWeight: typography.fontWeight.semibold || 600,
-            color: colors.textSecondary,
-            marginBottom: '4px',
-          }}>
-            Prejemnik
-          </label>
+        {/* ── Body ── */}
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Recipient */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: c.text?.muted || c.textSecondary, display: 'block', marginBottom: 6 }}>
+              {t('Recipient', 'Prejemnik')}
+            </label>
+            <div style={{
+              padding: '10px 14px', borderRadius: 8,
+              background: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+              border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0,
+              }}>
+                {recipientName.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: c.text?.heading || c.text }}>{recipientName}</div>
+                <div style={{ fontSize: 12, color: c.text?.muted || c.textSecondary }}>{recipientEmail}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: c.text?.muted || c.textSecondary, display: 'block', marginBottom: 6 }}>
+              {t('Subject', 'Zadeva')}
+            </label>
+            <input
+              type="text"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#6366f1'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'; }}
+            />
+          </div>
+
+          {/* Message */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: c.text?.muted || c.textSecondary, display: 'block', marginBottom: 6 }}>
+              {t('Message', 'Sporočilo')}
+            </label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={8}
+              placeholder={t('Write your message here...', 'Napišite svoje sporočilo tukaj...')}
+              style={{
+                ...inputStyle,
+                resize: 'vertical' as const,
+                minHeight: 180,
+                lineHeight: 1.6,
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#6366f1'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'; }}
+            />
+          </div>
+
+          {/* Info */}
           <div style={{
-            padding: `${spacing.sm} ${spacing.md}`,
-            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-            borderRadius: radii.md,
-            border: `1px solid ${colors.border}`,
-            color: colors.text,
-            fontSize: typography.fontSize.base || '1rem',
+            fontSize: 12, color: c.text?.muted || c.textSecondary, padding: '10px 12px',
+            background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+            borderRadius: 8, lineHeight: 1.5,
           }}>
-            <strong>{recipientName}</strong>
-            <span style={{ color: colors.textSecondary, marginLeft: spacing.sm }}>
-              &lt;{recipientEmail}&gt;
-            </span>
+            {t(
+              'Choose your preferred email service below. The message will be pre-filled in a new tab.',
+              'Izberite želeno email storitev spodaj. Sporočilo bo vnaprej izpolnjeno v novem zavihku.'
+            )}
           </div>
         </div>
 
-        {/* Subject */}
-        <div style={{ marginBottom: spacing.md }}>
-          <label style={{
-            display: 'block',
-            fontSize: typography.fontSize.sm || '0.875rem',
-            fontWeight: typography.fontWeight.semibold || 600,
-            color: colors.textSecondary,
-            marginBottom: '4px',
-          }}>
-            Zadeva
-          </label>
-          <input
-            type="text"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Vnesite zadevo sporočila..."
-            style={{
-              width: '100%',
-              padding: `${spacing.sm} ${spacing.md}`,
-              backgroundColor: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: radii.md,
-              color: colors.text,
-              fontSize: typography.fontSize.base || '1rem',
-              outline: 'none',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = colors.primary)}
-            onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
-          />
-        </div>
-
-        {/* Body */}
-        <div style={{ marginBottom: spacing.lg }}>
-          <label style={{
-            display: 'block',
-            fontSize: typography.fontSize.sm || '0.875rem',
-            fontWeight: typography.fontWeight.semibold || 600,
-            color: colors.textSecondary,
-            marginBottom: '4px',
-          }}>
-            Sporočilo
-          </label>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Napišite vaše sporočilo..."
-            rows={8}
-            style={{
-              width: '100%',
-              padding: spacing.md,
-              backgroundColor: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: radii.md,
-              color: colors.text,
-              fontSize: typography.fontSize.base || '1rem',
-              outline: 'none',
-              boxSizing: 'border-box',
-              resize: 'vertical',
-              minHeight: '160px',
-              fontFamily: 'inherit',
-              lineHeight: 1.5,
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = colors.primary)}
-            onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
-          />
-        </div>
-
-        {/* Send buttons */}
+        {/* ── Footer — Send buttons ── */}
         <div style={{
-          display: 'flex',
-          gap: spacing.sm,
-          flexWrap: 'wrap',
-          justifyContent: 'flex-end',
-          borderTop: `1px solid ${colors.border}`,
-          paddingTop: spacing.md,
+          padding: '16px 24px',
+          borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+          display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', alignItems: 'center',
         }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: `${spacing.sm} ${spacing.lg}`,
-              backgroundColor: 'transparent',
-              border: `1px solid ${colors.border}`,
-              borderRadius: radii.md,
-              color: colors.textSecondary,
-              fontSize: typography.fontSize.sm || '0.875rem',
-              cursor: 'pointer',
-              fontWeight: typography.fontWeight.medium || 500,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.hover)}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            Prekliči
+          {sent && (
+            <span style={{ fontSize: 13, color: '#22c55e', fontWeight: 600, marginRight: 'auto' }}>
+              {t('Opening email client...', 'Odpiranje email odjemalca...')}
+            </span>
+          )}
+
+          <button onClick={onClose} style={{
+            padding: '9px 18px', borderRadius: 8,
+            border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
+            background: 'transparent', color: c.text?.muted || c.textSecondary,
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>
+            {t('Cancel', 'Prekliči')}
           </button>
 
-          <button
-            onClick={handleSendViaGmail}
-            disabled={!subject.trim() || !body.trim()}
-            style={{
-              padding: `${spacing.sm} ${spacing.lg}`,
-              backgroundColor: '#EA4335',
-              border: 'none',
-              borderRadius: radii.md,
-              color: '#fff',
-              fontSize: typography.fontSize.sm || '0.875rem',
-              cursor: (!subject.trim() || !body.trim()) ? 'not-allowed' : 'pointer',
-              fontWeight: typography.fontWeight.semibold || 600,
-              opacity: (!subject.trim() || !body.trim()) ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            📧 Gmail
+          <button onClick={handleGmail} disabled={!canSend} style={{
+            padding: '9px 18px', borderRadius: 8, border: 'none',
+            background: canSend ? '#EA4335' : (isDarkMode ? '#334' : '#ddd'),
+            color: canSend ? '#fff' : (c.text?.muted || '#999'),
+            fontSize: 13, fontWeight: 700, cursor: canSend ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+          }}>
+            Gmail
           </button>
 
-          <button
-            onClick={handleSendViaOutlook}
-            disabled={!subject.trim() || !body.trim()}
-            style={{
-              padding: `${spacing.sm} ${spacing.lg}`,
-              backgroundColor: '#0078D4',
-              border: 'none',
-              borderRadius: radii.md,
-              color: '#fff',
-              fontSize: typography.fontSize.sm || '0.875rem',
-              cursor: (!subject.trim() || !body.trim()) ? 'not-allowed' : 'pointer',
-              fontWeight: typography.fontWeight.semibold || 600,
-              opacity: (!subject.trim() || !body.trim()) ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            📨 Outlook
+          <button onClick={handleOutlook} disabled={!canSend} style={{
+            padding: '9px 18px', borderRadius: 8, border: 'none',
+            background: canSend ? '#0078D4' : (isDarkMode ? '#334' : '#ddd'),
+            color: canSend ? '#fff' : (c.text?.muted || '#999'),
+            fontSize: 13, fontWeight: 700, cursor: canSend ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+          }}>
+            Outlook
           </button>
 
-          <button
-            onClick={handleSendViaMailto}
-            disabled={!subject.trim() || !body.trim()}
-            style={{
-              padding: `${spacing.sm} ${spacing.lg}`,
-              backgroundColor: colors.primary,
-              border: 'none',
-              borderRadius: radii.md,
-              color: '#fff',
-              fontSize: typography.fontSize.sm || '0.875rem',
-              cursor: (!subject.trim() || !body.trim()) ? 'not-allowed' : 'pointer',
-              fontWeight: typography.fontWeight.semibold || 600,
-              opacity: (!subject.trim() || !body.trim()) ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            ✉️ Email klient
+          <button onClick={handleMailto} disabled={!canSend} style={{
+            padding: '9px 18px', borderRadius: 8, border: 'none',
+            background: canSend ? '#6366f1' : (isDarkMode ? '#334' : '#ddd'),
+            color: canSend ? '#fff' : (c.text?.muted || '#999'),
+            fontSize: 13, fontWeight: 700, cursor: canSend ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+          }}>
+            ✉ {t('Email Client', 'Email odjemalec')}
           </button>
         </div>
-
-        {/* Sending indicator */}
-        {isSending && (
-          <div style={{
-            textAlign: 'center',
-            marginTop: spacing.md,
-            color: colors.success || '#22c55e',
-            fontSize: typography.fontSize.sm || '0.875rem',
-          }}>
-            Odpiranje email klienta...
-          </div>
-        )}
       </div>
     </div>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════
-// OrganizationCard — v5.2 — 2026-02-20
-// + Email/Message button per member
-// + mailto: with pre-filled subject & body template
+// OrganizationCard — v6.0 — 2026-02-20
+// ★ Replaced inline compose with EmailModal trigger
 // ═══════════════════════════════════════════════════════════════
-// Email modal state
-  const [emailModalOpen, setEmailModalOpen] = React.useState(false);
-  const [emailRecipient, setEmailRecipient] = React.useState<{ name: string; email: string }>({ name: '', email: '' });
-  const OrganizationCard: React.FC<{
+
+const OrganizationCard: React.FC<{
   language: 'en' | 'si';
   isDark: boolean;
   colors: any;
@@ -686,7 +594,8 @@ const EmailModal: React.FC<EmailModalProps> = ({
   isAdmin: boolean;
   onSwitchOrg: (orgId: string) => void;
   onOpenProject?: (projectId: string) => void;
-}> = ({ language, isDark, colors, activeOrg, userOrgs, isAdmin, onSwitchOrg, onOpenProject }) => {
+  onOpenEmailModal: (recipient: { name: string; email: string; orgName: string }) => void;
+}> = ({ language, isDark, colors, activeOrg, userOrgs, isAdmin, onSwitchOrg, onOpenProject, onOpenEmailModal }) => {
   const t = (en: string, si: string) => language === 'si' ? si : en;
 
   interface OrgData {
@@ -715,14 +624,9 @@ const EmailModal: React.FC<EmailModalProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [expandedOrgId, setExpandedOrgId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<'members' | 'projects'>('members');
-  // ★ v5.2: Message compose state
-  const [composeFor, setComposeFor] = React.useState<{ email: string; name: string; orgName: string } | null>(null);
-  const [composeSubject, setComposeSubject] = React.useState('');
-  const [composeBody, setComposeBody] = React.useState('');
 
   const isSuperAdmin = storageService.isSuperAdmin();
   const isOrgAdmin = isAdmin;
-  const currentUserName = storageService.getCurrentUserDisplayName() || 'User';
 
   React.useEffect(() => {
     let cancelled = false;
@@ -827,27 +731,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
     loadData();
     return () => { cancelled = true; };
   }, [isSuperAdmin, isOrgAdmin, activeOrg?.id]);
-
-  // ★ v5.2: Open compose modal with pre-filled template
-  const openCompose = (email: string, name: string, orgName: string) => {
-    setComposeFor({ email, name, orgName });
-    setComposeSubject(`EURO-OFFICE: ${t('Message from', 'Sporočilo od')} ${currentUserName}`);
-    setComposeBody('');
-  };
-
-  // ★ v5.2: Send via mailto
-  const sendViaMailto = () => {
-    if (!composeFor) return;
-    const subject = encodeURIComponent(composeSubject);
-    const body = encodeURIComponent(
-      composeBody +
-      `\n\n---\n${t('Sent via EURO-OFFICE', 'Poslano prek EURO-OFFICE')}\n${t('Organization', 'Organizacija')}: ${composeFor.orgName}\n${t('From', 'Od')}: ${currentUserName}`
-    );
-    window.open(`mailto:${composeFor.email}?subject=${subject}&body=${body}`, '_blank');
-    setComposeFor(null);
-    setComposeSubject('');
-    setComposeBody('');
-  };
 
   const roleColors: Record<string, string> = {
     owner: '#f59e0b',
@@ -1030,9 +913,12 @@ const EmailModal: React.FC<EmailModalProps> = ({
                           📁 {member.projectCount}
                         </span>
 
-                        {/* ★ v5.2: Message button */}
+                        {/* ★ v6.0: Message button — opens fullscreen EmailModal */}
                         <button
-                          onClick={(e) => { e.stopPropagation(); openCompose(member.email, member.displayName, org.name); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenEmailModal({ name: member.displayName, email: member.email, orgName: org.name });
+                          }}
                           title={t(`Send message to ${member.displayName}`, `Pošlji sporočilo ${member.displayName}`)}
                           style={{
                             width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer',
@@ -1113,135 +999,10 @@ const EmailModal: React.FC<EmailModalProps> = ({
           {t('No organizations found', 'Ni najdenih organizacij')}
         </div>
       )}
-
-      {/* ★ v5.2: Compose Message Modal */}
-      {composeFor && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 20,
-        }} onClick={() => setComposeFor(null)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: isDark ? '#1e1e2e' : '#fff',
-              borderRadius: 12, width: '100%', maxWidth: 480,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-              border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-              overflow: 'hidden',
-            }}
-          >
-            {/* Modal header */}
-            <div style={{
-              padding: '16px 20px', borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              <span style={{ fontSize: 18 }}>✉</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>
-                  {t('Send Message', 'Pošlji sporočilo')}
-                </div>
-                <div style={{ fontSize: 12, color: colors.textSecondary }}>
-                  {t('To', 'Za')}: {composeFor.name} ({composeFor.email})
-                </div>
-              </div>
-              <button onClick={() => setComposeFor(null)} style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: colors.textSecondary, fontSize: 18, padding: 4,
-              }}>✕</button>
-            </div>
-
-            {/* Modal body */}
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* Subject */}
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, display: 'block', marginBottom: 4 }}>
-                  {t('Subject', 'Zadeva')}
-                </label>
-                <input
-                  type="text"
-                  value={composeSubject}
-                  onChange={(e) => setComposeSubject(e.target.value)}
-                  style={{
-                    width: '100%', padding: '8px 12px', borderRadius: 8,
-                    border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
-                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
-                    color: colors.text, fontSize: 13, outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              {/* Body */}
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, display: 'block', marginBottom: 4 }}>
-                  {t('Message', 'Sporočilo')}
-                </label>
-                <textarea
-                  value={composeBody}
-                  onChange={(e) => setComposeBody(e.target.value)}
-                  rows={6}
-                  placeholder={t('Write your message here...', 'Napišite svoje sporočilo tukaj...')}
-                  style={{
-                    width: '100%', padding: '8px 12px', borderRadius: 8,
-                    border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
-                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
-                    color: colors.text, fontSize: 13, outline: 'none', resize: 'vertical',
-                    fontFamily: 'inherit', boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              {/* Info */}
-              <div style={{
-                fontSize: 11, color: colors.textSecondary, padding: '8px 10px',
-                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                borderRadius: 6,
-              }}>
-                💡 {t(
-                  'This will open your default email client (Outlook, Gmail, etc.) with the message pre-filled.',
-                  'To bo odprlo vaš privzeti email odjemalec (Outlook, Gmail, ipd.) z vnaprej izpolnjenim sporočilom.'
-                )}
-              </div>
-            </div>
-
-            {/* Modal footer */}
-            <div style={{
-              padding: '12px 20px', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-              display: 'flex', justifyContent: 'flex-end', gap: 8,
-            }}>
-              <button
-                onClick={() => setComposeFor(null)}
-                style={{
-                  padding: '8px 16px', borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
-                  background: 'transparent', color: colors.textSecondary, fontSize: 13,
-                  fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                {t('Cancel', 'Prekliči')}
-              </button>
-              <button
-                onClick={sendViaMailto}
-                disabled={!composeBody.trim()}
-                style={{
-                  padding: '8px 20px', borderRadius: 8, border: 'none',
-                  background: !composeBody.trim() ? (isDark ? '#334' : '#ddd') : colors.primary,
-                  color: !composeBody.trim() ? colors.textSecondary : '#fff',
-                  fontSize: 13, fontWeight: 700, cursor: !composeBody.trim() ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  transition: 'all 0.15s',
-                }}
-              >
-                ✉ {t('Open Email Client', 'Odpri email odjemalec')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+
 // ——— AI Chatbot — with formatted text + scroll fix ————————
 
 const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any; activeOrg: any | null }> = ({ language, isDark, colors: c, activeOrg }) => {
@@ -1258,17 +1019,14 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any;
 
   useEffect(() => { try { localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(conversations)); } catch {} }, [conversations]);
 
-  // ★ v5.0: Scroll to bottom ONLY when new message is added (not on mount/switch)
   const prevMsgCountRef = useRef(messages.length);
   useEffect(() => {
     if (messages.length > prevMsgCountRef.current) {
-      // New message added — scroll to bottom
       requestAnimationFrame(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); });
     }
     prevMsgCountRef.current = messages.length;
   }, [messages.length]);
 
-  // ★ v5.0: When switching conversation, scroll to TOP of chat container
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = 0;
@@ -1325,12 +1083,10 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any;
           ))}
         </div>
       )}
-      {/* ★ v5.0: Chat container with ref for scroll management */}
       <div ref={chatContainerRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' as const, gap: spacing.xs, marginBottom: spacing.sm }}>
         {messages.length === 0 && <div style={{ textAlign: 'center' as const, color: c.text.muted, fontSize: typography.fontSize.xs, padding: spacing.xl }}>{language === 'si' ? 'Pozdravljen! Sem EURO-OFFICE AI pomočnik.' : 'Hello! I\'m the EURO-OFFICE AI Assistant.'}</div>}
         {messages.map((msg, idx) => (
           <div key={idx} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: msg.role === 'user' ? c.primary[500] : (isDark ? c.surface.sidebar : c.surface.main), color: msg.role === 'user' ? '#fff' : c.text.body, borderRadius: radii.lg, padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.fontSize.xs, border: msg.role === 'assistant' ? `1px solid ${c.border.light}` : 'none', wordBreak: 'break-word' as const, lineHeight: 1.5 }}>
-            {/* ★ v5.0: Render formatted text instead of raw markdown */}
             {msg.role === 'assistant' ? renderFormattedText(msg.content) : msg.content}
           </div>
         ))}
@@ -1344,6 +1100,7 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any;
     </div>
   );
 };
+
 // ——— Main DashboardHome ————————————————————————
 
 const DashboardHome: React.FC<DashboardHomeProps> = ({
@@ -1353,6 +1110,10 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
   const [isDark, setIsDark] = useState(getThemeMode() === 'dark');
   const c = isDark ? darkColors : lightColors;
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // ★ v6.0: Email modal state — lives at DashboardHome level so it renders OUTSIDE all cards
+  const [emailModal, setEmailModal] = useState<{ name: string; email: string; orgName: string } | null>(null);
+  const currentUserName = storageService.getCurrentUserDisplayName() || 'User';
 
   useEffect(() => { const u = onThemeChange((m) => setIsDark(m === 'dark')); return u; }, []);
   useEffect(() => { if (containerRef.current) containerRef.current.scrollTop = 0; const ca = document.getElementById('main-content-area'); if (ca) ca.scrollTop = 0; window.scrollTo(0, 0); }, []);
@@ -1464,7 +1225,12 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
               )}
 
               {cardId === 'organization' && (
-                <OrganizationCard language={language} isDark={isDark} colors={c} activeOrg={activeOrg} userOrgs={userOrgs} isAdmin={isAdmin} onSwitchOrg={onSwitchOrg} onOpenProject={onOpenProject} />
+                <OrganizationCard
+                  language={language} isDark={isDark} colors={c}
+                  activeOrg={activeOrg} userOrgs={userOrgs} isAdmin={isAdmin}
+                  onSwitchOrg={onSwitchOrg} onOpenProject={onOpenProject}
+                  onOpenEmailModal={(recipient) => setEmailModal(recipient)}
+                />
               )}
 
               {cardId === 'activity' && (
@@ -1478,6 +1244,18 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
 
         <DropZone index={visibleCards.length} isDark={isDark} colors={c} draggingId={draggingId} onDropAtEnd={handleDropAtEnd} />
       </div>
+
+      {/* ★ v6.0: EmailModal — renders at root level, OUTSIDE all cards */}
+      <EmailModal
+        isOpen={emailModal !== null}
+        onClose={() => setEmailModal(null)}
+        recipientName={emailModal?.name || ''}
+        recipientEmail={emailModal?.email || ''}
+        orgName={emailModal?.orgName || ''}
+        senderName={currentUserName}
+        language={language}
+        isDarkMode={isDark}
+      />
     </div>
   );
 };
