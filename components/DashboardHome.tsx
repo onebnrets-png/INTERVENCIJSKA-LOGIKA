@@ -530,7 +530,48 @@ const ProjectChartsCard: React.FC<{
               borderRadius: radii.lg, border: `1px solid ${c.border.light}`, minHeight: chartH,
             }}>
               <DesignProgressRing
-                value={
+                value={completeness} size={isNarrow ? 60 : 80} strokeWidth={6}
+                showLabel={true} labelSize={isNarrow ? '0.65rem' : '0.8rem'}
+              />
+              <div style={{ textAlign: 'center' as const }}>
+                <div style={{
+                  fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold,
+                  color: c.text.heading,
+                }}>
+                  {language === 'si' ? 'Zapolnjenost' : 'Completeness'}
+                </div>
+                <div style={{ fontSize: '10px', color: c.text.muted }}>{completeness}%</div>
+              </div>
+            </div>
+
+            {chartsData && chartsData.length > 0 && chartsData.map((chart: ExtractedChartData, idx: number) => (
+              <div key={`c-${idx}-${chart.chartType}`} style={{ flexShrink: 0, width: chartW }}>
+                <ChartRenderer data={chart} width={chartW} height={chartH} showTitle={true} showSource={false} />
+              </div>
+            ))}
+
+            {(!chartsData || chartsData.length === 0) && (
+              <div style={{
+                flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: typography.fontSize.xs, color: c.text.muted, padding: spacing.lg, fontStyle: 'italic',
+              }}>
+                {language === 'si' ? 'Ni podatkov za grafike.' : 'No chart data.'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeProjectId && !isLoading && !activeData && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontSize: typography.fontSize.xs, color: c.text.muted, fontStyle: 'italic' }}>
+              {language === 'si' ? 'Podatki niso na voljo.' : 'Data not available.'}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // ═══════════════════════════════════════════════════════════
 // EMAIL MODAL — v6.0 — Fullscreen overlay with Gmail/Outlook/Mailto
