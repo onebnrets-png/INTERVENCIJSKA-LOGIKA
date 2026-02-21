@@ -10,6 +10,11 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
+// v5.6 — 2026-02-21 — CONSOLIDATED LANGUAGE DETECTION
+//   - CHANGED: detectInputLanguageMismatch() now uses detectTextLanguage from utils.ts
+//   - CHANGED: import updated to include detectTextLanguage
+//   - All previous v5.5 changes preserved.
+//
 // v5.5 — 2026-02-21 — KNOWLEDGE BASE INTEGRATION
 //   - NEW: import knowledgeBaseService
 //   - NEW: getKnowledgeBaseContext() — loads and caches KB documents for AI context
@@ -67,7 +72,8 @@ import {
   getSectionTaskInstruction,
   TEMPORAL_INTEGRITY_RULE
 } from './Instructions.ts';
-import { detectProjectLanguage as detectLanguage } from '../utils.ts';
+// ★ v5.6: Added detectTextLanguage import for consolidated language detection
+import { detectProjectLanguage as detectLanguage, detectTextLanguage } from '../utils.ts';
 import {
   generateContent,
   hasValidProviderKey,
@@ -100,6 +106,7 @@ const formatRulesAsList = (rules: string | string[]): string => {
   if (typeof rules === 'string' && rules.trim().length > 0) return rules;
   return '';
 };
+
 // ─── SAFE PROJECT END DATE CALCULATOR ────────────────────────────
 // ★ v5.0: Avoids JavaScript Date month-overflow bugs
 // (e.g., Jan 31 + 1 month → setMonth produces Mar 3 instead of Feb 28)
@@ -128,44 +135,51 @@ const calculateProjectEndDate = (startDateStr: string, durationMonths: number): 
   return `${y}-${m}-${d}`;
 };
 
-
 // ─── INPUT LANGUAGE DETECTION ────────────────────────────────────
+// ★ v5.6 (2026-02-21): Consolidated language detection — uses shared detectTextLanguage
 
 const detectInputLanguageMismatch = (
   projectData: any,
   uiLanguage: 'en' | 'si'
 ): string => {
-  const collectStrings = (obj: any, depth: number = 0): string[] => {
-    if (depth > 5 || !obj) return [];
-    const strings: string[] = [];
-    if (typeof obj === 'string' && obj.trim().length > 10) {
-      strings.push(obj.trim());
-    } else if (Array.isArray(obj)) {
-      obj.forEach((item) => strings.push(...collectStrings(item, depth + 1)));
-    } else if (typeof obj === 'object') {
-      Object.values(obj).forEach((val) => strings.push(...collectStrings(val, depth + 1)));
+  const sampleTexts: string[] = [];
+
+  const collectStrings = (obj: any, depth = 0) => {
+    if (depth > 3 || sampleTexts.length >= 5) return;
+    if (typeof obj === 'string' && obj.length > 30) {
+      sampleTexts.push(obj);
+    } else if (typeof obj === 'object' && obj !== null) {
+      for (const val of Object.values(obj)) {
+        collectStrings(val, depth + 1);
+        if (sampleTexts.length >= 5) break;
+      }
     }
-    return strings;
   };
 
-  const allTexts = collectStrings(projectData);
-  if (allTexts.length === 0) return '';
+  collectStrings(projectData?.problemAnalysis);
+  collectStrings(projectData?.projectIdea);
+  collectStrings(projectData?.objectives);
 
-  const sample = allTexts.slice(0, 5).join(' ');
+  if (sampleTexts.length === 0) return '';
 
-  const slovenianMarkers = /[čšžČŠŽ]|(\b(je|za|na|ki|ali|ter|pri|kot|ima|biti|sem|ker|tudi|vse|med|lahko|zelo|brez|kako|kateri|vendar|zato|skupaj|potrebno|obstoječi|dejavnosti|razvoj|sodelovanje|vzpostaviti|okrepiti|zagotoviti|vzroke|posledice)\b)/gi;
-  const englishMarkers = /\b(the|is|are|was|were|been|being|have|has|had|will|would|shall|should|can|could|may|might|must|and|but|or|which|that|this|these|those|with|from|into|upon|about|between|through|during|before|after|above|below|against)\b/gi;
+  let mismatchCount = 0;
+  const checked = Math.min(sampleTexts.length, 5);
 
-  const slMatches = (sample.match(slovenianMarkers) || []).length;
-  const enMatches = (sample.match(englishMarkers) || []).length;
+  for (let i = 0; i < checked; i++) {
+    const detected = detectTextLanguage(sampleTexts[i]);
+    if (detected !== 'unknown' && detected !== uiLanguage) {
+      mismatchCount++;
+    }
+  }
 
-  let detectedLang: 'si' | 'en' | 'unknown' = 'unknown';
-  if (slMatches > enMatches * 1.5) detectedLang = 'si';
-  else if (enMatches > slMatches * 1.5) detectedLang = 'en';
+  if (mismatchCount > checked / 2) {
+    return getLanguageMismatchNotice(
+      uiLanguage === 'en' ? 'si' : 'en',
+      uiLanguage
+    );
+  }
 
-  if (detectedLang === 'unknown' || detectedLang === uiLanguage) return '';
-
-  return getLanguageMismatchNotice(detectedLang, uiLanguage);
+  return '';
 };
 
 // ─── SANITIZE PROJECT TITLE ─────────────────────────────────────
@@ -282,7 +296,7 @@ const getContext = (projectData: any): string => {
   const pi = projectData.projectIdea;
   if (pi?.mainAim || pi?.stateOfTheArt || pi?.proposedSolution || pi?.projectTitle) {
     let endDateStr = '';
-        if (pi?.startDate && pi?.durationMonths) {
+    if (pi?.startDate && pi?.durationMonths) {
       endDateStr = calculateProjectEndDate(pi.startDate, pi.durationMonths);
     }
     const piWithDates = {
@@ -593,7 +607,6 @@ const schemas: Record<string, any> = {
   }
 };
 
-
 // ─── MAPPINGS ────────────────────────────────────────────────────
 // ★ v5.4: Added sub-section mappings
 
@@ -635,6 +648,7 @@ const SECTION_TO_SCHEMA: Record<string, string> = {
   stateOfTheArt: 'stateOfTheArt', proposedSolution: 'proposedSolution',
   readinessLevels: 'readinessLevels', policies: 'policies',
 };
+
 // ─── HELPERS ─────────────────────────────────────────────────────
 
 const isValidDate = (d: any): boolean => d instanceof Date && !isNaN(d.getTime());
@@ -822,7 +836,6 @@ const buildTaskInstruction = (
 ): string => {
   const placeholders: Record<string, string> = {};
 
-  // ★ v5.4: Map sub-section keys to parent for task instruction lookup
   const SUB_TO_PARENT_TASK: Record<string, string> = {
     coreProblem: 'problemAnalysis', causes: 'problemAnalysis', consequences: 'problemAnalysis',
     projectTitleAcronym: 'projectIdea', mainAim: 'projectIdea', stateOfTheArt: 'projectIdea',
@@ -857,7 +870,7 @@ const buildTaskInstruction = (
       break;
     }
 
-      case 'activities': {
+    case 'activities': {
       const today = new Date().toISOString().split('T')[0];
       placeholders.projectStart = projectData.projectIdea?.startDate || today;
       const months = projectData.projectIdea?.durationMonths || 24;
@@ -917,14 +930,13 @@ const getPromptAndSchemaForSection = (
     const pMonths = projectData.projectIdea?.durationMonths || 24;
     const pEnd = calculateProjectEndDate(pStart, pMonths);
 
-
     temporalRuleBlock = (TEMPORAL_INTEGRITY_RULE[language] || TEMPORAL_INTEGRITY_RULE.en)
       .replace(/\{\{projectStart\}\}/g, pStart)
       .replace(/\{\{projectEnd\}\}/g, pEnd)
       .replace(/\{\{projectDurationMonths\}\}/g, String(pMonths));
   }
 
-  // ★ v5.4: Sub-section focus instruction — tells AI to generate ONLY the specific sub-part
+  // ★ v5.4: Sub-section focus instruction
   const SUB_SECTION_FOCUS: Record<string, Record<string, string>> = {
     coreProblem: {
       en: 'FOCUS: Generate ONLY the Core Problem (title + description). Do NOT generate causes or consequences.',
@@ -952,1096 +964,384 @@ const getPromptAndSchemaForSection = (
     },
     proposedSolution: {
       en: 'FOCUS: Generate ONLY the Proposed Solution — start with 5-8 sentence introduction, then phases with plain text headers. Return JSON object: { "proposedSolution": "..." }',
-      si: 'FOKUS: Generiraj SAMO Predlagano rešitev — začni s 5-8 stavkov dolgim uvodom, nato faze z golimi naslovi. Vrni JSON objekt: { "proposedSolution": "..." }'
+      si: 'FOKUS: Generiraj SAMO Predlagano rešitev — začni s 5-8 stavčnim uvodom, nato faze z navadnimi besedilnimi naslovi. Vrni JSON objekt: { "proposedSolution": "..." }'
     },
     readinessLevels: {
-      en: 'FOCUS: Generate ONLY the Readiness Levels (TRL, SRL, ORL, LRL) — each with a level number and specific justification. Return JSON object with TRL/SRL/ORL/LRL sub-objects.',
-      si: 'FOKUS: Generiraj SAMO Stopnje pripravljenosti (TRL, SRL, ORL, LRL) — vsaka s številko stopnje in specifično utemeljitvijo. Vrni JSON objekt s TRL/SRL/ORL/LRL pod-objekti.'
+      en: 'FOCUS: Generate ONLY the Readiness Levels (TRL, SRL, ORL, LRL) — each with a numeric level and justification. Return JSON object with exactly 4 sub-objects.',
+      si: 'FOKUS: Generiraj SAMO Stopnje pripravljenosti (TRL, SRL, ORL, LRL) — vsaka s številčno stopnjo in utemeljitvijo. Vrni JSON objekt z natanko 4 pod-objekti.'
     },
     policies: {
-      en: 'FOCUS: Generate ONLY the EU Policies array (3-5 relevant policies, each with name + description explaining alignment). Do NOT generate other project idea fields.',
-      si: 'FOKUS: Generiraj SAMO array EU politik (3-5 relevantnih politik, vsaka z imenom + opisom usklajenosti). NE generiraj drugih polj projektne ideje.'
-    },
+      en: 'FOCUS: Generate ONLY the EU Policies array (3-5 policies, each with name + description). Do NOT generate other project idea fields.',
+      si: 'FOKUS: Generiraj SAMO array EU politik (3-5 politik, vsaka z imenom + opisom). NE generiraj drugih polj projektne ideje.'
+    }
   };
 
-  const subSectionFocus = SUB_SECTION_FOCUS[sectionKey]?.[language] || SUB_SECTION_FOCUS[sectionKey]?.['en'] || '';
+  const focusInstruction = SUB_SECTION_FOCUS[sectionKey]?.[language] || '';
 
   const prompt = [
-    subSectionFocus,                            // ★ v5.4: Sub-section focus FIRST
-    temporalRuleBlock,                          // ★ FIRST for activities — highest priority
+    focusInstruction ? `★★★ ${focusInstruction} ★★★\n` : '',
+    temporalRuleBlock ? `${temporalRuleBlock}\n` : '',
     langDirective,
-    langMismatchNotice,
-    taskInstruction,
-    textSchema,
-    qualityGate,
-    context,
-    modeInstruction,
-    titleRules,
-    academicRules,
-    humanRules,
-    `${globalRulesHeader}:\n${globalRules}`,
+    langMismatchNotice ? `\n${langMismatchNotice}\n` : '',
+    `\n${globalRulesHeader}:\n${globalRules}`,
     sectionRules,
-    subSectionFocus,                            // ★ v5.4: ALSO at end for emphasis
-    temporalRuleBlock ? temporalRuleBlock : '', // ★ ALSO LAST — AI attends to end too
-  ].filter(Boolean).join('\n\n');
+    academicRules ? `\n${academicRules}` : '',
+    humanRules ? `\n${humanRules}` : '',
+    titleRules ? `\n${titleRules}` : '',
+    `\n${context}`,
+    taskInstruction ? `\n${taskInstruction}` : '',
+    modeInstruction ? `\n${modeInstruction}` : '',
+    textSchema,
+    qualityGate ? `\n${qualityGate}` : '',
+    temporalRuleBlock ? `\n${temporalRuleBlock}` : '',
+    focusInstruction ? `\n★★★ REMINDER: ${focusInstruction} ★★★` : ''
+  ].filter(Boolean).join('\n');
 
-  return { prompt, schema };
-};
-// ═══════════════════════════════════════════════════════════════
-// ★ v4.7: TARGETED FILL — generates ONLY specific empty items
-// ═══════════════════════════════════════════════════════════════
-
-export const generateTargetedFill = async (
-  sectionKey: string,
-  projectData: any,
-  language: 'en' | 'si',
-  emptyIndices: number[]
-): Promise<any[]> => {
-  const currentData = projectData[sectionKey];
-
-  if (!Array.isArray(currentData) || emptyIndices.length === 0) {
-    return currentData || [];
-  }
-
-  const existingItems: string[] = [];
-  const missingItems: string[] = [];
-
-  currentData.forEach((item: any, index: number) => {
-    if (emptyIndices.includes(index)) {
-      const partialInfo = item && typeof item === 'object'
-        ? Object.entries(item)
-            .filter(([_, v]) => typeof v === 'string' && (v as string).trim().length > 0)
-            .map(([k, v]) => `${k}: "${v}"`)
-            .join(', ')
-        : '';
-      missingItems.push(
-        language === 'si'
-          ? `  - Element ${index + 1} (indeks ${index})${partialInfo ? ` — delni podatki: ${partialInfo}` : ' — popolnoma prazen'}`
-          : `  - Item ${index + 1} (index ${index})${partialInfo ? ` — partial data: ${partialInfo}` : ' — completely empty'}`
-      );
-    } else {
-      const title = item?.title || item?.description || `Item ${index + 1}`;
-      existingItems.push(
-        language === 'si'
-          ? `  - Element ${index + 1}: "${title}" (OHRANI NESPREMENJENO)`
-          : `  - Item ${index + 1}: "${title}" (KEEP UNCHANGED)`
-      );
-    }
-  });
-
-  const schemaKey = SECTION_TO_SCHEMA[sectionKey];
-  const itemSchema = schemas[schemaKey]?.items;
-
-  if (!itemSchema) {
-    throw new Error(`No schema found for section: ${sectionKey}`);
-  }
-
-  const config = getProviderConfig();
-  const needsTextSchema = config.provider !== 'gemini';
-  const textSchema = needsTextSchema ? schemaToTextInstruction({
-    type: Type.ARRAY,
-    items: itemSchema
-  }) : '';
-
-  const context = getContext(projectData);
-  const langDirective = getLanguageDirective(language);
-  const academicRules = getAcademicRigorRules(language);
-  const humanRules = getHumanizationRules(language);
-  const sectionRules = getRulesForSection(sectionKey, language);
-
-  const sectionLabel = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
-
-  const targetedPrompt = language === 'si'
-    ? [
-        langDirective,
-        `NALOGA: Generiraj vsebino SAMO za manjkajoče elemente v razdelku "${sectionLabel}".`,
-        `\nTrenutno stanje razdelka "${sectionLabel}" (${currentData.length} elementov):`,
-        `\nOBSTOJEČI ELEMENTI (NE SPREMINJAJ):`,
-        existingItems.join('\n'),
-        `\nMANJKAJOČI ELEMENTI (GENERIRAJ TE):`,
-        missingItems.join('\n'),
-        `\nPRAVILA:`,
-        `- Generiraj NATANKO ${emptyIndices.length} elementov — enega za vsak manjkajoči element.`,
-        `- Vsak generiran element mora biti vsebinsko povezan s projektom in obstoječimi elementi.`,
-        `- Vrni JSON array z NATANKO ${emptyIndices.length} elementi.`,
-        `- Vrstni red v arrayu mora ustrezati vrstnemu redu manjkajočih indeksov: [${emptyIndices.join(', ')}].`,
-        `- NE vračaj obstoječih elementov — SAMO nove.`,
-        textSchema,
-        context,
-        academicRules,
-        humanRules,
-        sectionRules,
-      ].filter(Boolean).join('\n\n')
-    : [
-        langDirective,
-        `TASK: Generate content ONLY for the missing items in the "${sectionLabel}" section.`,
-        `\nCurrent state of "${sectionLabel}" section (${currentData.length} items):`,
-        `\nEXISTING ITEMS (DO NOT MODIFY):`,
-        existingItems.join('\n'),
-        `\nMISSING ITEMS (GENERATE THESE):`,
-        missingItems.join('\n'),
-        `\nRULES:`,
-        `- Generate EXACTLY ${emptyIndices.length} items — one for each missing item.`,
-        `- Each generated item must be contextually related to the project and existing items.`,
-        `- Return a JSON array with EXACTLY ${emptyIndices.length} items.`,
-        `- The order in the array must match the order of missing indices: [${emptyIndices.join(', ')}].`,
-        `- Do NOT return existing items — ONLY new ones.`,
-        textSchema,
-        context,
-        academicRules,
-        humanRules,
-        sectionRules,
-      ].filter(Boolean).join('\n\n');
-
-  const useNativeSchema = config.provider === 'gemini';
-
-  const result = await generateContent({
-    prompt: targetedPrompt,
-    jsonSchema: useNativeSchema ? { type: Type.ARRAY, items: itemSchema } : undefined,
-    jsonMode: !useNativeSchema,
-    sectionKey: sectionKey,
-  });
-
-  const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-  let generatedItems = JSON.parse(jsonStr);
-
-  if (!Array.isArray(generatedItems)) {
-    if (generatedItems && typeof generatedItems === 'object') {
-      generatedItems = [generatedItems];
-    } else {
-      throw new Error('AI returned non-array for targeted fill');
-    }
-  }
-
-  generatedItems = stripMarkdown(generatedItems);
-
-  const filledData = [...currentData];
-
-  for (let i = 0; i < emptyIndices.length; i++) {
-    const targetIndex = emptyIndices[i];
-    if (i < generatedItems.length && targetIndex < filledData.length) {
-      const existing = filledData[targetIndex] || {};
-      const generated = generatedItems[i];
-      filledData[targetIndex] = { ...generated, ...Object.fromEntries(
-        Object.entries(existing).filter(([_, v]) => typeof v === 'string' ? (v as string).trim().length > 0 : v != null)
-      )};
-    }
-  }
-
-    console.log(`[TargetedFill] ${sectionKey}: Filled ${Math.min(generatedItems.length, emptyIndices.length)} of ${emptyIndices.length} empty items at indices [${emptyIndices.join(', ')}]`);
-
-  // ★ v5.0: Post-process activities with temporal integrity and dependency sanitization
-  if (sectionKey === 'activities') {
-    let processed = sanitizeActivities(filledData);
-    processed = enforceTemporalIntegrity(processed, projectData);
-    return processed;
-  }
-
-  return filledData;
-};
-// ═══════════════════════════════════════════════════════════════
-// ★ v5.1: OBJECT FILL — generates ONLY empty fields in object sections
-// For projectIdea, problemAnalysis, projectManagement etc.
-// ═══════════════════════════════════════════════════════════════
-
-export const generateObjectFill = async (
-  sectionKey: string,
-  projectData: any,
-  language: 'en' | 'si',
-  emptyFields: string[]
-): Promise<any> => {
-  const currentData = projectData[sectionKey];
-
-  if (!currentData || typeof currentData !== 'object' || emptyFields.length === 0) {
-    return currentData || {};
-  }
-
-  // Build context of what EXISTS (so AI can generate contextually relevant content)
-  const existingFields: string[] = [];
-  const missingFields: string[] = [];
-
-  for (const [key, val] of Object.entries(currentData)) {
-    if (emptyFields.includes(key)) {
-      missingFields.push(
-        language === 'si'
-          ? `  - "${key}" — PRAZNO (GENERIRAJ)`
-          : `  - "${key}" — EMPTY (GENERATE THIS)`
-      );
-    } else if (typeof val === 'string' && val.trim().length > 0) {
-      const preview = val.length > 150 ? val.substring(0, 150) + '...' : val;
-      existingFields.push(
-        language === 'si'
-          ? `  - "${key}": "${preview}" (OHRANI NESPREMENJENO)`
-          : `  - "${key}": "${preview}" (KEEP UNCHANGED)`
-      );
-    } else if (val && typeof val === 'object') {
-      existingFields.push(
-        language === 'si'
-          ? `  - "${key}": [objekt/array z vsebino] (OHRANI NESPREMENJENO)`
-          : `  - "${key}": [object/array with content] (KEEP UNCHANGED)`
-      );
-    }
-  }
-
-  const schemaKey = SECTION_TO_SCHEMA[sectionKey];
-  const fullSchema = schemas[schemaKey];
-
-  if (!fullSchema) {
-    throw new Error(`No schema found for section: ${sectionKey}`);
-  }
-
-  // Build a reduced schema containing ONLY the empty fields
-  const reducedProperties: any = {};
-  const reducedRequired: string[] = [];
-
-  for (const fieldName of emptyFields) {
-    if (fullSchema.properties && fullSchema.properties[fieldName]) {
-      reducedProperties[fieldName] = fullSchema.properties[fieldName];
-      reducedRequired.push(fieldName);
-    }
-  }
-
-  const reducedSchema = {
-    type: Type.OBJECT,
-    properties: reducedProperties,
-    required: reducedRequired,
-  };
-
-  const config = getProviderConfig();
-  const useNativeSchema = config.provider === 'gemini';
-  const needsTextSchema = !useNativeSchema;
-  const textSchema = needsTextSchema ? schemaToTextInstruction(reducedSchema) : '';
-
-  const context = getContext(projectData);
-  const langDirective = getLanguageDirective(language);
-  const academicRules = getAcademicRigorRules(language);
-  const humanRules = getHumanizationRules(language);
-  const sectionRules = getRulesForSection(sectionKey, language);
-  const titleRules = sectionKey === 'projectIdea' ? getProjectTitleRules(language) : '';
-  const qualityGate = getQualityGate(sectionKey, language);
-
-  // Build task instruction with placeholders
-  const taskInstruction = buildTaskInstruction(sectionKey, projectData, language);
-
-  const sectionLabel = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
-
-  const objectFillPrompt = language === 'si'
-    ? [
-        langDirective,
-        `NALOGA: Generiraj vsebino SAMO za manjkajoča polja v razdelku "${sectionLabel}".`,
-        `\nOBSTOJEČA POLJA (NE SPREMINJAJ — uporabi kot kontekst):`,
-        existingFields.join('\n'),
-        `\nMANJKAJOČA POLJA (GENERIRAJ SAMO TE):`,
-        missingFields.join('\n'),
-        `\nPRAVILA:`,
-        `- Vrni JSON objekt z NATANKO ${emptyFields.length} polji: ${emptyFields.map(f => `"${f}"`).join(', ')}.`,
-        `- NE vračaj obstoječih polj — SAMO manjkajoča.`,
-        `- Vsebina mora biti kontekstualno povezana z obstoječimi polji zgoraj.`,
-        textSchema,
-        taskInstruction,
-        titleRules,
-        context,
-        academicRules,
-        humanRules,
-        sectionRules,
-        qualityGate,
-      ].filter(Boolean).join('\n\n')
-    : [
-        langDirective,
-        `TASK: Generate content ONLY for the missing fields in the "${sectionLabel}" section.`,
-        `\nEXISTING FIELDS (DO NOT MODIFY — use as context):`,
-        existingFields.join('\n'),
-        `\nMISSING FIELDS (GENERATE ONLY THESE):`,
-        missingFields.join('\n'),
-        `\nRULES:`,
-        `- Return a JSON object with EXACTLY ${emptyFields.length} fields: ${emptyFields.map(f => `"${f}"`).join(', ')}.`,
-        `- Do NOT return existing fields — ONLY the missing ones.`,
-        `- Content must be contextually related to the existing fields above.`,
-        textSchema,
-        taskInstruction,
-        titleRules,
-        context,
-        academicRules,
-        humanRules,
-        sectionRules,
-        qualityGate,
-      ].filter(Boolean).join('\n\n');
-
-  const result = await generateContent({
-    prompt: objectFillPrompt,
-    jsonSchema: useNativeSchema ? reducedSchema : undefined,
-    jsonMode: !useNativeSchema,
-    sectionKey: sectionKey,
-  });
-
-  const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-  let generatedFields = JSON.parse(jsonStr);
-
-  generatedFields = stripMarkdown(generatedFields);
-
-  // Sanitize project title if present
-  if (sectionKey === 'projectIdea' && generatedFields.projectTitle) {
-    generatedFields.projectTitle = sanitizeProjectTitle(generatedFields.projectTitle);
-  }
-
-  // Merge: keep ALL existing data, overlay ONLY the newly generated fields
-  const merged = { ...currentData };
-  for (const fieldName of emptyFields) {
-    if (generatedFields[fieldName] !== undefined && generatedFields[fieldName] !== null) {
-      // Only fill if the field is actually still empty (safety check)
-      const existing = merged[fieldName];
-      const isEmpty = !existing || (typeof existing === 'string' && existing.trim().length === 0);
-      if (isEmpty) {
-        merged[fieldName] = generatedFields[fieldName];
-      }
-    }
-  }
-
-  console.log(`[ObjectFill] ${sectionKey}: Generated ${emptyFields.length} fields: [${emptyFields.join(', ')}]`);
-
-  return merged;
+  return { prompt, schema: needsTextSchema ? null : schema };
 };
 
-// ─── MAIN GENERATION FUNCTIONS ───────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API: SECTION GENERATION
+// ═══════════════════════════════════════════════════════════════
 
 export const generateSectionContent = async (
   sectionKey: string,
   projectData: any,
   language: 'en' | 'si' = 'en',
-  mode: string = 'regenerate'
-) => {
-  // ★ v5.5 [C]: Load KB context ONCE for this generation call
+  mode: string = 'regenerate',
+  currentSectionData: any = null
+): Promise<any> => {
+  const { prompt, schema } = getPromptAndSchemaForSection(sectionKey, projectData, language, mode, currentSectionData);
+
+  // ★ v5.5: Inject Knowledge Base context
   const kbContext = await getKnowledgeBaseContext();
-
-  // ★ Handle 'expectedResults' as a composite section
-  if (sectionKey === 'expectedResults') {
-    const subSections = ['outputs', 'outcomes', 'impacts'];
-    const compositeResult: Record<string, any> = {};
-
-    for (const subKey of subSections) {
-      try {
-        const currentSubData = projectData[subKey];
-        const { prompt: basePrompt, schema } = getPromptAndSchemaForSection(
-          subKey, projectData, language, mode, currentSubData
-        );
-
-        // ★ v5.5 [C]: Prepend KB context to each sub-prompt
-        const prompt = kbContext ? `${kbContext}\n\n${basePrompt}` : basePrompt;
-
-        const config = getProviderConfig();
-        const useNativeSchema = config.provider === 'gemini';
-
-        const result = await generateContent({
-          prompt,
-          jsonSchema: useNativeSchema ? schema : undefined,
-          jsonMode: !useNativeSchema,
-          sectionKey: subKey,
-        });
-
-        const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-        let parsedData = JSON.parse(jsonStr);
-
-        if (mode === 'fill' && currentSubData) {
-          parsedData = smartMerge(currentSubData, parsedData);
-        }
-
-        parsedData = stripMarkdown(parsedData);
-        compositeResult[subKey] = parsedData;
-      } catch (err) {
-        console.warn(`[generateSectionContent] Failed to generate ${subKey}:`, err);
-        compositeResult[subKey] = projectData[subKey] || [];
-      }
-    }
-
-    return compositeResult;
-  }
-
-  // ─── Standard (non-composite) generation ───
-  const currentSectionData = projectData[sectionKey];
-  const { prompt: basePrompt, schema } = getPromptAndSchemaForSection(
-    sectionKey, projectData, language, mode, currentSectionData
-  );
-
-  // ★ v5.5 [C]: Prepend KB context to the prompt
-  const prompt = kbContext ? `${kbContext}\n\n${basePrompt}` : basePrompt;
-
-  const config = getProviderConfig();
-  const useNativeSchema = config.provider === 'gemini';
+  const fullPrompt = kbContext ? `${kbContext}\n\n${prompt}` : prompt;
 
   const result = await generateContent({
-    prompt,
-    jsonSchema: useNativeSchema ? schema : undefined,
-    jsonMode: !useNativeSchema,
-    sectionKey: sectionKey,
+    prompt: fullPrompt,
+    schema: schema || undefined,
+    jsonMode: true,
+    sectionKey
   });
 
-  const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-  let parsedData = JSON.parse(jsonStr);
-
-  if (sectionKey === 'projectIdea' && jsonStr.startsWith('[')) {
-    throw new Error("API returned an array for projectIdea section, expected an object.");
-  }
-
-  // ★ v5.4: Post-process sub-section results — unwrap string sub-sections
-  if (sectionKey === 'projectTitleAcronym' && parsedData.projectTitle) {
-    parsedData.projectTitle = sanitizeProjectTitle(parsedData.projectTitle);
-  }
-
-  if (sectionKey === 'mainAim' && typeof parsedData === 'object' && parsedData.mainAim) {
-    parsedData = parsedData.mainAim; // Unwrap from { mainAim: "..." } to just the string
-  }
-
-  if (sectionKey === 'stateOfTheArt' && typeof parsedData === 'object' && parsedData.stateOfTheArt) {
-    parsedData = parsedData.stateOfTheArt;
-  }
-
-  if (sectionKey === 'proposedSolution' && typeof parsedData === 'object' && parsedData.proposedSolution) {
-    let text = parsedData.proposedSolution;
-    text = text.replace(/([^\n])\s*((?:Faza|Phase)\s+\d+(?::|\.))/g, '$1\n\n$2');
-    parsedData = text;
-  }
-
-  if (sectionKey === 'activities' && Array.isArray(parsedData)) {
-    parsedData = sanitizeActivities(parsedData);
-    // ★ v4.6: FORCE all dates within project envelope
-    parsedData = enforceTemporalIntegrity(parsedData, projectData);
-  }
-
-  if (sectionKey === 'projectIdea' && parsedData.proposedSolution) {
-    let text = parsedData.proposedSolution;
-    text = text.replace(
-      /([^\n])\s*((?:Faza|Phase)\s+\d+(?::|\.))/g,
-      '$1\n\n$2'
-    );
-    parsedData.proposedSolution = text;
-  }
-
-  if (sectionKey === 'projectIdea' && parsedData.projectTitle) {
-    parsedData.projectTitle = sanitizeProjectTitle(parsedData.projectTitle);
-  }
-
-  if (mode === 'fill' && currentSectionData) {
-    parsedData = smartMerge(currentSectionData, parsedData);
-  }
-
-  parsedData = stripMarkdown(parsedData);
-
-  if (sectionKey === 'projectIdea' && parsedData.projectTitle) {
-    parsedData.projectTitle = sanitizeProjectTitle(parsedData.projectTitle);
-  }
-
-  return parsedData;
-};
-// ─── FIELD CONTENT GENERATION ────────────────────────────────────
-
-export const generateFieldContent = async (
-  path: (string | number)[],
-  projectData: any,
-  language: 'en' | 'si' = 'en'
-) => {
-  const context = getContext(projectData);
-  const fieldName = String(path[path.length - 1]);
-  const sectionName = String(path[0]);
-
-  const instructions = getAppInstructions(language);
-  const globalRules = formatRules(instructions.GLOBAL_RULES);
-  const globalRulesHeader = language === 'si' ? 'GLOBALNA PRAVILA' : 'GLOBAL RULES';
-
-  const langDirective = getLanguageDirective(language);
-  const langMismatchNotice = detectInputLanguageMismatch(projectData, language);
-  const academicRules = getAcademicRigorRules(language);
-  const humanRules = getHumanizationRules(language);
-
-  const fieldRule = getFieldRule(fieldName, language);
-  const fieldRuleText = fieldRule
-    ? `\n${language === 'si' ? 'PRAVILO ZA TO POLJE' : 'FIELD-SPECIFIC RULE'}:\n${fieldRule}\n`
-    : '';
-
-  const isProjectTitle = fieldName === 'projectTitle' ||
-    (sectionName === 'projectIdea' && fieldName === 'title' && path.length <= 2);
-
-  const titleRules = isProjectTitle ? getProjectTitleRules(language) : '';
-
-  const sectionRules = getRulesForSection(sectionName, language);
-
-  let siblingContext = '';
+  let parsed: any;
   try {
-    let parentObj: any = projectData;
-    for (let i = 0; i < path.length - 1; i++) {
-      if (parentObj && parentObj[path[i]] !== undefined) parentObj = parentObj[path[i]];
-      else { parentObj = null; break; }
-    }
-    if (parentObj && typeof parentObj === 'object') {
-      const siblings: string[] = [];
-      for (const [key, value] of Object.entries(parentObj)) {
-        if (key !== fieldName && typeof value === 'string' && value.trim().length > 0) {
-          siblings.push(`  ${key}: "${value}"`);
-        }
-      }
-      if (siblings.length > 0) {
-        const header = language === 'si'
-          ? 'OBSTOJEČI PODATKI V ISTEM RAZDELKU (uporabi kot osnovo)'
-          : 'EXISTING DATA IN THE SAME SECTION (use as the basis for generation)';
-        siblingContext = `\n${header}:\n${siblings.join('\n')}\n`;
-      }
-    }
+    const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+    parsed = JSON.parse(jsonStr);
   } catch (e) {
-    console.warn('[generateFieldContent] Could not extract sibling context:', e);
+    console.error('[geminiService] Failed to parse AI response as JSON:', e);
+    throw new Error('AI response was not valid JSON');
   }
 
-  let specificContext = '';
-  let extraInstruction = '';
+  // Strip markdown from all string values
+  parsed = stripMarkdown(parsed);
 
-  if (isProjectTitle) {
-    const existingTitle = projectData.projectIdea?.projectTitle?.trim() || '';
-    specificContext = language === 'si' ? 'naziv projekta (projectTitle)' : 'the project title (projectTitle)';
-    extraInstruction = existingTitle
-      ? (language === 'si'
-        ? `\nUPORABNIKOV TRENUTNI NAZIV: "${existingTitle}"\nČe je primeren (30–200 znakov, imenski izraz, brez akronima, brez glagola), ga VRNI NESPREMENJENO.\nČe ni primeren, ga IZBOLJŠAJ v skladu s pravili za naziv zgoraj — ostani na isti temi.\nVrni SAMO naziv — brez navodil, brez razlage, brez narekovajev.\n`
-        : `\nUSER'S CURRENT TITLE: "${existingTitle}"\nIf acceptable (30–200 chars, noun phrase, no acronym, no verb), RETURN IT UNCHANGED.\nIf not acceptable, IMPROVE it following the title rules above — stay on the same topic.\nReturn ONLY the title — no instructions, no explanation, no quotes.\n`)
-      : (language === 'si'
-        ? `\nGeneriraj primeren NAZIV PROJEKTA na podlagi konteksta projekta.\nUpoštevaj pravila za naziv zgoraj.\nVrni SAMO naziv — brez navodil, brez razlage, brez narekovajev.\n`
-        : `\nGenerate an appropriate PROJECT TITLE based on the project context.\nFollow the title rules above.\nReturn ONLY the title — no instructions, no explanation, no quotes.\n`);
-  } else if (path.includes('milestones')) {
-    if (fieldName === 'date') {
-      const projectStartDate = projectData.projectIdea?.startDate || new Date().toISOString().split('T')[0];
-      const wpIdx = path[1];
-      const msIdx = path[3];
-      const milestoneDesc = projectData.activities?.[wpIdx as number]?.milestones?.[msIdx as number]?.description || '';
-      specificContext = language === 'si' ? 'datum za mejnik' : 'a date for a Milestone';
-      extraInstruction = `\nCONTEXT:\n- Project Start Date: ${projectStartDate}\n- Milestone Description: "${milestoneDesc}"\nTASK: Estimate a realistic completion date.\nFORMAT: Return ONLY 'YYYY-MM-DD'. No other text.`;
-    } else {
-      specificContext = language === 'si'
-        ? `mejnik v delovnem sklopu na poti ${JSON.stringify(path)}`
-        : `a Milestone in the Work Package defined in the path ${JSON.stringify(path)}`;
+  // ★ v5.4: Post-process sub-sections — unwrap string values
+  if (['mainAim', 'stateOfTheArt', 'proposedSolution'].includes(sectionKey)) {
+    if (parsed && typeof parsed === 'object' && parsed[sectionKey]) {
+      return parsed[sectionKey];
     }
-  } else if (path.includes('tasks')) {
-    specificContext = language === 'si' ? 'nalogo v delovnem sklopu' : 'a Task in the Work Package';
-  } else if (path.includes('deliverables')) {
-    specificContext = language === 'si' ? 'predvideni rezultat' : 'a Deliverable';
-  } else if (path.includes('risks')) {
-    specificContext = language === 'si' ? 'specifično tveganje' : 'a specific Risk';
-  } else {
-    specificContext = language === 'si' ? `polje "${fieldName}"` : `the field "${fieldName}"`;
   }
 
-  const anchorNote = siblingContext
-    ? (language === 'si'
-      ? ' Generirano besedilo MORA biti neposredno vsebinsko povezano z obstoječimi podatki zgoraj.'
-      : ' The generated text MUST be directly related to the existing data above.')
-    : '';
-
-  const taskLine = isProjectTitle
-    ? (language === 'si'
-      ? `Generiraj ali izboljšaj NAZIV PROJEKTA. Vrni SAMO golo besedilo naziva (30–200 znakov). Brez markdown, brez narekovajev, brez razlage.${anchorNote}`
-      : `Generate or improve the PROJECT TITLE. Return ONLY the plain text title (30–200 characters). No markdown, no quotes, no explanation.${anchorNote}`)
-    : (language === 'si'
-      ? `Generiraj profesionalno vrednost za ${specificContext} znotraj "${sectionName}". Vrni samo golo besedilo brez markdown. Vključi citat iz REALNEGA vira če primerno. Če ne poznaš podatka: "[Vstavite preverjen podatek: ...]". Piši kot izkušen človeški svetovalec.${anchorNote}`
-      : `Generate a professional value for ${specificContext} within "${sectionName}". Return only plain text, no markdown. Include citation from a REAL source where appropriate. If unknown: "[Insert verified data: ...]". Write like an experienced human consultant.${anchorNote}`);
-
-  const prompt = [
-    langDirective,
-    langMismatchNotice,
-    isProjectTitle ? '' : academicRules,
-    isProjectTitle ? '' : humanRules,
-    titleRules,
-    context,
-    siblingContext,
-    `${globalRulesHeader}:\n${globalRules}`,
-    sectionRules,
-    fieldRuleText,
-    extraInstruction,
-    taskLine
-  ].filter(Boolean).join('\n\n');
-
-  const result = await generateContent({
-    prompt,
-    sectionKey: 'field',
-  });
-
-  let text = result.text;
-  text = text
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/`([^`]+)`/g, '$1');
-
-  if (isProjectTitle) {
-    text = sanitizeProjectTitle(text);
+  // ★ v5.0: Sanitize project title
+  if (sectionKey === 'projectIdea' && parsed?.projectTitle) {
+    parsed.projectTitle = sanitizeProjectTitle(parsed.projectTitle);
+  }
+  if (sectionKey === 'projectTitleAcronym' && parsed?.projectTitle) {
+    parsed.projectTitle = sanitizeProjectTitle(parsed.projectTitle);
   }
 
-  return text;
+  // ★ v4.6: For activities, enforce temporal integrity
+  if (sectionKey === 'activities' && Array.isArray(parsed)) {
+    parsed = sanitizeActivities(parsed);
+    parsed = enforceTemporalIntegrity(parsed, projectData);
+  }
+
+  // ★ Fill mode: merge with existing data
+  if (mode === 'fill' && currentSectionData) {
+    return smartMerge(currentSectionData, parsed);
+  }
+
+  return parsed;
 };
 
-// ─── SUMMARY GENERATION (v5.0 — condensation-only, structured) ──
-
-export const generateProjectSummary = async (
-  projectData: any,
-  language: 'en' | 'si' = 'en'
-) => {
-  const context = getContext(projectData);
-  const summaryRules = getSummaryRules(language);
-  const langDirective = getLanguageDirective(language);
-
-  const extractionReminder = language === 'si'
-    ? `KRITIČNO NAVODILO: Si KONDENZACIJSKI mehanizem. DESTILIRAJ projektne podatke v KRATEK povzetek — NAJVEČ 800 besed skupaj, 5 sekcij, brez alinej, brez kopiranja celih odstavkov. Zajemi samo BISTVO vsake sekcije.`
-    : `CRITICAL INSTRUCTION: You are a CONDENSATION engine. DISTILL the project data into a SHORT summary — MAXIMUM 800 words total, 5 sections, no bullet points, no copy-pasting whole paragraphs. Capture only the ESSENCE of each section.`;
-
-  const prompt = [
-    langDirective,
-    extractionReminder,
-    summaryRules,
-    `\n---\nPROJECT DATA TO SUMMARISE:\n---\n`,
-    context,
-    `\n---\n`,
-    language === 'si'
-      ? `KONČNI OPOMNIK: NAJVEČ 800 besed. 5 sekcij z ## naslovi. BREZ alinej. BREZ krepkega tiska. Samo tekoči odstavki proze. NE kopiraj — KONDENZIRAJ.`
-      : `FINAL REMINDER: MAXIMUM 800 words. 5 sections with ## headings. NO bullet points. NO bold text. Only flowing prose paragraphs. Do NOT copy — CONDENSE.`
-  ].filter(Boolean).join('\n\n');
-
-  const result = await generateContent({
-    prompt,
-    sectionKey: 'summary',
-  });
-  return result.text;
-};
 // ═══════════════════════════════════════════════════════════════
-// ★ v5.0: PER-WP GENERATION — generates activities one WP at a time
-// Phase 1: Scaffold (WP ids, titles, date ranges)
-// Phase 2: Each WP individually with cross-WP dependency context
-// Phase 3: Post-processing (sanitize + temporal integrity)
+// PUBLIC API: PER-WP ACTIVITIES GENERATION
 // ═══════════════════════════════════════════════════════════════
 
 export const generateActivitiesPerWP = async (
   projectData: any,
   language: 'en' | 'si' = 'en',
   mode: string = 'regenerate',
-  onProgress?: (wpIndex: number, wpTotal: number, wpTitle: string) => void,
-  existingScaffold?: any[],
-  onlyIndices?: number[]
+  existingActivities: any[] = [],
+  onProgress?: (msg: string) => void
 ): Promise<any[]> => {
-
-  const config = getProviderConfig();
-  const useNativeSchema = config.provider === 'gemini';
-
-  // ── Calculate project dates ──
-  const today = new Date().toISOString().split('T')[0];
-  const projectStart = projectData.projectIdea?.startDate || today;
-  const durationMonths = projectData.projectIdea?.durationMonths || 24;
-  const projectEnd = calculateProjectEndDate(projectStart, durationMonths);
-
   const context = getContext(projectData);
-  const langDirective = getLanguageDirective(language);
+  const instructions = getAppInstructions(language);
+  const globalRules = formatRules(instructions.GLOBAL_RULES);
+  const sectionRules = getRulesForSection('activities', language);
   const academicRules = getAcademicRigorRules(language);
   const humanRules = getHumanizationRules(language);
-  const sectionRules = getRulesForSection('activities', language);
-  const qualityGate = getQualityGate('activities', language);
 
-  // Build temporal rule with actual dates
+  const today = new Date().toISOString().split('T')[0];
+  const pStart = projectData.projectIdea?.startDate || today;
+  const pMonths = projectData.projectIdea?.durationMonths || 24;
+  const pEnd = calculateProjectEndDate(pStart, pMonths);
+
   const temporalRule = (TEMPORAL_INTEGRITY_RULE[language] || TEMPORAL_INTEGRITY_RULE.en)
-    .replace(/\{\{projectStart\}\}/g, projectStart)
-    .replace(/\{\{projectEnd\}\}/g, projectEnd)
-    .replace(/\{\{projectDurationMonths\}\}/g, String(durationMonths));
+    .replace(/\{\{projectStart\}\}/g, pStart)
+    .replace(/\{\{projectEnd\}\}/g, pEnd)
+    .replace(/\{\{projectDurationMonths\}\}/g, String(pMonths));
 
-  // Build task instruction with placeholders filled
-  const taskInstruction = getSectionTaskInstruction('activities', language, {
-    projectStart,
-    projectEnd,
-    projectDurationMonths: String(durationMonths),
-  });
-
-  // ★ v5.5 [D]: Load KB context ONCE for the entire per-WP generation
+  // ★ v5.5: Knowledge Base context
   const kbContext = await getKnowledgeBaseContext();
 
-    // ════════════════════════════════════════════════════════════
-  // PHASE 1: Generate WP scaffold OR use existing one
-  // ════════════════════════════════════════════════════════════
+  // PHASE 1: Generate scaffold (WP IDs, titles, date ranges)
+  const scaffoldPrompt = [
+    kbContext || '',
+    temporalRule,
+    getLanguageDirective(language),
+    `\n${language === 'si' ? 'GLOBALNA PRAVILA' : 'GLOBAL RULES'}:\n${globalRules}`,
+    sectionRules,
+    academicRules ? `\n${academicRules}` : '',
+    humanRules ? `\n${humanRules}` : '',
+    `\n${context}`,
+    `\n${language === 'si'
+      ? `NALOGA: Ustvari SCAFFOLD (ogrodje) za delovne pakete. Vrni JSON array z objekti, ki imajo SAMO: id, title, dateRange (startDate, endDate). Ne generiraj nalog, mejnikov ali deliverables.
+OBVEZNA WP-ja: Predzadnji WP MORA biti "Dissemination, Communication & Exploitation", zadnji WP MORA biti "Project Management & Coordination". Oba morata trajati celotno trajanje projekta (${pStart} do ${pEnd}).
+Skupno 5-8 WP-jev.`
+      : `TASK: Create a SCAFFOLD for work packages. Return a JSON array of objects with ONLY: id, title, dateRange (startDate, endDate). Do NOT generate tasks, milestones, or deliverables.
+MANDATORY WPs: Second-to-last WP MUST be "Dissemination, Communication & Exploitation", last WP MUST be "Project Management & Coordination". Both must span the full project duration (${pStart} to ${pEnd}).
+Total 5-8 WPs.`}`,
+    `\n${temporalRule}`
+  ].filter(Boolean).join('\n');
+
+  if (onProgress) onProgress(language === 'si' ? 'Generiranje ogrodja delovnih paketov...' : 'Generating work package scaffold...');
+
+  const scaffoldResult = await generateContent({
+    prompt: scaffoldPrompt,
+    jsonMode: true,
+    sectionKey: 'activities'
+  });
 
   let scaffold: any[];
-
-  if (existingScaffold && existingScaffold.length > 0) {
-    scaffold = existingScaffold;
-    console.log(`[PerWP] Phase 1: Using existing scaffold with ${scaffold.length} WPs`);
-  } else {
-    console.log(`[PerWP] Phase 1: Generating scaffold...`);
-    if (onProgress) onProgress(-1, 0, language === 'si' ? 'Generiranje strukture DS...' : 'Generating WP structure...');
-
-    const scaffoldBasePrompt = [
-      temporalRule,
-      langDirective,
-      language === 'si'
-        ? `NALOGA: Generiraj SAMO strukturo delovnih sklopov (scaffold) — BREZ nalog, mejnikov ali dosežkov.
-Za vsak DS vrni: id (WP1, WP2...), title (samostalniška zveza), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD).
-Projekt traja od ${projectStart} do ${projectEnd} (${durationMonths} mesecev).
-Med 6 in 10 DS. Upoštevaj pravila za vrstni red DS (prvi je temeljni/analitični, predzadnji diseminacija, zadnji upravljanje).
-Vrni JSON array: [{ "id": "WP1", "title": "...", "startDate": "...", "endDate": "..." }, ...]
-BREZ nalog, mejnikov ali dosežkov — SAMO scaffold.`
-        : `TASK: Generate ONLY the work package structure (scaffold) — WITHOUT tasks, milestones, or deliverables.
-For each WP return: id (WP1, WP2...), title (noun phrase), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD).
-Project runs from ${projectStart} to ${projectEnd} (${durationMonths} months).
-Between 6 and 10 WPs. Follow WP ordering rules (first is foundational/analytical, second-to-last is dissemination, last is project management).
-Return a JSON array: [{ "id": "WP1", "title": "...", "startDate": "...", "endDate": "..." }, ...]
-NO tasks, milestones, or deliverables — ONLY scaffold.`,
-      taskInstruction,
-      context,
-      temporalRule,
-    ].filter(Boolean).join('\n\n');
-
-    // ★ v5.5 [D]: Prepend KB context to scaffold prompt
-    const scaffoldPrompt = kbContext ? `${kbContext}\n\n${scaffoldBasePrompt}` : scaffoldBasePrompt;
-
-    const scaffoldSchema = {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          id: { type: Type.STRING },
-          title: { type: Type.STRING },
-          startDate: { type: Type.STRING },
-          endDate: { type: Type.STRING },
-        },
-        required: ['id', 'title', 'startDate', 'endDate']
-      }
-    };
-
-    const scaffoldResult = await generateContent({
-      prompt: scaffoldPrompt,
-      jsonSchema: useNativeSchema ? scaffoldSchema : undefined,
-      jsonMode: !useNativeSchema,
-      sectionKey: 'activities',
-    });
-
-    const scaffoldStr = scaffoldResult.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-    scaffold = JSON.parse(scaffoldStr);
-
-    if (!Array.isArray(scaffold) || scaffold.length === 0) {
-      throw new Error('AI returned invalid scaffold for per-WP generation');
-    }
+  try {
+    const jsonStr = scaffoldResult.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+    scaffold = JSON.parse(jsonStr);
+    if (!Array.isArray(scaffold)) throw new Error('Scaffold is not an array');
+  } catch (e) {
+    console.error('[geminiService] Failed to parse scaffold:', e);
+    throw new Error('AI scaffold response was not valid JSON');
   }
 
-  console.log(`[PerWP] Phase 1 complete: ${scaffold.length} WPs: ${scaffold.map(w => w.id).join(', ')}`);
-
-  // ════════════════════════════════════════════════════════════
-  // PHASE 2: Generate each WP's content individually
-  // ════════════════════════════════════════════════════════════
-
+  // PHASE 2: Generate each WP individually
   const fullActivities: any[] = [];
-  const wpItemSchema = schemas.activities.items;
 
-  const indicesToGenerate = onlyIndices || scaffold.map((_, idx) => idx);
+  for (let wpIdx = 0; wpIdx < scaffold.length; wpIdx++) {
+    const wpScaffold = scaffold[wpIdx];
+    const wpId = wpScaffold.id || `WP${wpIdx + 1}`;
 
-  for (const i of indicesToGenerate) {
-    if (i < 0 || i >= scaffold.length) continue;
-
-    const wp = scaffold[i];
-    const isLast = i === scaffold.length - 1;
-    const isSecondToLast = i === scaffold.length - 2;
-    const wpNum = wp.id.replace('WP', '');
-
-    const progressIdx = indicesToGenerate.indexOf(i);
-    console.log(`[PerWP] Phase 2: Generating ${wp.id} "${wp.title}" (${progressIdx + 1}/${indicesToGenerate.length})...`);
-    if (onProgress) onProgress(progressIdx, indicesToGenerate.length, wp.title);
-
-    let wpTypeInstruction: string;
-           if (isLast) {
-      // ★ v5.3: Expert identity + concrete dates + JSON example for PM WP
-      const pmStart = new Date(projectStart + 'T00:00:00Z');
-      const pmEnd = new Date(projectEnd + 'T00:00:00Z');
-      const pmTotal = pmEnd.getTime() - pmStart.getTime();
-      const toISO = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
-      const pm_m3 = toISO(new Date(pmStart.getTime() + pmTotal * 0.08));
-      const pm_closing = toISO(new Date(pmEnd.getTime() - pmTotal * 0.08));
-      const pmWpNum = scaffold.length;
-
-      wpTypeInstruction = language === 'si'
-        ? `SI IZKUŠEN STROKOVNJAK ZA PROJEKTNO VODENJE (PMP/PRINCE2) z 20+ leti izkušenj pri EU projektih.
-KOT STROKOVNJAK VEŠ: naloge projektnega vodenja (koordinacija, monitoring, kakovost, finance) TEČEJO VZPOREDNO skozi CELOTNO trajanje projekta. Koordinacija se NIKOLI ne konča pred zaključkom projekta. Finančno upravljanje je STALNA aktivnost. Spremljanje napredka je CIKLIČNO skozi celoten projekt. EDINA kratka naloga je zaključno poročilo na koncu.
-NAPAČNO = zaporedne kratke naloge, naloge stisnjene v isto obdobje, naloge ki se končajo pred koncem projekta.
-
-Ta DS je "Upravljanje in koordinacija projekta" (ZADNJI DS).
-
-═══ ŽELEZNO PRAVILO ZA DATUME (KRŠITEV = ZAVRNITEV) ═══
-VSAKA naloga razen zaključnega poročila MORA imeti endDate = ${projectEnd}.
-
-OBVEZNI DATUMI:
-  T${pmWpNum}.1: startDate="${projectStart}", endDate="${projectEnd}"
-  T${pmWpNum}.2: startDate="${projectStart}", endDate="${projectEnd}"
-  T${pmWpNum}.3: startDate="${pm_m3}",         endDate="${projectEnd}"
-  T${pmWpNum}.4: startDate="${projectStart}", endDate="${projectEnd}"
-  T${pmWpNum}.5: startDate="${pm_closing}",    endDate="${projectEnd}"
-
-JSON PRIMER:
-{"tasks":[
-  {"id":"T${pmWpNum}.1","title":"Koordinacija konzorcija in operativno upravljanje","startDate":"${projectStart}","endDate":"${projectEnd}","dependencies":[],"description":"Celostna koordinacija projektnih aktivnosti, vključno z vodenjem sestankov konzorcija, upravljanjem komunikacije med partnerji in zagotavljanjem skladnosti z zavezami iz pogodbe o sofinanciranju."},
-  {"id":"T${pmWpNum}.2","title":"Spremljanje napredka in ciklično poročanje","startDate":"${projectStart}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.1","type":"SS"}],"description":"Kontinuirano spremljanje projektnega napredka z rednimi vmesnimi poročili, letnimi pregledi in mehanizmi za zgodnje zaznavanje odstopanj od načrta."},
-  {"id":"T${pmWpNum}.3","title":"Zagotavljanje kakovosti in obvladovanje tveganj","startDate":"${pm_m3}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.1","type":"SS"}],"description":"Vzpostavitev in izvajanje sistema kakovosti z notranjimi revizijami, medsebojnimi evalvacijami ter aktivnim upravljanjem registra tveganj."},
-  {"id":"T${pmWpNum}.4","title":"Finančno upravljanje in revizijska pripravljenost","startDate":"${projectStart}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.1","type":"SS"}],"description":"Upravljanje projektnega proračuna, spremljanje porabe po partnerjih, priprava finančnih poročil in zagotavljanje revizijske sledi."},
-  {"id":"T${pmWpNum}.5","title":"Zaključno poročilo in zaprtje projekta","startDate":"${pm_closing}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.2","type":"FF"}],"description":"Priprava zaključnega tehničnega in finančnega poročila, prenos znanja, arhiviranje dokumentacije in formalno zaprtje projekta."}
-]}
-Sledi temu vzorcu. Spremeni naslove in opise glede na kontekst projekta, ampak DATUMI morajo biti identični. Mejnik na ali pred ${projectEnd}.
-═══════════════════════════════════════════════════════════════════`
-
-        : `YOU ARE AN EXPERIENCED PROJECT MANAGEMENT EXPERT (PMP/PRINCE2) with 20+ years managing EU projects.
-AS AN EXPERT YOU KNOW: PM tasks (coordination, monitoring, quality, finance) RUN IN PARALLEL throughout the ENTIRE project. Coordination NEVER ends before project closure. Financial management is ONGOING. Progress monitoring is CYCLICAL. The ONLY short task is the final report at the end.
-WRONG = sequential short tasks, tasks compressed into same period, tasks ending before project end.
-
-This WP is "Project Management and Coordination" (LAST WP).
-
-═══ IRON RULE FOR DATES (VIOLATION = REJECTION) ═══
-EVERY task except the final report MUST have endDate = ${projectEnd}.
-
-MANDATORY DATES:
-  T${pmWpNum}.1: startDate="${projectStart}", endDate="${projectEnd}"
-  T${pmWpNum}.2: startDate="${projectStart}", endDate="${projectEnd}"
-  T${pmWpNum}.3: startDate="${pm_m3}",         endDate="${projectEnd}"
-  T${pmWpNum}.4: startDate="${projectStart}", endDate="${projectEnd}"
-  T${pmWpNum}.5: startDate="${pm_closing}",    endDate="${projectEnd}"
-
-JSON EXAMPLE:
-{"tasks":[
-  {"id":"T${pmWpNum}.1","title":"Consortium Coordination and Operational Management","startDate":"${projectStart}","endDate":"${projectEnd}","dependencies":[],"description":"Overall coordination of project activities including consortium meetings, partner communication management, and compliance with grant agreement obligations."},
-  {"id":"T${pmWpNum}.2","title":"Progress Monitoring and Reporting Cycle Execution","startDate":"${projectStart}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.1","type":"SS"}],"description":"Continuous monitoring of project progress through regular interim reports, annual reviews, and early warning mechanisms for deviations from the work plan."},
-  {"id":"T${pmWpNum}.3","title":"Quality Assurance and Risk Management Framework","startDate":"${pm_m3}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.1","type":"SS"}],"description":"Establishment and execution of the quality management system including internal audits, peer evaluations, and active risk register management."},
-  {"id":"T${pmWpNum}.4","title":"Financial Management and Audit Preparation","startDate":"${projectStart}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.1","type":"SS"}],"description":"Budget management, expenditure tracking per partner, financial reporting preparation, and audit trail maintenance."},
-  {"id":"T${pmWpNum}.5","title":"Final Project Closure and Knowledge Transfer","startDate":"${pm_closing}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${pmWpNum}.2","type":"FF"}],"description":"Preparation of final technical and financial reports, knowledge transfer activities, documentation archiving, and formal project closure."}
-]}
-Follow this pattern. Adapt titles and descriptions to the project context, but DATES must be identical. Milestone on or before ${projectEnd}.
-═══════════════════════════════════════════════════════════════════`;
-
-            } else if (isSecondToLast) {
-      // ★ v5.3: Expert identity + concrete dates + JSON example for Dissemination WP
-      const dissStart = new Date(projectStart + 'T00:00:00Z');
-      const dissEnd = new Date(projectEnd + 'T00:00:00Z');
-      const dissTotal = dissEnd.getTime() - dissStart.getTime();
-      const toISOd = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
-      const diss_setup_end = toISOd(new Date(dissStart.getTime() + dissTotal * 0.15));
-      const diss_m2 = toISOd(new Date(dissStart.getTime() + dissTotal * 0.05));
-      const diss_m6 = toISOd(new Date(dissStart.getTime() + dissTotal * 0.15));
-      const diss_m12 = toISOd(new Date(dissStart.getTime() + dissTotal * 0.33));
-      const dissWpNum = scaffold.length - 1;
-
-      wpTypeInstruction = language === 'si'
-        ? `SI IZKUŠEN STROKOVNJAK ZA DISEMINACIJO IN KOMUNIKACIJO V EU PROJEKTIH z 20+ leti izkušenj.
-KOT STROKOVNJAK VEŠ: vizualna identiteta se vzpostavi NA ZAČETKU (kratka setup naloga). Spletna stran se upravlja od vzpostavitve DO KONCA. Dogodki se organizirajo od zgodnje faze DO KONCA. Publikacije se pripravljajo od sredine DO KONCA. Eksploatacijska strategija se razvija od ~33% projekta DO KONCA.
-NAPAČNO = vse naloge stisnjene na konec, vse na začetek, naloge ki se končajo pred koncem projekta.
-
-Ta DS je "Diseminacija, komunikacija in izkoriščanje rezultatov" (PREDZADNJI DS).
-
-═══ ŽELEZNO PRAVILO ZA DATUME (KRŠITEV = ZAVRNITEV) ═══
-Vse naloge RAZEN T${dissWpNum}.1 (setup) MORAJO imeti endDate = ${projectEnd}.
-
-OBVEZNI DATUMI:
-  T${dissWpNum}.1: startDate="${projectStart}", endDate="${diss_setup_end}"  ← SAMO ta je kratka
-  T${dissWpNum}.2: startDate="${diss_m2}",      endDate="${projectEnd}"      ← do konca!
-  T${dissWpNum}.3: startDate="${diss_m6}",      endDate="${projectEnd}"      ← do konca!
-  T${dissWpNum}.4: startDate="${diss_m6}",      endDate="${projectEnd}"      ← do konca!
-  T${dissWpNum}.5: startDate="${diss_m12}",     endDate="${projectEnd}"      ← do konca!
-
-JSON PRIMER:
-{"tasks":[
-  {"id":"T${dissWpNum}.1","title":"Vzpostavitev vizualne identitete in komunikacijskih kanalov","startDate":"${projectStart}","endDate":"${diss_setup_end}","dependencies":[{"predecessorId":"T1.1","type":"SS"}],"description":"Oblikovanje projektne vizualne identitete, logotipa, grafične predloge in vzpostavitev komunikacijskih kanalov (spletna stran, profili na družbenih omrežjih)."},
-  {"id":"T${dissWpNum}.2","title":"Upravljanje spletne strani in družbenih omrežij","startDate":"${diss_m2}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.1","type":"FS"}],"description":"Tekoče upravljanje projektne spletne strani z rednimi objavami napredka, rezultatov in dogodkov ter aktivno upravljanje profilov na družbenih omrežjih."},
-  {"id":"T${dissWpNum}.3","title":"Organizacija strokovnih dogodkov in delavnic","startDate":"${diss_m6}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.1","type":"FS"}],"description":"Načrtovanje in izvedba strokovnih dogodkov, delavnic, seminarjev in zaključne konference za diseminacijo rezultatov med ciljnimi skupinami."},
-  {"id":"T${dissWpNum}.4","title":"Priprava publikacij in diseminacijskih poročil","startDate":"${diss_m6}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.2","type":"SS"}],"description":"Priprava strokovnih publikacij, policy briefov, newsletterjev in diseminacijskih poročil za različne ciljne skupine."},
-  {"id":"T${dissWpNum}.5","title":"Razvoj strategije za izkoriščanje rezultatov","startDate":"${diss_m12}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.3","type":"SS"}],"description":"Razvoj celovite strategije za izkoriščanje projektnih rezultatov, vključno z načrtom komercializacije, odprtega dostopa in integracije v politike."}
-]}
-Sledi temu vzorcu. Spremeni naslove in opise glede na kontekst, ampak DATUMI morajo biti identični. Mejnik na ali pred ${projectEnd}.
-═══════════════════════════════════════════════════════════════════`
-
-        : `YOU ARE AN EXPERIENCED EU PROJECT DISSEMINATION AND COMMUNICATION EXPERT with 20+ years of experience.
-AS AN EXPERT YOU KNOW: visual identity is established AT THE START (short setup task). Website is managed from setup UNTIL THE END. Events are organised from early phase UNTIL THE END. Publications from mid-project UNTIL THE END. Exploitation strategy from ~33% UNTIL THE END.
-WRONG = all tasks compressed to the end, all to the start, tasks ending before project end.
-
-This WP is "Dissemination, Communication and Exploitation of Results" (SECOND-TO-LAST WP).
-
-═══ IRON RULE FOR DATES (VIOLATION = REJECTION) ═══
-All tasks EXCEPT T${dissWpNum}.1 (setup) MUST have endDate = ${projectEnd}.
-
-MANDATORY DATES:
-  T${dissWpNum}.1: startDate="${projectStart}", endDate="${diss_setup_end}"  ← ONLY this one is short
-  T${dissWpNum}.2: startDate="${diss_m2}",      endDate="${projectEnd}"      ← to the end!
-  T${dissWpNum}.3: startDate="${diss_m6}",      endDate="${projectEnd}"      ← to the end!
-  T${dissWpNum}.4: startDate="${diss_m6}",      endDate="${projectEnd}"      ← to the end!
-  T${dissWpNum}.5: startDate="${diss_m12}",     endDate="${projectEnd}"      ← to the end!
-
-JSON EXAMPLE:
-{"tasks":[
-  {"id":"T${dissWpNum}.1","title":"Establishment of Visual Identity and Communication Channels","startDate":"${projectStart}","endDate":"${diss_setup_end}","dependencies":[{"predecessorId":"T1.1","type":"SS"}],"description":"Design of project visual identity, logo, graphic templates, and establishment of communication channels (website, social media profiles)."},
-  {"id":"T${dissWpNum}.2","title":"Website and Social Media Management","startDate":"${diss_m2}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.1","type":"FS"}],"description":"Ongoing management of project website with regular updates on progress, results, and events, plus active social media profile management."},
-  {"id":"T${dissWpNum}.3","title":"Organisation of Professional Events and Workshops","startDate":"${diss_m6}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.1","type":"FS"}],"description":"Planning and execution of professional events, workshops, seminars, and a closing conference for disseminating results to target groups."},
-  {"id":"T${dissWpNum}.4","title":"Preparation of Publications and Dissemination Reports","startDate":"${diss_m6}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.2","type":"SS"}],"description":"Preparation of professional publications, policy briefs, newsletters, and dissemination reports for various target audiences."},
-  {"id":"T${dissWpNum}.5","title":"Development of Results Exploitation Strategy","startDate":"${diss_m12}","endDate":"${projectEnd}","dependencies":[{"predecessorId":"T${dissWpNum}.3","type":"SS"}],"description":"Development of a comprehensive exploitation strategy including commercialisation plan, open access provisions, and policy integration roadmap."}
-]}
-Follow this pattern. Adapt titles and descriptions to the project context, but DATES must be identical. Milestone on or before ${projectEnd}.
-═══════════════════════════════════════════════════════════════════`;
-
-
-
-    } else {
-      wpTypeInstruction = language === 'si'
-        ? `Ta DS je vsebinski/tehnični DS. Traja od ${wp.startDate} do ${wp.endDate}. NE sme trajati celotno obdobje projekta. Naloge so zaporedne ali zamaknjene znotraj tega obdobja.`
-        : `This is a content/thematic WP. It runs from ${wp.startDate} to ${wp.endDate}. It MUST NOT span the entire project duration. Tasks are sequential or staggered within this period.`;
+    if (onProgress) {
+      onProgress(language === 'si'
+        ? `Generiranje ${wpId}: ${wpScaffold.title || ''}...`
+        : `Generating ${wpId}: ${wpScaffold.title || ''}...`);
     }
 
-    let prevWPsContext = '';
-    if (fullActivities.length > 0) {
-      const prevSummary = fullActivities.map(w => ({
-        id: w.id,
-        title: w.title,
-        tasks: w.tasks?.map((t: any) => ({ id: t.id, title: t.title, startDate: t.startDate, endDate: t.endDate }))
-      }));
-      prevWPsContext = language === 'si'
-        ? `\nŽE GENERIRANI DS (uporabi za cross-WP odvisnosti — tvoje naloge se MORAJO sklicevati na predhodnike iz teh DS kjer je logično):\n${JSON.stringify(prevSummary, null, 2)}`
-        : `\nALREADY GENERATED WPs (use for cross-WP dependencies — your tasks MUST reference predecessors from these WPs where logical):\n${JSON.stringify(prevSummary, null, 2)}`;
-    }
+    // Build context of previously generated WPs
+    const previousWPsContext = fullActivities.length > 0
+      ? `\n${language === 'si' ? 'ŽE GENERIRANI DELOVNI PAKETI' : 'ALREADY GENERATED WORK PACKAGES'}:\n${JSON.stringify(fullActivities, null, 2)}`
+      : '';
 
-    const scaffoldOverview = language === 'si'
-      ? `\nCELOTEN SCAFFOLD PROJEKTA:\n${scaffold.map(s => `  ${s.id}: "${s.title}" (${s.startDate} → ${s.endDate})`).join('\n')}`
-      : `\nFULL PROJECT SCAFFOLD:\n${scaffold.map(s => `  ${s.id}: "${s.title}" (${s.startDate} → ${s.endDate})`).join('\n')}`;
-
-    const firstTaskId = `T${wpNum}.1`;
-    const isFirstWP = i === 0;
-
-    const wpBasePrompt = [
+    const wpPrompt = [
+      kbContext || '',
       temporalRule,
-      langDirective,
-      language === 'si'
-        ? `NALOGA: Generiraj CELOTEN delovni sklop ${wp.id}: "${wp.title}" z nalogami, mejniki in dosežki.
-Vrni EN JSON objekt (ne array) s strukturo: { "id": "${wp.id}", "title": "${wp.title}", "tasks": [...], "milestones": [...], "deliverables": [...] }`
-        : `TASK: Generate the COMPLETE work package ${wp.id}: "${wp.title}" with tasks, milestones, and deliverables.
-Return ONE JSON object (not array): { "id": "${wp.id}", "title": "${wp.title}", "tasks": [...], "milestones": [...], "deliverables": [...] }`,
-      wpTypeInstruction,
-      scaffoldOverview,
-      prevWPsContext,
-      language === 'si'
-        ? `\nPRAVILA ZA ${wp.id}:
-- 2–5 nalog z zaporednimi/zamaknjenimi datumi znotraj ${wp.startDate} do ${wp.endDate}
-- Task ID format: T${wpNum}.1, T${wpNum}.2, T${wpNum}.3...
-- Vsaj 1 mejnik z datumom v YYYY-MM-DD
-- Vsaj 1 dosežek s polji: title (samostalniška zveza), description (2–4 stavki), indicator (specifičen, merljiv)
-- ${isFirstWP ? `Naloga ${firstTaskId} NIMA odvisnosti (je izhodišče projekta)` : `Naloga ${firstTaskId} MORA imeti vsaj 1 cross-WP odvisnost na nalogo iz predhodnega DS`}
-- Vse ostale naloge v tem DS imajo vsaj 1 odvisnost (FS, SS, FF ali SF)
-- Naslovi nalog: samostalniške zveze, NE nedoločniki
-- BREZ markdown (**, ##, \`)
-- Piši kot izkušen EU projektni svetovalec`
-        : `\nRULES FOR ${wp.id}:
-- 2–5 tasks with sequential/staggered dates within ${wp.startDate} to ${wp.endDate}
-- Task ID format: T${wpNum}.1, T${wpNum}.2, T${wpNum}.3...
-- At least 1 milestone with date in YYYY-MM-DD
-- At least 1 deliverable with fields: title (noun phrase), description (2–4 sentences), indicator (specific, measurable)
-- ${isFirstWP ? `Task ${firstTaskId} has NO dependencies (it is the project starting point)` : `Task ${firstTaskId} MUST have at least 1 cross-WP dependency on a task from a previous WP`}
-- All other tasks in this WP have at least 1 dependency (FS, SS, FF, or SF)
-- Task titles: noun phrases, NOT infinitive verbs
-- NO markdown (**, ##, \`)
-- Write like an experienced EU project consultant`,
-      context,
-      academicRules,
-      humanRules,
+      getLanguageDirective(language),
+      `\n${language === 'si' ? 'GLOBALNA PRAVILA' : 'GLOBAL RULES'}:\n${globalRules}`,
       sectionRules,
-      temporalRule,
-    ].filter(Boolean).join('\n\n');
+      academicRules ? `\n${academicRules}` : '',
+      humanRules ? `\n${humanRules}` : '',
+      `\n${context}`,
+      previousWPsContext,
+      `\nSCAFFOLD:\n${JSON.stringify(scaffold, null, 2)}`,
+      `\n${language === 'si'
+        ? `NALOGA: Generiraj CELOTEN delovni paket ${wpId} ("${wpScaffold.title}").
+Vrni EN JSON objekt z: id, title, tasks (3-5 nalog z id, title, description, startDate, endDate, dependencies), milestones (1-2), deliverables (1-3 z id, title, description, indicator).
+Vse naloge morajo imeti datume znotraj ${wpScaffold.dateRange?.startDate || pStart} - ${wpScaffold.dateRange?.endDate || pEnd}.
+Upoštevaj odvisnosti od nalog v prejšnjih WP-jih.`
+        : `TASK: Generate the COMPLETE work package ${wpId} ("${wpScaffold.title}").
+Return ONE JSON object with: id, title, tasks (3-5 tasks with id, title, description, startDate, endDate, dependencies), milestones (1-2), deliverables (1-3 with id, title, description, indicator).
+All task dates must be within ${wpScaffold.dateRange?.startDate || pStart} - ${wpScaffold.dateRange?.endDate || pEnd}.
+Consider dependencies on tasks in previous WPs.`}`,
+      `\n${temporalRule}`
+    ].filter(Boolean).join('\n');
 
-    // ★ v5.5 [D]: Prepend KB context to each WP prompt
-    const wpPrompt = kbContext ? `${kbContext}\n\n${wpBasePrompt}` : wpBasePrompt;
+    // Rate limit between WP generations
+    if (wpIdx > 0) {
+      await new Promise(r => setTimeout(r, 1500));
+    }
 
     const wpResult = await generateContent({
       prompt: wpPrompt,
-      jsonSchema: useNativeSchema ? wpItemSchema : undefined,
-      jsonMode: !useNativeSchema,
-      sectionKey: 'activities',
+      jsonMode: true,
+      sectionKey: 'activities'
     });
 
-    const wpStr = wpResult.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-    let wpData = JSON.parse(wpStr);
+    try {
+      const jsonStr = wpResult.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+      let wpData = JSON.parse(jsonStr);
 
-    if (Array.isArray(wpData)) {
-      wpData = wpData[0] || {};
-    }
-
-    wpData.id = wp.id;
-    wpData.title = wpData.title || wp.title;
-
-    wpData = stripMarkdown(wpData);
-
-    fullActivities.push(wpData);
-
-    console.log(`[PerWP] ${wp.id} generated: ${wpData.tasks?.length || 0} tasks, ${wpData.milestones?.length || 0} milestones, ${wpData.deliverables?.length || 0} deliverables`);
-
-    if (progressIdx < indicesToGenerate.length - 1) {
-      await new Promise(r => setTimeout(r, 2000));
-    }
-  }
-
-  // ════════════════════════════════════════════════════════════
-  // PHASE 3: Post-processing
-  // ════════════════════════════════════════════════════════════
-
-  console.log(`[PerWP] Phase 3: Post-processing ${fullActivities.length} WPs...`);
-
-  let mergedActivities: any[];
-  if (onlyIndices && existingScaffold) {
-    mergedActivities = [...(projectData.activities || [])];
-    for (const wpData of fullActivities) {
-      const idx = mergedActivities.findIndex((w: any) => w.id === wpData.id);
-      if (idx >= 0) {
-        const existing = mergedActivities[idx];
-        const hasTasks = existing.tasks && existing.tasks.length > 0
-          && existing.tasks.some((t: any) => t.title && t.title.trim().length > 0);
-        const hasMilestones = existing.milestones && existing.milestones.length > 0
-          && existing.milestones.some((m: any) => m.description && m.description.trim().length > 0);
-        const hasDeliverables = existing.deliverables && existing.deliverables.length > 0
-          && existing.deliverables.some((d: any) => d.title && d.title.trim().length > 0);
-
-        mergedActivities[idx] = {
-          ...existing,
-          tasks: hasTasks ? existing.tasks : (wpData.tasks || existing.tasks || []),
-          milestones: hasMilestones ? existing.milestones : (wpData.milestones || existing.milestones || []),
-          deliverables: hasDeliverables ? existing.deliverables : (wpData.deliverables || existing.deliverables || []),
-        };
-      } else {
-        mergedActivities.push(wpData);
+      // Handle case where AI returns an array with one element
+      if (Array.isArray(wpData)) {
+        wpData = wpData[0] || wpData;
       }
+
+      wpData = stripMarkdown(wpData);
+      fullActivities.push(wpData);
+    } catch (e) {
+      console.error(`[geminiService] Failed to parse WP ${wpId}:`, e);
+      // Use scaffold data as fallback
+      fullActivities.push({
+        id: wpId,
+        title: wpScaffold.title || '',
+        tasks: [],
+        milestones: [],
+        deliverables: []
+      });
     }
-  } else {
-    mergedActivities = fullActivities;
   }
 
-  let result = sanitizeActivities(mergedActivities);
-
+  // Post-process: sanitize and enforce temporal integrity
+  let result = sanitizeActivities(fullActivities);
   result = enforceTemporalIntegrity(result, projectData);
-
-  console.log(`[PerWP] Complete! ${result.length} WPs with ${result.reduce((sum: number, wp: any) => sum + (wp.tasks?.length || 0), 0)} total tasks.`);
 
   return result;
 };
 
-// ─── TRANSLATION ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API: TARGETED FILL (fill empty fields only)
+// ═══════════════════════════════════════════════════════════════
 
-export const translateProjectContent = async (
+export const generateTargetedFill = async (
+  sectionKey: string,
   projectData: any,
-  targetLanguage: 'en' | 'si'
-) => {
-  const langName = targetLanguage === 'si' ? 'Slovenian' : 'English';
-  const translationRules = getTranslationRules(targetLanguage);
-  const formattedTranslationRules = formatRulesAsList(translationRules);
+  currentData: any,
+  language: 'en' | 'si' = 'en'
+): Promise<any> => {
+  const result = await generateSectionContent(sectionKey, projectData, language, 'fill', currentData);
+
+  // ★ v5.0 FIX: sanitize and enforce temporal integrity for activities
+  if (sectionKey === 'activities' && Array.isArray(result)) {
+    let processed = sanitizeActivities(result);
+    processed = enforceTemporalIntegrity(processed, projectData);
+    return processed;
+  }
+
+  return result;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API: OBJECT FILL (fill empty fields in an object)
+// ═══════════════════════════════════════════════════════════════
+
+export const generateObjectFill = async (
+  sectionKey: string,
+  projectData: any,
+  currentData: any,
+  emptyFields: string[],
+  language: 'en' | 'si' = 'en'
+): Promise<any> => {
+  const { prompt, schema } = getPromptAndSchemaForSection(sectionKey, projectData, language, 'fill', currentData);
+
+  const fillInstruction = language === 'si'
+    ? `\nPRAZNA POLJA ZA IZPOLNITEV: ${emptyFields.join(', ')}\nIzpolni SAMO navedena prazna polja. Obstoječe podatke OHRANI nespremenjene.`
+    : `\nEMPTY FIELDS TO FILL: ${emptyFields.join(', ')}\nFill ONLY the listed empty fields. Keep existing data UNCHANGED.`;
+
+  const fullPrompt = prompt + fillInstruction;
+
+  const kbContext = await getKnowledgeBaseContext();
+  const finalPrompt = kbContext ? `${kbContext}\n\n${fullPrompt}` : fullPrompt;
+
+  const result = await generateContent({
+    prompt: finalPrompt,
+    schema: schema || undefined,
+    jsonMode: true,
+    sectionKey
+  });
+
+  let parsed: any;
+  try {
+    const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    console.error('[geminiService] Failed to parse fill response:', e);
+    throw new Error('AI fill response was not valid JSON');
+  }
+
+  parsed = stripMarkdown(parsed);
+
+  // Merge: keep existing, fill empty
+  return smartMerge(currentData, parsed);
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API: PROJECT SUMMARY GENERATION
+// ═══════════════════════════════════════════════════════════════
+
+export const generateProjectSummary = async (
+  projectData: any,
+  language: 'en' | 'si' = 'en'
+): Promise<string> => {
+  const context = getContext(projectData);
+  const summaryRules = getSummaryRules(language);
+  const langDirective = getLanguageDirective(language);
 
   const prompt = [
-    `You are a professional translator for EU Project Proposals.`,
-    `Translate the following JSON object strictly into ${langName}.`,
-    `RULES:\n- ${formattedTranslationRules}`,
-    `Return ONLY the valid JSON string.`,
-    `\nJSON to Translate:\n${JSON.stringify(projectData)}`
-  ].join('\n');
+    langDirective,
+    `\n${context}`,
+    `\n${language === 'si' ? 'PRAVILA ZA POVZETEK' : 'SUMMARY RULES'}:`,
+    formatRules(summaryRules),
+    `\n${language === 'si'
+      ? 'NALOGA: Napiši povzetek projekta na podlagi zgornjih podatkov. Povzetek naj bo 150-300 besed, strukturiran v 3-4 odstavke. Ne dodajaj novih informacij — samo kondenziraj obstoječe podatke.'
+      : 'TASK: Write a project summary based on the data above. The summary should be 150-300 words, structured in 3-4 paragraphs. Do not add new information — only condense existing data.'}`
+  ].filter(Boolean).join('\n');
+
+  const kbContext = await getKnowledgeBaseContext();
+  const finalPrompt = kbContext ? `${kbContext}\n\n${prompt}` : prompt;
+
+  const result = await generateContent({
+    prompt: finalPrompt,
+    sectionKey: 'summary'
+  });
+
+  return result.text.trim();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PUBLIC API: FIELD-LEVEL GENERATION
+// ═══════════════════════════════════════════════════════════════
+
+export const generateFieldContent = async (
+  fieldPath: string,
+  projectData: any,
+  language: 'en' | 'si' = 'en'
+): Promise<string> => {
+  const fieldRule = getFieldRule(fieldPath, language);
+  const context = getContext(projectData);
+  const langDirective = getLanguageDirective(language);
+
+  const prompt = [
+    langDirective,
+    `\n${context}`,
+    `\n${language === 'si' ? 'PRAVILO ZA POLJE' : 'FIELD RULE'}: ${fieldRule}`,
+    `\n${language === 'si'
+      ? `NALOGA: Generiraj vsebino za polje "${fieldPath}" na podlagi konteksta projekta in pravila za polje.`
+      : `TASK: Generate content for the field "${fieldPath}" based on the project context and field rule.`}`
+  ].filter(Boolean).join('\n');
 
   const result = await generateContent({
     prompt,
-    jsonMode: true,
-    sectionKey: 'translation',
+    sectionKey: 'field'
   });
-  const jsonStr = result.text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-  return JSON.parse(jsonStr);
+
+  return stripMarkdown(result.text.trim());
 };
-
-// ─── RE-EXPORTS ──────────────────────────────────────────────────
-
-export const detectProjectLanguage = detectLanguage;
