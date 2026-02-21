@@ -1,7 +1,8 @@
 // components/Sidebar.tsx
 // ═══════════════════════════════════════════════════════════════
 // EURO-OFFICE Sidebar — Design System Edition
-// v3.0 — 2026-02-19
+// v3.1 — 2026-02-21
+//   ★ v3.1: FIX: hasActiveProject prop — all steps disabled when no project selected
 //   ★ v3.0: Dashboard Home integration
 //     - NEW: activeView prop ('dashboard' | 'project')
 //     - NEW: onOpenDashboard prop
@@ -177,6 +178,8 @@ interface SidebarProps {
   // ★ v3.0: Dashboard integration
   activeView: 'dashboard' | 'project';
   onOpenDashboard: () => void;
+  // ★ v3.1: Disable steps when no project is active
+  hasActiveProject?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────
@@ -189,6 +192,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onBackToWelcome, onOpenProjectList, onOpenAdminPanel, onLogout, onLanguageSwitch,
   onSubStepClick, isLoading, onCollapseChange,
   activeView, onOpenDashboard, // ★ v3.0
+  hasActiveProject = true, // ★ v3.1
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(() => getThemeMode() === 'dark');
@@ -426,7 +430,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               const stepColor = stepColors[stepKey];
               const isActive = activeView === 'project' && currentStepId === step.id;
               const isCompleted = completedStepsStatus[idx];
-              const isClickable = step.id === 1 || completedStepsStatus[0];
+              // ★ v3.1: Steps are only clickable when a project is active
+              const isClickable = hasActiveProject && (step.id === 1 || completedStepsStatus[0]);
               const completionPct = getStepCompletionPercent(projectData, step.key);
               const StepIcon = STEP_ICONS[step.key];
 
