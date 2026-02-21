@@ -419,7 +419,7 @@ export const extractStructuralData = (projectData: any, language: 'en' | 'si' = 
         { label: si ? 'Nizek vpliv' : 'Low Impact', value: impactCounts.low || 0, category: 'impact' },
       ].filter(p => p.value > 0);
 
-      if (severityPoints.length >= 3) {
+      if (severityPoints.length >= 1) {
         results.push({
           id: 'structural-risk-severity',
           chartType: 'stacked_bar',
