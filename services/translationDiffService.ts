@@ -1,6 +1,11 @@
 // services/translationDiffService.ts
 // ═══════════════════════════════════════════════════════════════
 // Granular diff-based translation engine.
+// v4.1 — 2026-02-21 — CONSOLIDATED LANGUAGE DETECTION
+//   - CHANGED: detectLanguageOfText() now delegates to shared
+//     detectTextLanguage() from utils.ts for consistency.
+//   - NEW: import detectTextLanguage from utils.ts
+//
 // v4.0 — 2026-02-15 — RELIABILITY OVERHAUL
 //
 // FIXES:
@@ -23,6 +28,7 @@ import { supabase } from './supabaseClient.ts';
 import { generateContent } from './aiProvider.ts';
 import { storageService } from './storageService.ts';
 import { getTranslationRules } from './Instructions.ts';
+import { detectTextLanguage } from '../utils.ts';
 
 // ─── SIMPLE HASH ─────────────────────────────────────────────────
 
@@ -184,19 +190,10 @@ const saveHashes = async (
 };
 
 // ─── LANGUAGE DETECTION HELPER ───────────────────────────────────
+// ★ v4.1 (2026-02-21): Consolidated — uses shared detectTextLanguage from utils.ts
 
 const detectLanguageOfText = (text: string): 'en' | 'si' | 'unknown' => {
-  if (!text || text.trim().length < 10) return 'unknown';
-
-  const slovenianMarkers = /[čšžČŠŽ]|(\b(je|za|na|ki|ali|ter|pri|kot|ima|biti|sem|ker|tudi|vse|med|lahko|zelo|brez|kako|kateri|vendar|zato|skupaj|potrebno|obstoječi|dejavnosti|razvoj|sodelovanje|vzpostaviti|okrepiti|zagotoviti|vzroke|posledice|projekt|upravljanje|spremljanje|ocenjevanje|delovni|sklop|naloga|mejnik|kazalnik|cilj|rezultat|tveganje|ukrep)\b)/gi;
-  const englishMarkers = /\b(the|is|are|was|were|been|being|have|has|had|will|would|shall|should|can|could|may|might|must|and|but|or|which|that|this|these|those|with|from|into|upon|about|between|through|during|before|after|above|below|against|project|management|monitoring|evaluation|work|package|task|milestone|indicator|objective|result|risk|measure)\b/gi;
-
-  const slMatches = (text.match(slovenianMarkers) || []).length;
-  const enMatches = (text.match(englishMarkers) || []).length;
-
-  if (slMatches > enMatches * 1.3) return 'si';
-  if (enMatches > slMatches * 1.3) return 'en';
-  return 'unknown';
+  return detectTextLanguage(text);
 };
 
 // ─── VERIFY TRANSLATION LANGUAGE ─────────────────────────────────
