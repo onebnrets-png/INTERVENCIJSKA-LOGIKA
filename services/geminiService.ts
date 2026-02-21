@@ -10,6 +10,11 @@
 //  - Calling the AI provider
 //  - Post-processing (JSON parsing, sanitization, merging)
 //
+// v5.7 — 2026-02-21 — RE-EXPORT detectProjectLanguage
+//   - NEW: Added re-export of detectProjectLanguage for backward compatibility
+//     (useProjectManager.ts and any future consumers can import from here)
+//   - All previous v5.6 changes preserved.
+//
 // v5.6 — 2026-02-21 — CONSOLIDATED LANGUAGE DETECTION
 //   - CHANGED: detectInputLanguageMismatch() now uses detectTextLanguage from utils.ts
 //   - CHANGED: import updated to include detectTextLanguage
@@ -92,6 +97,9 @@ export const validateApiKey = async (apiKey: string): Promise<boolean> => {
 };
 
 export const validateProviderApiKey = validateProviderKey;
+
+// ★ v5.7: Re-export detectProjectLanguage for backward compatibility
+export { detectProjectLanguage } from '../utils.ts';
 
 // ─── SAFE RULES FORMATTER ────────────────────────────────────────
 
