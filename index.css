@@ -648,7 +648,18 @@ html.dark .border-b[style*="border"] {
      --step-card-bg     (light tint of section color)
      --step-card-border  (section accent color)
    ═══════════════════════════════════════════════════════════════ */
+/* Step cards: tinted backgrounds */
+.step-content .bg-white {
+  background-color: var(--step-card-bg, #FFFFFF);
+  border-color: var(--step-card-border, #E2E8F0);
+}
 
+/* ★ v5.1: Charts/diagrams keep white background — no step color bleeding */
+.step-content .chart-container-white,
+.step-content .chart-container-white .bg-white,
+.step-content .chart-container-white .bg-slate-50 {
+  background-color: #FFFFFF !important;
+}
 /* Light mode: subtle tinted background */
 .step-content .bg-white {
   background-color: var(--step-card-bg, #FFFFFF);
