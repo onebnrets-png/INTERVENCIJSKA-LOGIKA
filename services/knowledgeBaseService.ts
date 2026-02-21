@@ -197,10 +197,12 @@ export const knowledgeBaseService = {
       return { success: false, message: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024} MB.` };
     }
 
-    // Check document limit
-    const count = await this.getDocCount(orgId);
-    if (count >= MAX_DOCS_PER_ORG) {
-      return { success: false, message: `Document limit reached (${MAX_DOCS_PER_ORG}). Please delete some documents first.` };
+    // Check document limit (SuperAdmin bypass)
+    if (!skipLimitCheck) {
+      const count = await this.getDocCount(orgId);
+      if (count >= MAX_DOCS_PER_ORG) {
+        return { success: false, message: `Document limit reached (${MAX_DOCS_PER_ORG}). Please delete some documents first.` };
+      }
     }
 
     try {
