@@ -2,6 +2,9 @@
 // ═══════════════════════════════════════════════════════════════
 // Utility functions: deep-setter, validation, project factory,
 // completion checks, scheduling logic, language detection.
+// v4.5 — 2026-02-21 — CHANGES:
+//   - NEW: detectTextLanguage() — consolidated single-string language detection
+//   - CHANGED: detectProjectLanguage() now delegates to detectTextLanguage()
 // v4.4 — 2026-02-14 — CHANGES:
 //   - FIXED: Added 'implementation' and 'organigram' sub-step completion checks
 //   - FIXED: Removed obsolete 'quality-efficiency' case
@@ -78,13 +81,12 @@ export const createEmptyProjectData = () => {
       causes: [{ title: '', description: '' }],
       consequences: [{ title: '', description: '' }],
     },
-      projectIdea: {
+    projectIdea: {
       projectTitle: '',
       projectAcronym: '',
       startDate: today,
-      durationMonths: 24,  // ★ v4.5: Default 24 months
+      durationMonths: 24,
       mainAim: '',
-
       proposedSolution: '',
       stateOfTheArt: '',
       readinessLevels: {
@@ -285,80 +287,85 @@ export const downloadBlob = (blob: Blob, fileName: string): void => {
   URL.revokeObjectURL(url);
 };
 
-// ─── LANGUAGE DETECTION ──────────────────────────────────────────
+// ─── CONSOLIDATED LANGUAGE DETECTION (v4.5, 2026-02-21) ─────────
+// ★ Single-string language detection — used across the entire project
+// ═══════════════════════════════════════════════════════════════════
 
-export const detectProjectLanguage = (projectData: any): 'en' | 'si' => {
-  if (!projectData) return 'en';
+const SI_KEYWORDS = [
+  'projekt', 'cilj', 'aktivnost', 'rezultat', 'tveganje', 'kazalnik',
+  'upravljanje', 'kakovost', 'analiza', 'opis', 'delovni', 'paket',
+  'trajanje', 'začetek', 'konec', 'partnerji', 'vodja', 'proračun',
+  'financiranje', 'izvedba', 'spremljanje', 'poročanje', 'diseminacija',
+  'trajnost', 'inovacija', 'vpliv', 'učinek', 'izhod', 'dosežek',
+  'metodologija', 'pristop', 'strategija', 'komunikacija', 'vrednotenje',
+  'je', 'in', 'na', 'za', 'ki', 'da', 'se', 'bo', 'so', 'ter', 'ali',
+  'lahko', 'tudi', 'pri', 'med', 'po', 'iz', 'nad', 'pod'
+];
 
-  const textParts: string[] = [];
+const EN_KEYWORDS = [
+  'project', 'objective', 'activity', 'result', 'risk', 'indicator',
+  'management', 'quality', 'analysis', 'description', 'work', 'package',
+  'duration', 'start', 'end', 'partners', 'leader', 'budget',
+  'funding', 'implementation', 'monitoring', 'reporting', 'dissemination',
+  'sustainability', 'innovation', 'impact', 'outcome', 'output', 'achievement',
+  'methodology', 'approach', 'strategy', 'communication', 'evaluation',
+  'the', 'and', 'for', 'that', 'with', 'will', 'are', 'this', 'from',
+  'has', 'have', 'been', 'not', 'but', 'which', 'their', 'can', 'into'
+];
 
-  const extractText = (obj: any): void => {
-    if (!obj) return;
-    if (typeof obj === 'string') {
-      textParts.push(obj);
-      return;
-    }
-    if (Array.isArray(obj)) {
-      obj.forEach(extractText);
-      return;
-    }
-    if (typeof obj === 'object') {
-      Object.values(obj).forEach(extractText);
-    }
-  };
+export const detectTextLanguage = (text: string): 'en' | 'si' | 'unknown' => {
+  if (!text || text.trim().length < 10) return 'unknown';
 
-  extractText(projectData);
-  const allText = textParts.join(' ').toLowerCase();
+  const lower = text.toLowerCase();
+  const words = lower.split(/\s+/);
 
-  if (allText.trim().length < 20) return 'en';
+  // Slovenian-specific characters
+  const siChars = (lower.match(/[čšžćđ]/g) || []).length;
 
-  const siKeywords = [
-    'ali', 'zato', 'ker', 'tudi', 'ter', 'oziroma', 'vendar', 'ampak', 'torej',
-    'zaradi', 'med', 'pred', 'nad', 'pod', 'pri', 'proti', 'skozi', 'znotraj',
-    'je', 'so', 'bo', 'biti', 'ima', 'lahko', 'mora', 'bodo', 'bila', 'bilo', 'bili',
-    'potrebno', 'možno', 'nujno',
-    'projekt', 'cilj', 'cilji', 'aktivnost', 'aktivnosti', 'rezultat', 'rezultati',
-    'tveganje', 'tveganja', 'kazalnik', 'kazalniki', 'učinek', 'učinki',
-    'delovni', 'paket', 'paketi', 'naloga', 'naloge', 'mejnik', 'mejniki',
-    'upravljanje', 'vodenje', 'izvajanje', 'spremljanje', 'poročanje',
-    'analiza', 'problema', 'problemov', 'vzrok', 'vzroki', 'posledica', 'posledice',
-    'opis', 'naslov', 'pristop', 'rešitev',
-    'č', 'š', 'ž'
-  ];
-
-  const enKeywords = [
-    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'which', 'through', 'between',
-    'therefore', 'however', 'although', 'because', 'moreover', 'furthermore',
-    'is', 'are', 'will', 'have', 'has', 'been', 'being', 'should', 'would', 'could',
-    'can', 'must', 'shall',
-    'project', 'objective', 'objectives', 'activity', 'activities', 'result', 'results',
-    'risk', 'risks', 'indicator', 'indicators', 'impact', 'impacts',
-    'work', 'package', 'packages', 'task', 'tasks', 'milestone', 'milestones',
-    'management', 'implementation', 'monitoring', 'reporting', 'deliverable',
-    'analysis', 'problem', 'cause', 'causes', 'consequence', 'consequences',
-    'description', 'title', 'approach', 'solution', 'output', 'outcome'
-  ];
-
-  let siScore = 0;
+  let siScore = siChars * 3; // strong signal
   let enScore = 0;
 
-  for (const kw of siKeywords) {
-    if (kw.length === 1) {
-      if (allText.includes(kw)) siScore += 3;
-    } else {
-      const regex = new RegExp(`\\b${kw}\\b`, 'gi');
-      const matches = allText.match(regex);
-      if (matches) siScore += matches.length;
+  for (const word of words) {
+    if (SI_KEYWORDS.includes(word)) siScore++;
+    if (EN_KEYWORDS.includes(word)) enScore++;
+  }
+
+  if (siScore === 0 && enScore === 0) return 'unknown';
+  if (siScore > enScore * 1.2) return 'si';
+  if (enScore > siScore * 1.2) return 'en';
+  return siScore >= enScore ? 'si' : 'en';
+};
+
+// ★ v4.5: Now delegates to detectTextLanguage for consistency
+export const detectProjectLanguage = (data: any): 'en' | 'si' => {
+  if (!data) return 'en';
+
+  const sampleTexts: string[] = [];
+
+  const sections = [
+    data?.problemAnalysis,
+    data?.projectIdea,
+    data?.objectives,
+    data?.projectManagement,
+  ];
+
+  for (const section of sections) {
+    if (section && typeof section === 'object') {
+      for (const value of Object.values(section)) {
+        if (typeof value === 'string' && (value as string).length > 20) {
+          sampleTexts.push(value as string);
+          if (sampleTexts.length >= 5) break;
+        }
+      }
     }
+    if (sampleTexts.length >= 5) break;
   }
 
-  for (const kw of enKeywords) {
-    const regex = new RegExp(`\\b${kw}\\b`, 'gi');
-    const matches = allText.match(regex);
-    if (matches) enScore += matches.length;
-  }
+  if (sampleTexts.length === 0) return 'en';
 
-  return siScore > enScore ? 'si' : 'en';
+  const combined = sampleTexts.join(' ');
+  const result = detectTextLanguage(combined);
+  return result === 'unknown' ? 'en' : result;
 };
 
 // ─── SCHEDULING LOGIC ────────────────────────────────────────────
