@@ -1,7 +1,13 @@
 // components/DashboardHome.tsx
 // ═══════════════════════════════════════════════════════════════════
 // EURO-OFFICE Dashboard Home — Main view after login
-// v6.0 — 2026-02-20
+// v6.1 — 2026-02-21
+//
+// CHANGES v6.1:
+//   ★ Responsive grid — 1 column on mobile (<768px), 2 on desktop
+//   ★ Reduced padding on mobile, adaptive gap sizes
+//   ★ Card resize buttons use dynamic gridCols
+//   ★ Header text scales on mobile
 //
 // CHANGES v6.0:
 //   - NEW: EmailModal — fullscreen overlay za pošiljanje emaila članu
@@ -61,7 +67,8 @@ const DEFAULT_CARD_SIZES: Record<string, number> = { projects: 1, chatbot: 1, or
 
 const CHAT_STORAGE_KEY = 'euro-office-chat-conversations';
 const MAX_CONVERSATIONS = 20;
-const GRID_COLS = 2;
+const GRID_COLS_DESKTOP = 2;
+const GRID_COLS_MOBILE = 1;
 const CHART_WIDTH = 260;
 const CHART_HEIGHT = 160;
 
@@ -203,24 +210,27 @@ const LocalProgressRing: React.FC<{ percent: number; size?: number; strokeWidth?
 interface CardProps {
   id: CardId; title: string; icon: string; children: React.ReactNode;
   isDark: boolean; colors: any; colSpan: number; language: 'en' | 'si';
+  gridCols: number;
   onResize: (id: CardId, span: number) => void;
   dragHandlers: { onDragStart: (e: React.DragEvent, id: CardId) => void; onDragOver: (e: React.DragEvent) => void; onDrop: (e: React.DragEvent, id: CardId) => void; onDragEnd: () => void; };
   draggingId: CardId | null;
 }
 
-const DashboardCard: React.FC<CardProps> = ({ id, title, icon, children, isDark, colors: c, colSpan, language, onResize, dragHandlers, draggingId }) => {
+const DashboardCard: React.FC<CardProps> = ({ id, title, icon, children, isDark, colors: c, colSpan, language, gridCols, onResize, dragHandlers, draggingId }) => {
   const isDragging = draggingId === id;
-  const span = Math.min(colSpan, GRID_COLS);
+  const span = Math.min(colSpan, gridCols);
   return (
     <div draggable onDragStart={(e) => dragHandlers.onDragStart(e, id)} onDragOver={dragHandlers.onDragOver} onDrop={(e) => dragHandlers.onDrop(e, id)} onDragEnd={dragHandlers.onDragEnd}
       style={{ background: c.surface.card, borderRadius: radii.xl, border: `1px solid ${isDragging ? c.primary[400] : c.border.light}`, boxShadow: isDragging ? shadows.xl : shadows.card, overflow: 'hidden', opacity: isDragging ? 0.7 : 1, transform: isDragging ? 'scale(1.02)' : 'scale(1)', transition: `all ${animation.duration.fast} ${animation.easing.default}`, gridColumn: `span ${span}`, display: 'flex', flexDirection: 'column' as const, cursor: 'grab', minHeight: 0 }}>
       <div style={{ padding: `${spacing.md} ${spacing.lg}`, borderBottom: `1px solid ${c.border.light}`, display: 'flex', alignItems: 'center', gap: spacing.sm, flexShrink: 0 }}>
         <span style={{ fontSize: '18px' }}>{icon}</span>
         <h3 style={{ margin: 0, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, color: c.text.heading, flex: 1 }}>{title}</h3>
-        <div style={{ display: 'flex', gap: '2px', marginRight: spacing.xs }}>
-          {span > 1 && <button onClick={(e) => { e.stopPropagation(); onResize(id, span - 1); }} draggable={false} title={language === 'si' ? 'Zoži' : 'Narrow'} style={{ background: 'none', border: `1px solid ${c.border.light}`, borderRadius: radii.sm, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.text.muted, fontSize: '12px' }} onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.primary[900]+'30' : c.primary[50]; e.currentTarget.style.color = c.primary[600]; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = c.text.muted; }}>◂</button>}
-          {span < GRID_COLS && <button onClick={(e) => { e.stopPropagation(); onResize(id, span + 1); }} draggable={false} title={language === 'si' ? 'Razširi' : 'Widen'} style={{ background: 'none', border: `1px solid ${c.border.light}`, borderRadius: radii.sm, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.text.muted, fontSize: '12px' }} onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.primary[900]+'30' : c.primary[50]; e.currentTarget.style.color = c.primary[600]; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = c.text.muted; }}>▸</button>}
-        </div>
+        {gridCols > 1 && (
+          <div style={{ display: 'flex', gap: '2px', marginRight: spacing.xs }}>
+            {span > 1 && <button onClick={(e) => { e.stopPropagation(); onResize(id, span - 1); }} draggable={false} title={language === 'si' ? 'Zoži' : 'Narrow'} style={{ background: 'none', border: `1px solid ${c.border.light}`, borderRadius: radii.sm, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.text.muted, fontSize: '12px' }} onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.primary[900]+'30' : c.primary[50]; e.currentTarget.style.color = c.primary[600]; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = c.text.muted; }}>◂</button>}
+            {span < gridCols && <button onClick={(e) => { e.stopPropagation(); onResize(id, span + 1); }} draggable={false} title={language === 'si' ? 'Razširi' : 'Widen'} style={{ background: 'none', border: `1px solid ${c.border.light}`, borderRadius: radii.sm, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.text.muted, fontSize: '12px' }} onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? c.primary[900]+'30' : c.primary[50]; e.currentTarget.style.color = c.primary[600]; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = c.text.muted; }}>▸</button>}
+          </div>
+        )}
         <div style={{ cursor: 'grab', color: c.text.muted, display: 'flex' }}><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
       </div>
       <div style={{ padding: spacing.lg, flex: 1, overflow: 'auto', minHeight: 0 }}>{children}</div>
@@ -250,7 +260,6 @@ const ProjectChartsCard: React.FC<{
   const autoLoadedRef = useRef(false);
   const acronymsLoadedRef = useRef(false);
 
-  // ★ v6.2: Preload ALL acronyms on mount (lightweight query, no full data)
   useEffect(() => {
     if (acronymsLoadedRef.current || projectsMeta.length === 0) return;
     acronymsLoadedRef.current = true;
@@ -281,7 +290,6 @@ const ProjectChartsCard: React.FC<{
     })();
   }, [projectsMeta, language]);
 
-  // Cache current project data
   useEffect(() => {
     if (currentProjectId && projectData) {
       setLoadedData(prev => ({ ...prev, [currentProjectId]: projectData }));
@@ -307,7 +315,6 @@ const ProjectChartsCard: React.FC<{
     }
   }, [loadedData, currentProjectId, projectData, language]);
 
-  // ★ v6.1: Auto-load first project on mount
   useEffect(() => {
     if (autoLoadedRef.current) return;
     if (projectsMeta.length === 0) return;
@@ -360,7 +367,6 @@ const ProjectChartsCard: React.FC<{
   const chartH = colSpan >= 2 ? CHART_HEIGHT : Math.min(130, CHART_HEIGHT);
   const isNarrow = colSpan < 2;
 
-  // ★ v6.2: Get acronym — preloaded first, then loaded data, then fallback
   const getAcronym = (p: any): string => {
     if (acronyms[p.id]) return acronyms[p.id];
     const pData = loadedData[p.id];
@@ -371,7 +377,6 @@ const ProjectChartsCard: React.FC<{
 
   return (
     <div style={{ display: 'flex', flexDirection: isNarrow ? 'column' as const : 'row' as const, gap: spacing.md, minHeight: isNarrow ? 300 : 220 }}>
-      {/* Left: project list with acronyms */}
       <div style={{
         width: isNarrow ? '100%' : 130, minWidth: isNarrow ? undefined : 110, flexShrink: 0,
         borderRight: isNarrow ? 'none' : `1px solid ${c.border.light}`,
@@ -451,7 +456,6 @@ const ProjectChartsCard: React.FC<{
         })}
       </div>
 
-      {/* Right: charts area */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: spacing.xs }}>
         {activeProjectId && (() => {
           const meta = projectsMeta.find(p => p.id === activeProjectId);
@@ -520,8 +524,6 @@ const ProjectChartsCard: React.FC<{
             flexWrap: isNarrow ? 'wrap' as const : 'nowrap' as const,
             gap: spacing.sm, paddingBottom: spacing.xs, alignItems: 'flex-start',
           }}>
-            
-            {/* Charts */}
             {chartsData && chartsData.length > 0 && chartsData.map((chart: ExtractedChartData, idx: number) => (
               <div key={`c-${idx}-${chart.chartType}`} style={{ flexShrink: 0, width: chartW }}>
                 <ChartRenderer data={chart} width={chartW} height={chartH} showTitle={true} showSource={false} />
@@ -574,7 +576,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
   const [body, setBody] = useState('');
   const [sent, setSent] = useState(false);
 
-  // Reset on open
   useEffect(() => {
     if (isOpen) {
       setSubject(`EURO-OFFICE: ${t('Message from', 'Sporočilo od')} ${senderName}`);
@@ -583,7 +584,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
     }
   }, [isOpen]);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
     window.addEventListener('keydown', handler);
@@ -650,7 +650,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
           border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
         }}
       >
-        {/* ── Header ── */}
         <div style={{
           padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 12,
           borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
@@ -680,10 +679,7 @@ const EmailModal: React.FC<EmailModalProps> = ({
           </button>
         </div>
 
-        {/* ── Body ── */}
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Recipient */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: c.text?.muted || c.textSecondary, display: 'block', marginBottom: 6 }}>
               {t('Recipient', 'Prejemnik')}
@@ -709,7 +705,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
             </div>
           </div>
 
-          {/* Subject */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: c.text?.muted || c.textSecondary, display: 'block', marginBottom: 6 }}>
               {t('Subject', 'Zadeva')}
@@ -724,7 +719,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
             />
           </div>
 
-          {/* Message */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: c.text?.muted || c.textSecondary, display: 'block', marginBottom: 6 }}>
               {t('Message', 'Sporočilo')}
@@ -745,7 +739,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
             />
           </div>
 
-          {/* Info */}
           <div style={{
             fontSize: 12, color: c.text?.muted || c.textSecondary, padding: '10px 12px',
             background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
@@ -758,7 +751,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
           </div>
         </div>
 
-        {/* ── Footer — Send buttons ── */}
         <div style={{
           padding: '16px 24px',
           borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
@@ -816,7 +808,6 @@ const EmailModal: React.FC<EmailModalProps> = ({
 
 // ═══════════════════════════════════════════════════════════════
 // OrganizationCard — v6.0 — 2026-02-20
-// ★ Replaced inline compose with EmailModal trigger
 // ═══════════════════════════════════════════════════════════════
 
 const OrganizationCard: React.FC<{
@@ -833,24 +824,9 @@ const OrganizationCard: React.FC<{
   const t = (en: string, si: string) => language === 'si' ? si : en;
 
   interface OrgData {
-    id: string;
-    name: string;
-    slug: string;
-    members: {
-      userId: string;
-      displayName: string;
-      email: string;
-      orgRole: string;
-      joinedAt: string;
-      projectCount: number;
-    }[];
-    projects: {
-      id: string;
-      title: string;
-      ownerName: string;
-      ownerEmail: string;
-      updatedAt: string;
-    }[];
+    id: string; name: string; slug: string;
+    members: { userId: string; displayName: string; email: string; orgRole: string; joinedAt: string; projectCount: number; }[];
+    projects: { id: string; title: string; ownerName: string; ownerEmail: string; updatedAt: string; }[];
   }
 
   const [orgDataList, setOrgDataList] = React.useState<OrgData[]>([]);
@@ -932,9 +908,7 @@ const OrganizationCard: React.FC<{
           });
 
           results.push({
-            id: org.id,
-            name: org.name,
-            slug: org.slug || '',
+            id: org.id, name: org.name, slug: org.slug || '',
             members: members.map(m => ({
               userId: m.userId,
               displayName: m.displayName || m.email?.split('@')[0] || 'Unknown',
@@ -966,29 +940,18 @@ const OrganizationCard: React.FC<{
     return () => { cancelled = true; };
   }, [isSuperAdmin, isOrgAdmin, activeOrg?.id]);
 
-  const roleColors: Record<string, string> = {
-    owner: '#f59e0b',
-    admin: '#3b82f6',
-    member: '#10b981',
-    superadmin: '#ef4444',
-  };
-
-  const roleLabels: Record<string, string> = {
-    owner: t('Owner', 'Lastnik'),
-    admin: 'Admin',
-    member: t('Member', 'Član'),
-    superadmin: 'Super Admin',
-  };
+  const roleColors: Record<string, string> = { owner: '#f59e0b', admin: '#3b82f6', member: '#10b981', superadmin: '#ef4444' };
+  const roleLabels: Record<string, string> = { owner: t('Owner', 'Lastnik'), admin: 'Admin', member: t('Member', 'Član'), superadmin: 'Super Admin' };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflow: 'auto' }}>
-      {/* SuperAdmin badge */}
       {isSuperAdmin && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 12px', borderRadius: 8,
           background: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)',
           border: `1px solid ${isDark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`,
+          flexWrap: 'wrap' as const,
         }}>
           <span style={{ fontSize: 16 }}>👑</span>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}>SUPER ADMIN</span>
@@ -1012,7 +975,6 @@ const OrganizationCard: React.FC<{
         </div>
       )}
 
-      {/* Tabs */}
       {!loading && !error && (
         <div style={{ display: 'flex', gap: 4, padding: '2px', borderRadius: 8, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }}>
           {(['members', 'projects'] as const).map(tab => (
@@ -1028,7 +990,6 @@ const OrganizationCard: React.FC<{
         </div>
       )}
 
-      {/* Organization list */}
       {!loading && !error && orgDataList.map(org => {
         const isExpanded = expandedOrgId === org.id;
         const isActive = activeOrg?.id === org.id;
@@ -1039,14 +1000,13 @@ const OrganizationCard: React.FC<{
             border: `1px solid ${isActive ? colors.primary + '60' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')}`,
             background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
           }}>
-            {/* Org header */}
             <div
               onClick={() => setExpandedOrgId(isExpanded ? null : org.id)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 14px', cursor: 'pointer',
                 background: isExpanded ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)') : 'transparent',
-                transition: 'background 0.2s',
+                transition: 'background 0.2s', flexWrap: 'wrap' as const,
               }}
             >
               <div style={{
@@ -1054,7 +1014,7 @@ const OrganizationCard: React.FC<{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: isActive ? colors.primary : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
                 color: isActive ? '#fff' : colors.textSecondary,
-                fontWeight: 700, fontSize: 15,
+                fontWeight: 700, fontSize: 15, flexShrink: 0,
               }}>
                 {org.name.charAt(0).toUpperCase()}
               </div>
@@ -1093,10 +1053,8 @@ const OrganizationCard: React.FC<{
               </span>
             </div>
 
-            {/* Expanded content */}
             {isExpanded && (
               <div style={{ padding: '4px 14px 14px' }}>
-                {/* MEMBERS TAB */}
                 {activeTab === 'members' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {org.members.length === 0 && (
@@ -1110,8 +1068,8 @@ const OrganizationCard: React.FC<{
                         padding: '10px 12px', borderRadius: 8,
                         background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
                         border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}`,
+                        flexWrap: 'wrap' as const,
                       }}>
-                        {/* Avatar */}
                         <div style={{
                           width: 34, height: 34, borderRadius: '50%',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1122,7 +1080,6 @@ const OrganizationCard: React.FC<{
                           {member.displayName.charAt(0).toUpperCase()}
                         </div>
 
-                        {/* Name + email */}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {member.displayName}
@@ -1132,7 +1089,6 @@ const OrganizationCard: React.FC<{
                           </div>
                         </div>
 
-                        {/* Role badge */}
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
                           background: (roleColors[member.orgRole] || '#666') + '20',
@@ -1142,12 +1098,10 @@ const OrganizationCard: React.FC<{
                           {roleLabels[member.orgRole] || member.orgRole}
                         </span>
 
-                        {/* Project count */}
                         <span style={{ fontSize: 11, color: colors.textSecondary, display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                           📁 {member.projectCount}
                         </span>
 
-                        {/* ★ v6.0: Message button — opens fullscreen EmailModal */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1177,7 +1131,6 @@ const OrganizationCard: React.FC<{
                   </div>
                 )}
 
-                {/* PROJECTS TAB */}
                 {activeTab === 'projects' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {org.projects.length === 0 && (
@@ -1194,7 +1147,7 @@ const OrganizationCard: React.FC<{
                           padding: '10px 12px', borderRadius: 8, cursor: onOpenProject ? 'pointer' : 'default',
                           background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
                           border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}`,
-                          transition: 'background 0.15s',
+                          transition: 'background 0.15s', flexWrap: 'wrap' as const,
                         }}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'; }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'; }}
@@ -1227,7 +1180,6 @@ const OrganizationCard: React.FC<{
         );
       })}
 
-      {/* Empty state */}
       {!loading && !error && orgDataList.length === 0 && (
         <div style={{ padding: 32, textAlign: 'center', color: colors.textSecondary, fontSize: 13 }}>
           {t('No organizations found', 'Ni najdenih organizacij')}
@@ -1301,7 +1253,7 @@ const AIChatbot: React.FC<{ language: 'en' | 'si'; isDark: boolean; colors: any;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' as const, height: '100%', minHeight: 300 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm, flexShrink: 0, flexWrap: 'wrap' as const }}>
         <button onClick={createNewConvo} style={{ background: c.primary[500], color: '#fff', border: 'none', borderRadius: radii.md, padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.fontSize.xs, cursor: 'pointer', fontWeight: typography.fontWeight.semibold }}>+ {language === 'si' ? 'Nov pogovor' : 'New chat'}</button>
         <button onClick={() => setShowHistory(!showHistory)} style={{ background: showHistory ? c.primary[100] : 'transparent', color: c.text.body, border: `1px solid ${c.border.light}`, borderRadius: radii.md, padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.fontSize.xs, cursor: 'pointer' }}>{language === 'si' ? `Zgodovina (${conversations.length})` : `History (${conversations.length})`}</button>
       </div>
@@ -1345,7 +1297,19 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
   const c = isDark ? darkColors : lightColors;
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ★ v6.0: Email modal state — lives at DashboardHome level so it renders OUTSIDE all cards
+  // ★ v6.1: Responsive grid columns
+  const [gridCols, setGridCols] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768 ? GRID_COLS_MOBILE : GRID_COLS_DESKTOP);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const w = window.innerWidth;
+      setGridCols(w < 768 ? GRID_COLS_MOBILE : GRID_COLS_DESKTOP);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ★ v6.0: Email modal state
   const [emailModal, setEmailModal] = useState<{ name: string; email: string; orgName: string } | null>(null);
   const currentUserName = storageService.getCurrentUserDisplayName() || 'User';
 
@@ -1392,13 +1356,13 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
   const visibleCards = cardOrder.filter(id => !(id === 'admin' && !isAdmin));
 
   return (
-    <div ref={containerRef} style={{ padding: spacing.xl, maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column' as const, gap: spacing.lg }}>
+    <div ref={containerRef} style={{ padding: gridCols === 1 ? spacing.md : spacing.xl, maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column' as const, gap: spacing.lg }}>
       <div style={{ marginBottom: spacing.sm }}>
-        <h1 style={{ margin: 0, fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: c.text.heading }}>{language === 'si' ? 'Nadzorna plošča' : 'Dashboard'}</h1>
+        <h1 style={{ margin: 0, fontSize: gridCols === 1 ? typography.fontSize.xl : typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: c.text.heading }}>{language === 'si' ? 'Nadzorna plošča' : 'Dashboard'}</h1>
         <p style={{ margin: `${spacing.xs} 0 0`, color: c.text.muted, fontSize: typography.fontSize.sm }}>{orgName}{totalProjects > 0 && ` · ${totalProjects} ${language === 'si' ? 'projektov' : 'projects'}`}</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))`, gap: spacing.lg, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`, gap: gridCols === 1 ? spacing.md : spacing.lg, alignItems: 'start' }}>
         {visibleCards.map(cardId => {
           const cardConfig: Record<CardId, { title: string; icon: string }> = {
             projects: { title: language === 'si' ? 'Moji projekti' : 'My Projects', icon: '📁' },
@@ -1414,6 +1378,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
           return (
             <DashboardCard key={cardId} id={cardId} title={config.title} icon={config.icon}
               isDark={isDark} colors={c} colSpan={colSpan} language={language}
+              gridCols={gridCols}
               onResize={handleResize} dragHandlers={dragHandlers} draggingId={draggingId}>
 
               {cardId === 'projects' && (
@@ -1439,7 +1404,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({
               {cardId === 'chatbot' && <AIChatbot language={language} isDark={isDark} colors={c} activeOrg={activeOrg} />}
 
               {cardId === 'admin' && isAdmin && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.xs }}>
+                <div style={{ display: 'grid', gridTemplateColumns: gridCols === 1 ? '1fr' : '1fr 1fr', gap: spacing.xs }}>
                   {[
                     { label: language === 'si' ? 'Uporabniki' : 'Users', tab: 'users', icon: '👥' },
                     { label: language === 'si' ? 'Navodila' : 'Instructions', tab: 'instructions', icon: '📝' },
