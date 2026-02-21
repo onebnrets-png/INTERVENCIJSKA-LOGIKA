@@ -4,6 +4,13 @@
 // Identifies numbers, percentages, statistics, comparisons,
 // and returns structured data suitable for visualization.
 //
+// v1.4 — 2026-02-21
+//   - FIX: Risk severity/category now normalizes Slovenian values
+//     ("Nizka"→low, "Srednja"→medium, "Visoka"→high, "Tehnično"→Technical)
+//   - FIX: Minimum data points for severity chart reduced to >= 1
+//   - FIX: Category donut chart minimum reduced to >= 1
+//   - NEW: normalizeSeverity() and normalizeCategory() helpers
+//
 // v1.3 — 2026-02-21
 //   - NEW: extractStructuralData() now accepts `language` parameter
 //     and returns localized titles, subtitles, labels for SI/EN
@@ -267,7 +274,6 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
       if (arrayHasRealContent(data.policies)) { score++; total++; }
       const rl = data.readinessLevels;
       if (rl && (rl.TRL?.level !== null || rl.SRL?.level !== null || rl.ORL?.level !== null || rl.LRL?.level !== null)) {
-        // Only count if at least one level is a real number > 0
         const hasAnyLevel = [rl.TRL, rl.SRL, rl.ORL, rl.LRL].some(
           (r: any) => typeof r?.level === 'number' && r.level > 0
         );
@@ -320,11 +326,59 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
   }
 };
 
+// ─── Normalization helpers for risk data ─────────────────────
+// ★ v1.4: Support Slovenian, English, and numeric severity values
+
+const normalizeSeverity = (val: string | undefined): 'low' | 'medium' | 'high' | null => {
+  if (!val) return null;
+  const v = val.toString().toLowerCase().trim();
+  if (v === 'high' || v === 'visoka' || v === 'visok' || v === 'veliko' || v === 'velika' || v === '3') return 'high';
+  if (v === 'medium' || v === 'srednja' || v === 'srednji' || v === 'srednje' || v === '2') return 'medium';
+  if (v === 'low' || v === 'nizka' || v === 'nizek' || v === 'nizko' || v === 'malo' || v === 'majhna' || v === '1') return 'low';
+  // Partial match fallback
+  if (v.includes('visok') || v.includes('high') || v.includes('kritičn') || v.includes('critical')) return 'high';
+  if (v.includes('sredn') || v.includes('medium') || v.includes('zmern') || v.includes('moderate')) return 'medium';
+  if (v.includes('nizk') || v.includes('low') || v.includes('majhn') || v.includes('zanemarljiv')) return 'low';
+  return null;
+};
+
+const normalizeCategory = (val: string | undefined, language: 'en' | 'si'): string => {
+  if (!val) return language === 'si' ? 'Neznano' : 'Unknown';
+  const v = val.toString().toLowerCase().trim();
+  const catMap: Record<string, { en: string; si: string }> = {
+    'technical': { en: 'Technical', si: 'Tehnično' },
+    'tehnično': { en: 'Technical', si: 'Tehnično' },
+    'tehnicno': { en: 'Technical', si: 'Tehnično' },
+    'tehnical': { en: 'Technical', si: 'Tehnično' },
+    'social': { en: 'Social', si: 'Družbeno' },
+    'družbeno': { en: 'Social', si: 'Družbeno' },
+    'druzbeno': { en: 'Social', si: 'Družbeno' },
+    'economic': { en: 'Economic', si: 'Ekonomsko' },
+    'ekonomsko': { en: 'Economic', si: 'Ekonomsko' },
+    'financial': { en: 'Financial', si: 'Finančno' },
+    'finančno': { en: 'Financial', si: 'Finančno' },
+    'financno': { en: 'Financial', si: 'Finančno' },
+    'environmental': { en: 'Environmental', si: 'Okoljsko' },
+    'okoljsko': { en: 'Environmental', si: 'Okoljsko' },
+    'legal': { en: 'Legal', si: 'Pravno' },
+    'pravno': { en: 'Legal', si: 'Pravno' },
+    'organizational': { en: 'Organizational', si: 'Organizacijsko' },
+    'organizacijsko': { en: 'Organizational', si: 'Organizacijsko' },
+    'political': { en: 'Political', si: 'Politično' },
+    'politično': { en: 'Political', si: 'Politično' },
+    'politicno': { en: 'Political', si: 'Politično' },
+  };
+  const mapped = catMap[v];
+  if (mapped) return mapped[language];
+  return val.charAt(0).toUpperCase() + val.slice(1);
+};
+
 // ─── Extract from structured project data ────────────────────
 // Extracts visualization data from project's structured fields
 // (readiness levels, risks, objectives, etc.) WITHOUT using AI.
 //
 // ★ v1.3: Now accepts `language` parameter for bilingual output.
+// ★ v1.4: Normalizes SI/EN risk values, relaxed chart minimums.
 
 export const extractStructuralData = (projectData: any, language: 'en' | 'si' = 'en'): ExtractedChartData[] => {
   const results: ExtractedChartData[] = [];
@@ -365,40 +419,38 @@ export const extractStructuralData = (projectData: any, language: 'en' | 'si' = 
 
   // 2. Risk Matrix Summary
   const risks = projectData?.risks;
-  if (risks && Array.isArray(risks) && risks.length >= 2) {
+  if (risks && Array.isArray(risks) && risks.length >= 1) {
     const realRisks = risks.filter((r: any) =>
       hasRealString(r.title) || hasRealString(r.description)
     );
 
-    if (realRisks.length >= 2) {
+    if (realRisks.length >= 1) {
       const categoryCounts: Record<string, number> = {};
       const likelihoodCounts: Record<string, number> = { low: 0, medium: 0, high: 0 };
       const impactCounts: Record<string, number> = { low: 0, medium: 0, high: 0 };
 
       realRisks.forEach((r: any) => {
-        if (r.likelihood) likelihoodCounts[r.likelihood] = (likelihoodCounts[r.likelihood] || 0) + 1;
-        if (r.impact) impactCounts[r.impact] = (impactCounts[r.impact] || 0) + 1;
-        if (r.category) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
+        // ★ v1.4: Normalize SI/EN values before counting
+        const normLikelihood = normalizeSeverity(r.likelihood);
+        const normImpact = normalizeSeverity(r.impact);
+        if (normLikelihood) likelihoodCounts[normLikelihood]++;
+        if (normImpact) impactCounts[normImpact]++;
+
+        const catLabel = normalizeCategory(r.category, language);
+        categoryCounts[catLabel] = (categoryCounts[catLabel] || 0) + 1;
       });
 
-      // ★ v1.3: Bilingual category labels
-      const categoryLabels: Record<string, { en: string; si: string }> = {
-        technical: { en: 'Technical', si: 'Tehnično' },
-        social: { en: 'Social', si: 'Družbeno' },
-        economic: { en: 'Economic', si: 'Ekonomsko' },
-        environmental: { en: 'Environmental', si: 'Okoljsko' },
-      };
-
+      // Risk Categories Donut
       const catPoints: ExtractedDataPoint[] = Object.entries(categoryCounts)
         .filter(([, count]) => count > 0)
         .map(([cat, count]) => ({
-          label: categoryLabels[cat]?.[language] || (cat.charAt(0).toUpperCase() + cat.slice(1)),
+          label: cat,
           value: count,
           unit: si ? 'tveganj' : 'risks',
           category: 'risk_category',
         }));
 
-      if (catPoints.length >= 2) {
+      if (catPoints.length >= 1) {
         results.push({
           id: 'structural-risk-categories',
           chartType: 'donut',
@@ -409,7 +461,7 @@ export const extractStructuralData = (projectData: any, language: 'en' | 'si' = 
         });
       }
 
-      // ★ v1.3: Bilingual severity labels
+      // ★ v1.4: Bilingual severity labels with normalized counts
       const severityPoints: ExtractedDataPoint[] = [
         { label: si ? 'Visoka verjetnost' : 'High Likelihood', value: likelihoodCounts.high || 0, category: 'likelihood' },
         { label: si ? 'Srednja verjetnost' : 'Medium Likelihood', value: likelihoodCounts.medium || 0, category: 'likelihood' },
