@@ -1,7 +1,9 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v4.4 — 2026-02-21
+// v4.5 — 2026-02-21
+//   ★ v4.5: Import Project button added to Dashboard toolbar (RIGHT section)
+//           FIX: Center section was corrupted with dashboard buttons — now clean
 //   ★ v4.4: FIX: Removed duplicate hasActiveProject declaration
 //   ★ v4.3: FIX: "No Project Selected" when no project chosen after login
 //     - Sidebar steps are disabled when no project is loaded
@@ -33,7 +35,7 @@ import AdminPanel from './components/AdminPanel.tsx';
 import ProjectListModal from './components/ProjectListModal.tsx';
 import ProjectDashboard from './components/ProjectDashboard.tsx';
 import DashboardPanel from './components/DashboardPanel.tsx';
-import DashboardHome from './components/DashboardHome.tsx'; // ★ v4.0
+import DashboardHome from './components/DashboardHome.tsx';
 import Sidebar from './components/Sidebar.tsx';
 import SummaryModal from './components/SummaryModal.tsx';
 import { useAdmin } from './hooks/useAdmin.ts';
@@ -116,6 +118,7 @@ const ApiWarningBanner = ({ onDismiss, onOpenSettings, language }: { onDismiss: 
     </div>
   );
 };
+
 /* ═══ MAIN APP COMPONENT ═══ */
 
 const App = () => {
@@ -126,7 +129,7 @@ const App = () => {
   const [isProjectListOpen, setIsProjectListOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'dashboard' | 'project'>('dashboard'); // ★ v4.0
+  const [activeView, setActiveView] = useState<'dashboard' | 'project'>('dashboard');
   const adminHook = useAdmin();
   const orgHook = useOrganization();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -176,19 +179,18 @@ const App = () => {
   useEffect(() => { initTheme(); const unsub = onThemeChange((m) => setIsDark(m === 'dark')); return unsub; }, []);
   useEffect(() => { if (pm.showProjectListOnLogin) { setIsProjectListOpen(true); pm.setShowProjectListOnLogin(false); } }, [pm.showProjectListOnLogin]);
 
-  // ★ v4.0: On login, always start with dashboard view
   useEffect(() => {
     if (auth.currentUser) {
       setActiveView('dashboard');
     }
   }, [auth.currentUser]);
-  // Safety: redirect to dashboard if no project loaded in project view
+
   useEffect(() => {
     if (activeView === 'project' && !pm.currentProjectId) {
       setActiveView('dashboard');
     }
   }, [activeView, pm.currentProjectId]);
-    // ★ v4.2: Reset scroll position when switching views
+
   useEffect(() => {
     const contentArea = document.getElementById('main-content-area');
     if (contentArea) {
@@ -224,14 +226,12 @@ const App = () => {
   const handleExportDocx = async () => { try { await pm.handleExportDocx(generation.setIsLoading); } catch (e: any) { alert(e.message); } };
   const handleImportProject = async (event: React.ChangeEvent<HTMLInputElement>) => { generation.setIsLoading(true); try { await pm.handleImportProject(event); setActiveView('project'); pm.setCurrentStepId(1); } catch (e: any) { generation.setError(`Failed to import: ${e.message}`); } finally { generation.setIsLoading(false); } };
 
-  // ★ v4.0: Open project from dashboard
   const handleOpenProjectFromDashboard = async (projectId: string) => {
     await pm.handleSwitchProject(projectId);
     setActiveView('project');
     pm.setCurrentStepId(1);
   };
 
-  // ★ v4.0: Create project from dashboard
   const handleCreateProjectFromDashboard = async () => {
     try {
       await pm.handleCreateProject();
@@ -242,7 +242,6 @@ const App = () => {
     }
   };
 
-  // Handle organization switch
   const handleSwitchOrg = async (orgId: string) => {
     const result = await orgHook.switchOrg(orgId);
     if (result.success) {
@@ -271,7 +270,8 @@ const App = () => {
       </>
     );
   }
-    /* ═══ AUTHENTICATED VIEW ═══ */
+
+  /* ═══ AUTHENTICATED VIEW ═══ */
   return (
     <>
       {/* ═══ MODALS ═══ */}
@@ -344,14 +344,14 @@ const App = () => {
             onOpenProjectList={() => setIsProjectListOpen(true)}
             onOpenAdminPanel={(tab?: string) => { setAdminPanelInitialTab(tab); setIsAdminPanelOpen(true); }}
             onLogout={handleLogout} onLanguageSwitch={translation.handleLanguageSwitchRequest}
-            onSubStepClick={(subStepId: string) => { setActiveView('project');
-  // Počakaj da se ProjectDisplay renderira, nato scrollaj
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      pm.handleSubStepClick(subStepId);
-    }, 100);
-  });
-}}
+            onSubStepClick={(subStepId: string) => {
+              setActiveView('project');
+              requestAnimationFrame(() => {
+                setTimeout(() => {
+                  pm.handleSubStepClick(subStepId);
+                }, 100);
+              });
+            }}
             isLoading={!!generation.isLoading}
             onCollapseChange={setSidebarCollapsed}
             activeView={activeView}
@@ -367,14 +367,15 @@ const App = () => {
             transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           }}>
 
-            {/* ★ v4.2: TOOLBAR — ALWAYS VISIBLE, content adapts to activeView */}
+            {/* ★ v4.5: TOOLBAR — ALWAYS VISIBLE, content adapts to activeView */}
             <div style={{
               background: colors.surface.card, borderBottom: `1px solid ${colors.border.light}`,
               padding: `${spacing.sm} ${spacing.lg}`, display: 'flex', alignItems: 'center',
               justifyContent: 'space-between', gap: spacing.sm, flexShrink: 0,
               minHeight: 48,
             }}>
-              {/* Left: hamburger (mobile) + context button */}
+
+              {/* ═══ LEFT: hamburger (mobile) + context button ═══ */}
               <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, flexShrink: 0 }}>
                 <div className="lg:hidden">
                   <HamburgerIcon onClick={() => setIsSidebarOpen(true)} />
@@ -392,42 +393,19 @@ const App = () => {
                 )}
               </div>
 
-              {/* Center: Title — adapts to view */}
+              {/* ═══ CENTER: Title — adapts to view ═══ */}
               <div style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 gap: '10px', minWidth: 0, overflow: 'hidden', padding: `0 ${spacing.md}`,
               }}>
                 {activeView === 'dashboard' ? (
-                  /* ═══ DASHBOARD TOOLBAR RIGHT ═══ */
-                  <>
-                    <ToolbarButton colors={colors} onClick={handleCreateProjectFromDashboard}
-                      title={language === 'si' ? 'Nov projekt' : 'New Project'} variant="success"
-                      icon={<svg style={{ width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>}
-                    />
-                    {/* ★ v4.5: Import project — available from Dashboard */}
-                    <label style={{
-                      padding: spacing.sm, borderRadius: radii.lg, display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', cursor: 'pointer', transition: `all ${animation.duration.fast}`,
-                      color: colors.text.body,
-                    }} title={language === 'si' ? 'Uvozi projekt' : 'Import Project'}>
-                      <ICONS.IMPORT style={{ width: 20, height: 20 }} />
-                      <input type="file" accept=".json" onChange={handleImportProject} style={{ display: 'none' }} />
-                    </label>
-                    <ToolbarSeparator colors={colors} />
-                    <ToolbarButton colors={colors} onClick={() => setIsProjectListOpen(true)}
-                      title={language === 'si' ? 'Moji projekti' : 'My Projects'} variant="primary"
-                      icon={<svg style={{ width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" /></svg>}
-                    />
-                    <ToolbarSeparator colors={colors} />
-                    <ToolbarButton colors={colors} onClick={() => { setAdminPanelInitialTab('ai'); setIsSettingsOpen(true); }}
-                      title={language === 'si' ? 'Nastavitve' : 'Settings'} variant="default"
-                      icon={<svg style={{ width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
-                    />
-                  </>
-                    )}
-                  </div>
+                  <span style={{
+                    fontSize: '14px', fontWeight: 600, color: colors.text.heading,
+                    whiteSpace: 'nowrap', letterSpacing: '0.02em',
+                  }}>
+                    {language === 'si' ? 'Nadzorna plošča' : 'Dashboard'}
+                  </span>
                 ) : (
-                  /* ═══ PROJECT TOOLBAR CENTER ═══ */
                   <>
                     {pm.projectData?.projectIdea?.projectAcronym?.trim() ? (
                       <>
@@ -467,15 +445,23 @@ const App = () => {
                 )}
               </div>
 
-              {/* Right: Action buttons — adapts to view */}
+              {/* ═══ RIGHT: Action buttons — adapts to view ═══ */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
                 {activeView === 'dashboard' ? (
-                  /* ═══ DASHBOARD TOOLBAR RIGHT ═══ */
                   <>
                     <ToolbarButton colors={colors} onClick={handleCreateProjectFromDashboard}
                       title={language === 'si' ? 'Nov projekt' : 'New Project'} variant="success"
                       icon={<svg style={{ width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>}
                     />
+                    {/* ★ v4.5: Import project — available from Dashboard */}
+                    <label style={{
+                      padding: spacing.sm, borderRadius: radii.lg, display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', cursor: 'pointer', transition: `all ${animation.duration.fast}`,
+                      color: colors.text.body,
+                    }} title={language === 'si' ? 'Uvozi projekt' : 'Import Project'}>
+                      <ICONS.IMPORT style={{ width: 20, height: 20 }} />
+                      <input type="file" accept=".json" onChange={handleImportProject} style={{ display: 'none' }} />
+                    </label>
                     <ToolbarSeparator colors={colors} />
                     <ToolbarButton colors={colors} onClick={() => setIsProjectListOpen(true)}
                       title={language === 'si' ? 'Moji projekti' : 'My Projects'} variant="primary"
@@ -488,7 +474,6 @@ const App = () => {
                     />
                   </>
                 ) : (
-                  /* ═══ PROJECT TOOLBAR RIGHT ═══ */
                   <>
                     <ToolbarButton colors={colors} onClick={() => setIsDashboardOpen(true)}
                       title={language === 'si' ? 'Pregled projekta' : 'Project Dashboard'} variant="primary"
@@ -525,7 +510,6 @@ const App = () => {
             {/* ★ v4.2: Content area below toolbar — scrollable */}
             <div id="main-content-area" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               {activeView === 'dashboard' ? (
-                /* ═══ DASHBOARD HOME VIEW ═══ */
                 <DashboardHome
                   language={language}
                   projectsMeta={pm.userProjects}
@@ -541,7 +525,6 @@ const App = () => {
                   onSwitchOrg={handleSwitchOrg}
                 />
               ) : (
-                /* ═══ PROJECT VIEW ═══ */
                 <ProjectDisplay
                   projectData={pm.projectData}
                   activeStepId={pm.currentStepId}
