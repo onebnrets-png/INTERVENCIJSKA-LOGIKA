@@ -1360,9 +1360,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, language, init
                     {t.knowledge.subtitle}
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <span style={{ padding: '4px 12px', borderRadius: radii.full, background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, color: primaryBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
-                    {kbDocuments.length} / {knowledgeBaseService.MAX_DOCS_PER_ORG} {t.knowledge.docCount}
+                <span style={{ padding: '4px 12px', borderRadius: radii.full, background: primaryBadgeBg, border: `1px solid ${primaryBadgeBorder}`, color: primaryBadgeText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
+                    {kbDocuments.length}{isUserSuperAdmin ? '' : ` / ${knowledgeBaseService.MAX_DOCS_PER_ORG}`} {t.knowledge.docCount}
+                    {isUserSuperAdmin && ' (∞)'}
                   </span>
                   <span style={{ padding: '4px 12px', borderRadius: radii.full, background: secondaryInfoBg, border: `1px solid ${secondaryInfoBorder}`, color: secondaryInfoText, fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold }}>
                     {t.knowledge.maxSize}: {knowledgeBaseService.MAX_FILE_SIZE / 1024 / 1024} MB
