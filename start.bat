@@ -1,6 +1,11 @@
 @echo off
 cd /d "%~dp0"
-chcp 65001 >nul 2>nul
+
+REM === Prevent window from closing on any error ===
+if "%~1"=="" (
+    cmd /k "%~f0" RUNNING
+    exit /b
+)
 
 echo ========================================
 echo   EURO-OFFICE: EU Project Idea Draft
@@ -9,195 +14,171 @@ echo   React 19 + Vite 6 + Supabase
 echo ========================================
 echo.
 
-REM ----------------------------------------
-REM 1. CHECK NODE.JS
-REM ----------------------------------------
+REM Check if Node.js is installed
 where node >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Node.js ni namescen!
-    echo         Prenesi ga iz https://nodejs.org/ (LTS verzija 18+)
+    echo ERROR: Node.js ni namescen!
+    echo Prenesi ga iz https://nodejs.org/
     echo.
     pause
     exit /b 1
 )
 
-REM Check Node version (minimum 18 required for React 19 + Vite 6)
-for /f "tokens=1 delims=v." %%a in ('node --version') do set NODE_MAJOR=%%a
-for /f "tokens=2 delims=v." %%a in ('node --version') do set NODE_MAJOR=%%a
-if %NODE_MAJOR% LSS 18 (
-    echo [ERROR] Node.js verzija je prestara!
-    echo         Potrebna je verzija 18+, trenutna:
-    call node --version
-    echo         Prenesi novo verzijo iz https://nodejs.org/
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [OK] Node.js:
+echo Node.js found:
 call node --version
 echo.
 
-REM ----------------------------------------
-REM 2. CHECK .env FILE (Supabase credentials — optional with fallback)
-REM ----------------------------------------
-if not exist ".env" (
-    echo [INFO] .env datoteka ni najdena — uporabljam privzete Supabase podatke.
+REM ========================================
+REM   Clean Vite cache for fresh start
+REM ========================================
+if exist "node_modules\.vite" (
+    echo Cleaning Vite cache...
+    rmdir /s /q "node_modules\.vite"
+    echo Vite cache cleared.
     echo.
-    echo        Za lasten Supabase projekt ustvari .env z vsebino:
-    echo.
-    echo        VITE_SUPABASE_URL=https://tvoj-projekt.supabase.co
-    echo        VITE_SUPABASE_ANON_KEY=tvoj-anon-key
-    echo.
-    echo        (Podatke najdes v Supabase Dashboard -^> Settings -^> API)
-    echo.
-) else (
-    echo [OK] .env datoteka najdena
 )
-echo.
+if exist "dist" (
+    echo Cleaning old build output...
+    rmdir /s /q "dist"
+    echo Build output cleared.
+    echo.
+)
+if exist "vite_output.tmp" (
+    del /f /q "vite_output.tmp"
+)
 
-REM ----------------------------------------
-REM 3. INSTALL DEPENDENCIES
-REM ----------------------------------------
+REM Install dependencies if node_modules doesn't exist
 if not exist "node_modules" (
     echo ========================================
-    echo   Namescanje odvisnosti...
-    echo   (ob prvem zagonu traja 1-2 min)
+    echo   Installing dependencies...
+    echo   (this may take a minute on first run)
     echo ========================================
     echo.
     call npm install
     if %ERRORLEVEL% NEQ 0 (
         echo.
-        echo [ERROR] npm install ni uspel!
-        echo         Preveri internetno povezavo in poskusi znova.
+        echo ERROR: npm install ni uspel!
+        echo Preveri internetno povezavo in poskusi znova.
         echo.
         pause
         exit /b 1
     )
     echo.
-    echo [OK] Odvisnosti uspesno namescene!
+    echo Dependencies installed successfully!
     echo.
 )
 
-REM Check critical dependencies
-set MISSING_DEPS=0
+REM ========================================
+REM   Check critical dependencies
+REM ========================================
+set "MISSING=0"
 
 if not exist "node_modules\@supabase\supabase-js" (
-    echo [!] Manjka: @supabase/supabase-js
-    set MISSING_DEPS=1
+    echo [MISSING] @supabase/supabase-js
+    set "MISSING=1"
 )
 if not exist "node_modules\recharts" (
-    echo [!] Manjka: recharts
-    set MISSING_DEPS=1
+    echo [MISSING] recharts
+    set "MISSING=1"
 )
-if not exist "node_modules\typescript" (
-    echo [!] Manjka: typescript
-    set MISSING_DEPS=1
+if not exist "node_modules\react" (
+    echo [MISSING] react
+    set "MISSING=1"
+)
+if not exist "node_modules\docx" (
+    echo [MISSING] docx
+    set "MISSING=1"
+)
+if not exist "node_modules\jszip" (
+    echo [MISSING] jszip
+    set "MISSING=1"
+)
+if not exist "node_modules\html2canvas" (
+    echo [MISSING] html2canvas
+    set "MISSING=1"
+)
+if not exist "node_modules\qrcode" (
+    echo [MISSING] qrcode
+    set "MISSING=1"
+)
+if not exist "node_modules\@google\genai" (
+    echo [MISSING] @google/genai
+    set "MISSING=1"
 )
 
-if %MISSING_DEPS% EQU 1 (
+if "%MISSING%"=="1" (
     echo.
-    echo Ponovna namestitev odvisnosti...
+    echo ========================================
+    echo   Installing missing dependencies...
+    echo ========================================
+    echo.
     call npm install
     if %ERRORLEVEL% NEQ 0 (
-        echo [ERROR] npm install ni uspel!
+        echo.
+        echo ERROR: npm install ni uspel!
+        echo Preveri internetno povezavo in poskusi znova.
+        echo.
         pause
         exit /b 1
     )
-    echo [OK] Odvisnosti dopolnjene
-    echo.
-)
-
-REM ----------------------------------------
-REM 4. CHECK PORT 3000
-REM ----------------------------------------
-netstat -ano | findstr ":3000 " | findstr "LISTENING" >nul 2>nul
-if %ERRORLEVEL% EQU 0 (
-    echo [OPOZORILO] Port 3000 je ze zaseden!
-    echo.
-    echo   Moznosti:
-    echo   1. Zapri aplikacijo, ki uporablja port 3000
-    echo   2. Ali pa se Vite ze izvaja - odpri http://localhost:3000
-    echo.
-    choice /C DN /M "Nadaljujem vseeno (D=Da, N=Ne)?"
-    if %ERRORLEVEL% EQU 2 (
-        echo Prekinjam.
-        timeout /t 2 /nobreak >nul
-        exit /b 0
+    REM === Ensure jszip is installed (not in package.json yet) ===
+    if not exist "node_modules\jszip" (
+        echo Installing jszip separately...
+        call npm install jszip
     )
     echo.
+    echo All dependencies installed!
+    echo.
+) else (
+    echo All critical dependencies OK.
+    echo.
 )
 
-REM ----------------------------------------
-REM 5. START VITE DEV SERVER
-REM ----------------------------------------
-echo ========================================
-echo   Zaganjam razvojni streznik...
-echo   (735+ modulov, pocakaj ~8s)
-echo ========================================
-echo.
-
-REM Save PID for clean shutdown
-start /B cmd /c "npm run dev > vite_output.tmp 2>&1"
-
-REM Wait for Vite to compile (735+ modules need time)
-echo Cakam, da se Vite zgradi...
-set WAIT_COUNT=0
-
-:WAIT_LOOP
-timeout /t 2 /nobreak >nul
-set /a WAIT_COUNT+=2
-
-netstat -ano | findstr ":3000 " | findstr "LISTENING" >nul 2>nul
-if %ERRORLEVEL% EQU 0 goto SERVER_READY
-
-if %WAIT_COUNT% GEQ 30 (
+REM === Final safety check: jszip (dynamically imported, may not be in package.json) ===
+if not exist "node_modules\jszip" (
+    echo [FIX] jszip not found - installing...
+    call npm install jszip
+    echo jszip installed.
     echo.
-    echo [ERROR] Vite se ni zagnal v 30 sekundah!
-    echo         Preveri vite_output.tmp za napake.
-    echo.
-    pause
-    goto CLEANUP
 )
 
-echo   ... se zaganja (%WAIT_COUNT%s)
-goto WAIT_LOOP
+REM Optional: .env info (NOT required - Supabase is hardcoded, AI keys via Settings)
+if not exist ".env" (
+    echo [INFO] .env datoteka ni najdena - to je OK.
+    echo        Supabase credentials so v supabaseClient.ts.
+    echo        AI API kljuce nastavi v aplikaciji pod Settings.
+    echo.
+)
 
-:SERVER_READY
-echo.
-echo [OK] Vite streznik tece na http://localhost:3000
+echo ========================================
+echo   Starting development server...
+echo   (clean Vite cache = fresh build)
+echo ========================================
 echo.
 
-REM Open browser
+REM Start the dev server in a separate window
+start "EURO-OFFICE Vite Server" cmd /c "npm run dev"
+
+REM Wait for Vite to start
+echo Waiting for Vite server to start...
+timeout /t 8 /nobreak >nul
+
+REM Open browser on port 3000 (configured in vite.config.ts)
 start http://localhost:3000
 
-echo ========================================
-echo.
-echo   EURO-OFFICE se izvaja!
-echo   Brskalnik odprt na http://localhost:3000
-echo.
-echo   Pritisni KATEROKOLI tipko za ZAUSTAVITEV.
 echo.
 echo ========================================
-
-pause >nul
-
-REM ----------------------------------------
-REM 6. GRACEFUL SHUTDOWN
-REM ----------------------------------------
-:CLEANUP
+echo   Browser opened at http://localhost:3000
 echo.
-echo Zaustavljam streznik...
-
-REM Kill only the Node process on port 3000 (not all Node processes!)
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":3000 " ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%p >nul 2>nul
-)
-
-REM Clean up temp file
-if exist "vite_output.tmp" del /q "vite_output.tmp"
-
+echo   App is running!
+echo   Press any key to STOP the server.
+echo ========================================
 echo.
-echo [OK] Streznik zaustavljen. Nasvidenje!
+
+pause
+
+REM Kill node processes when user presses a key
+taskkill /F /IM node.exe >nul 2>nul
+echo.
+echo Server stopped. Goodbye!
 timeout /t 2 /nobreak >nul
-exit /b 0

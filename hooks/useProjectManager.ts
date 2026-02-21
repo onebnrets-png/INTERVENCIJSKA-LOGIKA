@@ -495,7 +495,7 @@ export const useProjectManager = ({
 
   const handleSubStepClick = useCallback((subStepId: string) => {
     const el = document.getElementById(subStepId);
-    const container = document.getElementById('main-scroll-container');
+    const container = document.getElementById('main-content-area');
     if (el && container) {
       const elRect = el.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
