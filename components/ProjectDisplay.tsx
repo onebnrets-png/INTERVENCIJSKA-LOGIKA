@@ -893,14 +893,17 @@ const renderActivities = (props) => {
             </div>
 
             <div id="gantt-chart" className="mt-12 mb-8 border-t-2 border-slate-200 pt-8">
-                 <h3 className="text-xl font-bold text-slate-700 mb-4">{t.subSteps.ganttChart}</h3>
-                <GanttChart activities={activities} language={language} id="gantt-chart-interactive" />
-            </div>
-
+            <h3 className="text-xl font-bold text-slate-700 mb-4">{t.subSteps.ganttChart}</h3>
+            <div className="bg-white rounded-xl">
+        <GanttChart activities={activities} language={language} id="gantt-chart-interactive" />
+    </div>
+</div>
             <div id="pert-chart" className="mt-12 mb-8 border-t-2 border-slate-200 pt-8">
-                 <h3 className="text-xl font-bold text-slate-700 mb-4">{t.subSteps.pertChart}</h3>
-                <PERTChart activities={activities} language={language} />
-            </div>
+            <h3 className="text-xl font-bold text-slate-700 mb-4">{t.subSteps.pertChart}</h3>
+            <div className="bg-white rounded-xl">
+        <PERTChart activities={activities} language={language} />
+    </div>
+</div>
 
             {renderRisks(props)}
         </>
