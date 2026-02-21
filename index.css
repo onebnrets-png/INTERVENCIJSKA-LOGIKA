@@ -640,6 +640,67 @@ html.dark .recharts-cartesian-grid line {
 html.dark .border-b[style*="border"] {
   border-color: #1E3050 !important;
 }
+/* ─── 6.25 GANTT CHART ─── */
+
+/* Milestone diamonds: black → bright white */
+html.dark .step-content .chart-container-white .bg-black {
+  background-color: #E2E8F0 !important;
+}
+
+/* Task bars: keep indigo visible */
+html.dark .step-content .chart-container-white .bg-indigo-400 {
+  background-color: rgba(129, 140, 248, 0.70) !important;
+}
+
+html.dark .step-content .chart-container-white .bg-indigo-500 {
+  background-color: rgba(129, 140, 248, 0.85) !important;
+}
+
+/* WP summary bars */
+html.dark .step-content .chart-container-white .bg-slate-700 {
+  background-color: rgba(148, 163, 184, 0.50) !important;
+}
+
+/* WP label background */
+html.dark .step-content .chart-container-white .bg-white\/80 {
+  background-color: rgba(22, 32, 50, 0.85) !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* Dependency arrows SVG */
+html.dark .step-content .chart-container-white svg polygon[fill="#64748b"] {
+  fill: #90CAF9 !important;
+}
+
+html.dark .step-content .chart-container-white svg path[stroke="#64748b"] {
+  stroke: rgba(144, 202, 249, 0.50) !important;
+}
+
+/* Header and grid lines */
+html.dark .step-content .chart-container-white .bg-slate-50,
+html.dark .step-content .chart-container-white .bg-slate-50\/50 {
+  background-color: #0F172A !important;
+}
+
+html.dark .step-content .chart-container-white .border-slate-100,
+html.dark .step-content .chart-container-white .border-slate-200 {
+  border-color: #1E3050 !important;
+}
+
+html.dark .step-content .chart-container-white .border-slate-300 {
+  border-color: #2A4065 !important;
+}
+
+/* Text labels in Gantt */
+html.dark .step-content .chart-container-white .text-slate-500,
+html.dark .step-content .chart-container-white .text-slate-600 {
+  color: rgba(255, 255, 255, 0.60) !important;
+}
+
+html.dark .step-content .chart-container-white .text-slate-700,
+html.dark .step-content .chart-container-white .text-slate-800 {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    7. STEP CONTENT CARDS
