@@ -355,9 +355,7 @@ const ProjectChartsCard: React.FC<{
     if (!activeData) return null;
     try { return extractStructuralData(activeData, language); } catch { return null; }
   }, [activeData]);
-  const completeness = useMemo(() => activeData ? calculateCompleteness(activeData) : 0, [activeData]);
   const isLoading = loadingId === activeProjectId;
-
   const chartW = colSpan >= 2 ? CHART_WIDTH : Math.min(200, CHART_WIDTH);
   const chartH = colSpan >= 2 ? CHART_HEIGHT : Math.min(130, CHART_HEIGHT);
   const isNarrow = colSpan < 2;
