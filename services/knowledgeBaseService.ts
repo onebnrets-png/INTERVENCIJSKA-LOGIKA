@@ -1,11 +1,14 @@
 // services/knowledgeBaseService.ts
 // ═══════════════════════════════════════════════════════════════
 // Knowledge Base Service — document upload, text extraction, search
-// v2.0 — 2026-02-21
+// v2.1 — 2026-02-21
+//
+// CHANGES v2.1:
+//   - SuperAdmin bypasses document limit (uploadDocument skipLimitCheck param)
 //
 // CHANGES v2.0:
 //   - MAX_FILE_SIZE: 10 MB → 5 MB
-//   - MAX_DOCS_PER_ORG: 50 → 50 (unchanged, per user spec)
+//   - MAX_DOCS_PER_ORG: 500 → 50
 //   - NEW: MAX_PAGES_PER_DOC = 300 (page limit validation for PDF)
 //   - NEW: getPageCount() — estimates page count before upload
 //   - NEW: getAllExtractedTexts() — returns all extracted text for AI context
@@ -17,6 +20,7 @@
 //   - Store metadata + extracted text in Supabase
 //   - Search knowledge base by keyword matching
 //   - Max 5MB per file, max 50 docs per organization, max 300 pages per doc
+//   - SuperAdmin: no document count limit
 //   - Prepared for future vector/RAG upgrade (Approach B)
 //
 // SECURITY:
@@ -71,7 +75,6 @@ async function extractTextFromFile(file: File): Promise<string> {
   if (ext === 'pdf') {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      // Try to use pdf.js if loaded
       if (typeof (window as any).pdfjsLib !== 'undefined') {
         const pdf = await (window as any).pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         // ★ v2.0: Validate page count
@@ -101,8 +104,8 @@ async function extractTextFromFile(file: File): Promise<string> {
       const zip = await JSZip.loadAsync(arrayBuffer);
       const docXml = await zip.file('word/document.xml')?.async('string');
       if (docXml) {
-        // Estimate pages (~3000 chars per page)
         const text = docXml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        // Estimate pages (~3000 chars per page)
         const estimatedPages = Math.ceil(text.length / 3000);
         if (estimatedPages > MAX_PAGES_PER_DOC) {
           throw new Error(`Document has ~${estimatedPages} estimated pages — maximum is ${MAX_PAGES_PER_DOC}.`);
@@ -185,7 +188,8 @@ export const knowledgeBaseService = {
   },
 
   // Upload a document
-  async uploadDocument(orgId: string, file: File): Promise<{ success: boolean; message: string; doc?: KBDocument }> {
+  // ★ v2.1: skipLimitCheck = true for SuperAdmin (no document count limit)
+  async uploadDocument(orgId: string, file: File, skipLimitCheck: boolean = false): Promise<{ success: boolean; message: string; doc?: KBDocument }> {
     // Validate file extension
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
@@ -197,7 +201,7 @@ export const knowledgeBaseService = {
       return { success: false, message: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024} MB.` };
     }
 
-    // Check document limit (SuperAdmin bypass)
+    // Check document limit (SuperAdmin bypasses this)
     if (!skipLimitCheck) {
       const count = await this.getDocCount(orgId);
       if (count >= MAX_DOCS_PER_ORG) {
@@ -304,7 +308,6 @@ export const knowledgeBaseService = {
     if (!query || !orgId) return [];
 
     try {
-      // Get all documents for the org
       const { data, error } = await supabase
         .from('knowledge_base')
         .select('file_name, extracted_text')
@@ -313,7 +316,6 @@ export const knowledgeBaseService = {
 
       if (error || !data || data.length === 0) return [];
 
-      // Simple keyword search — split query into words, find matching paragraphs
       const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
       if (queryWords.length === 0) return [];
 
@@ -321,7 +323,6 @@ export const knowledgeBaseService = {
 
       for (const doc of data) {
         if (!doc.extracted_text) continue;
-        // Split into paragraphs/chunks (~500 chars each)
         const chunks = doc.extracted_text.match(/.{1,500}/gs) || [];
         for (const chunk of chunks) {
           const lowerChunk = chunk.toLowerCase();
@@ -335,7 +336,6 @@ export const knowledgeBaseService = {
         }
       }
 
-      // Sort by score descending and return top N
       scoredChunks.sort((a, b) => b.score - a.score);
       return scoredChunks
         .slice(0, maxChunks)
