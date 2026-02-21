@@ -203,7 +203,7 @@ const App = () => {
   const STEPS = getSteps(language);
   const completedStepsStatus = useMemo(() => STEPS.map((step) => isStepCompleted(pm.projectData, step.key)), [pm.projectData, language, STEPS]);
   const currentProjectMeta = pm.userProjects.find((p: any) => p.id === pm.currentProjectId);
-  const hasActiveProject = activeView === 'project';
+  const hasActiveProject = !!pm.currentProjectId;
 
   const displayTitle = activeView === 'project'
     ? (currentProjectMeta?.title || pm.projectData.projectIdea?.projectTitle || t.projects.untitled)
