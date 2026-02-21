@@ -646,18 +646,24 @@ html.dark .border-b[style*="border"] {
    Uses CSS custom properties set by ProjectDisplay:
      --step-card-bg     (light tint of section color)
      --step-card-border  (section accent color)
+   v5.2 — 2026-02-21 — FIX: chart-container-white resets only
+     the CSS variable, not child element backgrounds.
    ═══════════════════════════════════════════════════════════════ */
 
-/* Step cards: tinted backgrounds */
+/* Light mode: step-tinted card backgrounds */
 .step-content .bg-white {
   background-color: var(--step-card-bg, #FFFFFF);
   border-color: var(--step-card-border, #E2E8F0);
 }
 
-/* ★ v5.1 FIX: Charts/diagrams keep white background — immune to step color tinting */
-.step-content .chart-container-white,
-.step-content .chart-container-white *:not(select):not(input):not(button):not(option) {
-  --step-card-bg: #FFFFFF !important;
+/* ★ v5.2 FIX: Chart containers — reset CSS variable only */
+.step-content .chart-container-white {
+  --step-card-bg: #FFFFFF;
+  background-color: #FFFFFF !important;
+}
+
+.step-content .chart-container-white > .bg-white,
+.step-content .chart-container-white > div > .bg-white {
   background-color: #FFFFFF !important;
 }
 
