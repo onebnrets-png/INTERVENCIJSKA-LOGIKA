@@ -1,7 +1,8 @@
 // App.tsx
 // ═══════════════════════════════════════════════════════════════
 // Main application shell — orchestration only.
-// v4.3 — 2026-02-21
+// v4.4 — 2026-02-21
+//   ★ v4.4: FIX: Removed duplicate hasActiveProject declaration
 //   ★ v4.3: FIX: "No Project Selected" when no project chosen after login
 //     - Sidebar steps are disabled when no project is loaded
 //     - displayTitle shows "No Project Selected" / "Ni izbranega projekta"
@@ -202,9 +203,7 @@ const App = () => {
   const currentProjectMeta = pm.userProjects.find((p: any) => p.id === pm.currentProjectId);
   const hasActiveProject = activeView === 'project';
 
-  // ★ v4.3: Show "No Project Selected" when no project is loaded
-  const hasActiveProject = !!pm.currentProjectId;
-  const displayTitle = hasActiveProject
+  const displayTitle = activeView === 'project'
     ? (currentProjectMeta?.title || pm.projectData.projectIdea?.projectTitle || t.projects.untitled)
     : (language === 'si' ? 'Ni izbranega projekta' : 'No Project Selected');
 
