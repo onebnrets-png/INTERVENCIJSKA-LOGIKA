@@ -4,6 +4,12 @@
 // Identifies numbers, percentages, statistics, comparisons,
 // and returns structured data suitable for visualization.
 //
+// v1.3 — 2026-02-21
+//   - NEW: extractStructuralData() now accepts `language` parameter
+//     and returns localized titles, subtitles, labels for SI/EN
+//   - All chart titles, subtitles, risk categories, severity labels,
+//     and section names are now bilingual (Slovenian / English)
+//
 // v1.2 — 2026-02-18
 //   - FIX: extractStructuralData() completeness calculation now correctly
 //     handles empty/skeleton project data (default values like startDate,
@@ -317,9 +323,12 @@ const getSectionCompleteness = (projectData: any, sectionKey: string): number =>
 // ─── Extract from structured project data ────────────────────
 // Extracts visualization data from project's structured fields
 // (readiness levels, risks, objectives, etc.) WITHOUT using AI.
+//
+// ★ v1.3: Now accepts `language` parameter for bilingual output.
 
-export const extractStructuralData = (projectData: any): ExtractedChartData[] => {
+export const extractStructuralData = (projectData: any, language: 'en' | 'si' = 'en'): ExtractedChartData[] => {
   const results: ExtractedChartData[] = [];
+  const si = language === 'si';
 
   // 1. Readiness Levels Radar
   const rl = projectData?.projectIdea?.readinessLevels;
@@ -335,7 +344,7 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
         dataPoints.push({
           label: key,
           value: level,
-          unit: 'level',
+          unit: si ? 'stopnja' : 'level',
           category: 'readiness',
         });
       }
@@ -345,10 +354,10 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
       results.push({
         id: 'structural-readiness-radar',
         chartType: 'radar',
-        title: 'Readiness Levels',
+        title: si ? 'Stopnje pripravljenosti' : 'Readiness Levels',
         subtitle: 'TRL / SRL / ORL / LRL',
         dataPoints,
-        textSnippet: 'Project readiness levels assessment',
+        textSnippet: si ? 'Ocena stopenj pripravljenosti projekta' : 'Project readiness levels assessment',
         confidence: 1.0,
       });
     }
@@ -372,12 +381,20 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
         if (r.category) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
       });
 
+      // ★ v1.3: Bilingual category labels
+      const categoryLabels: Record<string, { en: string; si: string }> = {
+        technical: { en: 'Technical', si: 'Tehnično' },
+        social: { en: 'Social', si: 'Družbeno' },
+        economic: { en: 'Economic', si: 'Ekonomsko' },
+        environmental: { en: 'Environmental', si: 'Okoljsko' },
+      };
+
       const catPoints: ExtractedDataPoint[] = Object.entries(categoryCounts)
         .filter(([, count]) => count > 0)
         .map(([cat, count]) => ({
-          label: cat.charAt(0).toUpperCase() + cat.slice(1),
+          label: categoryLabels[cat]?.[language] || (cat.charAt(0).toUpperCase() + cat.slice(1)),
           value: count,
-          unit: 'risks',
+          unit: si ? 'tveganj' : 'risks',
           category: 'risk_category',
         }));
 
@@ -385,30 +402,31 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
         results.push({
           id: 'structural-risk-categories',
           chartType: 'donut',
-          title: 'Risks by Category',
+          title: si ? 'Tveganja po kategorijah' : 'Risks by Category',
           dataPoints: catPoints,
-          textSnippet: 'Project risk register distribution',
+          textSnippet: si ? 'Porazdelitev registra tveganj projekta' : 'Project risk register distribution',
           confidence: 1.0,
         });
       }
 
+      // ★ v1.3: Bilingual severity labels
       const severityPoints: ExtractedDataPoint[] = [
-        { label: 'High Likelihood', value: likelihoodCounts.high || 0, category: 'likelihood' },
-        { label: 'Medium Likelihood', value: likelihoodCounts.medium || 0, category: 'likelihood' },
-        { label: 'Low Likelihood', value: likelihoodCounts.low || 0, category: 'likelihood' },
-        { label: 'High Impact', value: impactCounts.high || 0, category: 'impact' },
-        { label: 'Medium Impact', value: impactCounts.medium || 0, category: 'impact' },
-        { label: 'Low Impact', value: impactCounts.low || 0, category: 'impact' },
+        { label: si ? 'Visoka verjetnost' : 'High Likelihood', value: likelihoodCounts.high || 0, category: 'likelihood' },
+        { label: si ? 'Srednja verjetnost' : 'Medium Likelihood', value: likelihoodCounts.medium || 0, category: 'likelihood' },
+        { label: si ? 'Nizka verjetnost' : 'Low Likelihood', value: likelihoodCounts.low || 0, category: 'likelihood' },
+        { label: si ? 'Visok vpliv' : 'High Impact', value: impactCounts.high || 0, category: 'impact' },
+        { label: si ? 'Srednji vpliv' : 'Medium Impact', value: impactCounts.medium || 0, category: 'impact' },
+        { label: si ? 'Nizek vpliv' : 'Low Impact', value: impactCounts.low || 0, category: 'impact' },
       ].filter(p => p.value > 0);
 
       if (severityPoints.length >= 3) {
         results.push({
           id: 'structural-risk-severity',
           chartType: 'stacked_bar',
-          title: 'Risk Severity Distribution',
-          subtitle: 'Likelihood vs Impact',
+          title: si ? 'Porazdelitev resnosti tveganj' : 'Risk Severity Distribution',
+          subtitle: si ? 'Verjetnost in vpliv' : 'Likelihood vs Impact',
           dataPoints: severityPoints,
-          textSnippet: 'Risk likelihood and impact analysis',
+          textSnippet: si ? 'Analiza verjetnosti in vpliva tveganj' : 'Risk likelihood and impact analysis',
           confidence: 1.0,
         });
       }
@@ -417,13 +435,14 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
 
   // 3. Project Completeness (per section)
   // v1.2 FIX: Uses explicit per-section checks instead of generic field counting
+  // ★ v1.3: Bilingual section labels
   const sections = [
-    { key: 'problemAnalysis', label: 'Problem Analysis' },
-    { key: 'projectIdea', label: 'Project Idea' },
-    { key: 'generalObjectives', label: 'General Obj.' },
-    { key: 'specificObjectives', label: 'Specific Obj.' },
-    { key: 'activities', label: 'Activities' },
-    { key: 'outputs', label: 'Expected Results' },
+    { key: 'problemAnalysis', label: si ? 'Analiza problema' : 'Problem Analysis' },
+    { key: 'projectIdea', label: si ? 'Projektna ideja' : 'Project Idea' },
+    { key: 'generalObjectives', label: si ? 'Splošni cilji' : 'General Obj.' },
+    { key: 'specificObjectives', label: si ? 'Specifični cilji' : 'Specific Obj.' },
+    { key: 'activities', label: si ? 'Aktivnosti' : 'Activities' },
+    { key: 'outputs', label: si ? 'Pričak. rezultati' : 'Expected Results' },
   ];
 
   const completenessPoints: ExtractedDataPoint[] = [];
@@ -442,10 +461,10 @@ export const extractStructuralData = (projectData: any): ExtractedChartData[] =>
     results.push({
       id: 'structural-completeness',
       chartType: 'comparison_bar',
-      title: 'Project Completeness',
-      subtitle: 'Section-by-section progress',
+      title: si ? 'Zapolnjenost projekta' : 'Project Completeness',
+      subtitle: si ? 'Napredek po razdelkih' : 'Section-by-section progress',
       dataPoints: completenessPoints,
-      textSnippet: 'Project completion status overview',
+      textSnippet: si ? 'Pregled stanja zapolnjenosti projekta' : 'Project completion status overview',
       confidence: 1.0,
     });
   }
