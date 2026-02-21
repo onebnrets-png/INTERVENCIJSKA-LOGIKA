@@ -205,7 +205,7 @@ const App = () => {
   const currentProjectMeta = pm.userProjects.find((p: any) => p.id === pm.currentProjectId);
   const hasActiveProject = !!pm.currentProjectId;
 
-  const displayTitle = activeView === 'project'
+  const displayTitle = pm.currentProjectId
     ? (currentProjectMeta?.title || pm.projectData.projectIdea?.projectTitle || t.projects.untitled)
     : (language === 'si' ? 'Ni izbranega projekta' : 'No Project Selected');
 
