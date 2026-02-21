@@ -707,8 +707,10 @@ html.dark .step-content .chart-container-white .text-slate-800 {
    Uses CSS custom properties set by ProjectDisplay:
      --step-card-bg     (light tint of section color)
      --step-card-border  (section accent color)
-   v5.2 — 2026-02-21 — FIX: chart-container-white resets only
-     the CSS variable, not child element backgrounds.
+   v5.3 — 2026-02-21
+     - chart-container-white: light = #FFF, dark = #162032
+     - Targets only direct .bg-white children (no * selector)
+     - !important scoped to html.dark to avoid overriding dark mode
    ═══════════════════════════════════════════════════════════════ */
 
 /* Light mode: step-tinted card backgrounds */
@@ -717,18 +719,29 @@ html.dark .step-content .chart-container-white .text-slate-800 {
   border-color: var(--step-card-border, #E2E8F0);
 }
 
-/* ★ v5.2 FIX: Chart containers — reset CSS variable only */
+/* ★ v5.3: Light mode — chart containers stay white */
 .step-content .chart-container-white {
   --step-card-bg: #FFFFFF;
-  background-color: #FFFFFF !important;
+  background-color: #FFFFFF;
 }
 
 .step-content .chart-container-white > .bg-white,
 .step-content .chart-container-white > div > .bg-white {
-  background-color: #FFFFFF !important;
+  background-color: #FFFFFF;
 }
 
-/* Dark mode: override handled in 6.3 + 6.4 above */
+/* ★ v5.3: Dark mode — chart containers use Level 2 dark surface */
+html.dark .step-content .chart-container-white {
+  --step-card-bg: #162032;
+  background-color: #162032 !important;
+}
+
+html.dark .step-content .chart-container-white > .bg-white,
+html.dark .step-content .chart-container-white > div > .bg-white {
+  background-color: #162032 !important;
+}
+
+/* Dark mode: all other overrides handled in 6.3 + 6.4 above */
 
 
 /* ═══════════════════════════════════════════════════════════════
