@@ -522,32 +522,7 @@ const ProjectChartsCard: React.FC<{
             flexWrap: isNarrow ? 'wrap' as const : 'nowrap' as const,
             gap: spacing.sm, paddingBottom: spacing.xs, alignItems: 'flex-start',
           }}>
-            <div style={{
-              flexShrink: 0, width: chartW,
-              display: 'flex', flexDirection: 'column' as const,
-              alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-              padding: spacing.md, background: isDark ? '#1e1e2e' : '#f8fafc',
-              borderRadius: radii.lg, border: `1px solid ${c.border.light}`, minHeight: chartH,
-            }}>
-                            <DesignProgressRing
-                value={completeness}
-                size={isNarrow ? 60 : 80}
-                strokeWidth={6}
-                showLabel={true}
-                labelSize={isNarrow ? '0.65rem' : '0.8rem'}
-              />
-              <div style={{ textAlign: 'center' as const }}>
-                <div style={{
-                  fontSize: typography.fontSize.xs,
-                  fontWeight: typography.fontWeight.semibold,
-                  color: c.text.heading,
-                }}>
-                  {language === 'si' ? 'Zapolnjenost' : 'Completeness'}
-                </div>
-                <div style={{ fontSize: '10px', color: c.text.muted }}>{completeness}%</div>
-              </div>
-            </div>
-
+            
             {/* Charts */}
             {chartsData && chartsData.length > 0 && chartsData.map((chart: ExtractedChartData, idx: number) => (
               <div key={`c-${idx}-${chart.chartType}`} style={{ flexShrink: 0, width: chartW }}>
