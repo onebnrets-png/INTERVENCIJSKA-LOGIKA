@@ -353,7 +353,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, language, setLa
 
                     {/* ★ v5.0: First Name + Last Name — side by side */}
                     {!isLogin && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 480 ? '1fr' : '1fr 1fr', gap: spacing.md }}>
                             <div>
                                 <label style={labelStyle}>
                                     {language === 'si' ? 'Ime' : 'First Name'}
